@@ -3,6 +3,10 @@ import { ScrollView, Text, View, TouchableOpacity, FlatList, ActivityIndicator, 
 import { useRouter, Stack } from 'expo-router';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { fieldService, adminService } from '../services/api';
+import LogoutButton from '../components/LogoutButton';
+import AppBackground from './components/AppBackground';
+import GlassCard from './components/GlassCard';
+import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
 
 interface LedgerItem {
   id: string;
@@ -156,53 +160,46 @@ export default function AccountsLedgerScreen() {
   const netBalance = totalAdvances - totalDebits;
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
+    <View style={{ flex: 1, backgroundColor: 'transparent' }}>
+      <AppBackground />
       <Stack.Screen 
         options={{
           headerTitle: "Accounts Summary",
-          headerRight: () => (
-            <TouchableOpacity 
-              onPress={() => router.replace('/')}
-              style={{ marginRight: 15, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}
-            >
-              <MaterialIcons name="logout" size={16} color="#EF4444" />
-              <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 12 }}>LOGOUT</Text>
-            </TouchableOpacity>
-          ),
+          headerRight: () => <LogoutButton />,
         }} 
       />
 
       {/* Top Site Workspace Selector for Accounting Audits */}
-      <View style={{ backgroundColor: '#0F172A', paddingVertical: 12, paddingHorizontal: 16 }}>
-        <Text style={{ color: '#94A3B8', fontSize: 11, fontWeight: 'bold', marginBottom: 8 }}>ACCOUNTING WORKSPACE</Text>
+      <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.25)' }}>
+        <Text style={{ color: COLORS.text, fontSize: 11, fontWeight: 'bold', marginBottom: 8, letterSpacing: 0.5 }}>ACCOUNTING WORKSPACE</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <TouchableOpacity onPress={() => setCurrentTab('STATEMENT')} style={[styles.tabButton, currentTab === 'STATEMENT' && styles.activeTab]}>
-              <MaterialIcons name="assessment" size={16} color={currentTab === 'STATEMENT' ? '#0F172A' : '#94A3B8'} />
+              <MaterialIcons name="assessment" size={16} color={currentTab === 'STATEMENT' ? '#FFFFFF' : COLORS.textLight} />
               <Text style={[styles.tabText, currentTab === 'STATEMENT' && styles.activeTabText]}>STATEMENTS</Text>
             </TouchableOpacity>
             
             <TouchableOpacity onPress={() => setCurrentTab('PAYOUTS')} style={[styles.tabButton, currentTab === 'PAYOUTS' && styles.activeTab]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <MaterialIcons name="pending-actions" size={16} color={currentTab === 'PAYOUTS' ? '#0F172A' : '#94A3B8'} />
+                <MaterialIcons name="pending-actions" size={16} color={currentTab === 'PAYOUTS' ? '#FFFFFF' : COLORS.textLight} />
                 <Text style={[styles.tabText, currentTab === 'PAYOUTS' && styles.activeTabText]}>PAYOUTS</Text>
                 {advanceRequests.length > 0 && (
                   <View style={styles.badge}><Text style={styles.badgeText}>{advanceRequests.length}</Text></View>
                 )}
               </View>
             </TouchableOpacity>
-
+ 
             <TouchableOpacity onPress={() => setCurrentTab('ADD_CASH')} style={[styles.tabButton, currentTab === 'ADD_CASH' && styles.activeTab]}>
-              <MaterialIcons name="add-circle" size={16} color={currentTab === 'ADD_CASH' ? '#0F172A' : '#94A3B8'} />
+              <MaterialIcons name="add-circle" size={16} color={currentTab === 'ADD_CASH' ? '#FFFFFF' : COLORS.textLight} />
               <Text style={[styles.tabText, currentTab === 'ADD_CASH' && styles.activeTabText]}>ADD CASH</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </View>
-
+ 
       {currentTab === 'STATEMENT' && (
         <>
-          <View style={{ backgroundColor: '#0F172A', paddingHorizontal: 16, paddingBottom: 12 }}>
+          <View style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)', paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: 'rgba(255, 255, 255, 0.25)' }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {sitesList.map((site) => (
@@ -217,13 +214,13 @@ export default function AccountsLedgerScreen() {
               </View>
             </ScrollView>
           </View>
-
+ 
           <View style={styles.summaryCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <FontAwesome5 name="wallet" size={14} color="#94A3B8" />
-              <Text style={{ color: '#94A3B8', fontSize: 12 }}>{activeSite?.name.toUpperCase() || 'LOADING...'}</Text>
+              <FontAwesome5 name="wallet" size={14} color={COLORS.textLight} />
+              <Text style={{ color: COLORS.textLight, fontSize: 12 }}>{activeSite?.name.toUpperCase() || 'LOADING...'}</Text>
             </View>
-            <Text style={{ color: '#FFFFFF', fontSize: 32, fontWeight: 'bold' }}>₹{netBalance.toLocaleString()}</Text>
+            <Text style={{ color: COLORS.primary, fontSize: 32, fontWeight: 'bold' }}>₹{netBalance.toLocaleString()}</Text>
             
             <View style={styles.summaryFooter}>
               <View>
@@ -236,9 +233,9 @@ export default function AccountsLedgerScreen() {
               </View>
             </View>
           </View>
-
+ 
           {loading ? (
-            <ActivityIndicator size="large" color="#0F172A" style={{ marginTop: 40 }} />
+            <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />
           ) : (
             <FlatList
               data={ledger}
@@ -250,11 +247,11 @@ export default function AccountsLedgerScreen() {
                     <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
                       <Text style={styles.categoryBadge}>{item.category.toUpperCase()}</Text>
                       {item.is_gst === 1 && <Text style={styles.gstBadge}>GST</Text>}
-                      <Text style={{ fontSize: 11, color: '#94A3B8' }}>{new Date(item.date).toLocaleDateString()}</Text>
+                      <Text style={{ fontSize: 11, color: COLORS.textLight }}>{new Date(item.date).toLocaleDateString()}</Text>
                     </View>
                     <Text style={styles.ledgerDescription}>{item.description}</Text>
                   </View>
-                  <Text style={[styles.ledgerAmount, { color: item.type === 'CREDIT' ? '#10B981' : '#0F172A' }]}>
+                  <Text style={[styles.ledgerAmount, { color: item.type === 'CREDIT' ? '#10B981' : COLORS.text }]}>
                     {item.type === 'CREDIT' ? '+' : '-'} ₹{Number(item.amount).toLocaleString()}
                   </Text>
                 </View>
@@ -268,8 +265,8 @@ export default function AccountsLedgerScreen() {
       {currentTab === 'PAYOUTS' && (
         <View style={{ flex: 1, padding: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <MaterialIcons name="notification-important" size={20} color="#0F172A" />
-            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0F172A' }}>Approved Requests</Text>
+            <MaterialIcons name="notification-important" size={20} color={COLORS.primary} />
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: COLORS.text }}>Approved Requests</Text>
           </View>
           <FlatList
             data={advanceRequests}
@@ -278,13 +275,13 @@ export default function AccountsLedgerScreen() {
               <View style={styles.payoutCard}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   <View>
-                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0F172A' }}>{item.user_name}</Text>
-                    <Text style={{ fontSize: 11, color: '#64748B' }}>{item.user_role} • Requested: {new Date(item.date).toLocaleDateString()}</Text>
+                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: COLORS.text }}>{item.user_name}</Text>
+                    <Text style={{ fontSize: 11, color: COLORS.textLight }}>{item.user_role} • Requested: {new Date(item.date).toLocaleDateString()}</Text>
                   </View>
-                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A' }}>₹{Number(item.amount).toLocaleString()}</Text>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: COLORS.primary }}>₹{Number(item.amount).toLocaleString()}</Text>
                 </View>
                 <View style={styles.reasonBox}>
-                  <Text style={{ fontSize: 12, color: '#475569' }}>Reason: {item.reason}</Text>
+                  <Text style={{ fontSize: 12, color: COLORS.text }}>Reason: {item.reason}</Text>
                 </View>
                 
                 <View style={styles.allocationSection}>
@@ -322,7 +319,7 @@ export default function AccountsLedgerScreen() {
                 {supervisors.map((s) => (
                   <TouchableOpacity 
                     key={s.id} 
-                    style={[styles.siteChipOutline, selectedSupervisor?.id === s.id && styles.activeSiteChipOutline, { borderColor: '#9333EA' }]}
+                    style={[styles.siteChipOutline, selectedSupervisor?.id === s.id && styles.activeSiteChipOutline, { borderColor: COLORS.primary }]}
                     onPress={() => setSelectedSupervisor(s)}
                   >
                     <Text style={[styles.siteChipOutlineText, selectedSupervisor?.id === s.id && styles.activeSiteChipOutlineText]}>{s.name}</Text>
@@ -350,6 +347,7 @@ export default function AccountsLedgerScreen() {
             <TextInput 
               style={styles.textInput}
               placeholder="0.00"
+              placeholderTextColor={COLORS.textLight}
               keyboardType="numeric"
               value={cashAmount}
               onChangeText={setCashAmount}
@@ -359,6 +357,7 @@ export default function AccountsLedgerScreen() {
             <TextInput 
               style={styles.textInput}
               placeholder="e.g. Cash handed over at office"
+              placeholderTextColor={COLORS.textLight}
               value={cashDescription}
               onChangeText={setCashDescription}
             />

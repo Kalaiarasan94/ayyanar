@@ -1,14 +1,54 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Alert, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, StatusBar, Image } from 'react-native';
 import { useRouter } from 'expo-router';
-import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { authService } from '../services/api';
+import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import ScreenWrapper from './components/ScreenWrapper';
+import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
+import { api as authService } from '../services/api';
 
 export default function LoginScreen() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+
+  useEffect(() => {
+    const welcomeTimer = setTimeout(() => setShowWelcome(false), 3000);
+    return () => clearTimeout(welcomeTimer);
+  }, []);
+
+  useEffect(() => {
+    if (showWelcome) return;
+    const checkUserSession = async () => {
+      try {
+        const storedRole = await AsyncStorage.getItem('userRole');
+        const storedName = await AsyncStorage.getItem('userName');
+        const storedUserId = await AsyncStorage.getItem('userId');
+        console.log('LoginScreen checkUserSession read values:', { storedRole, storedName, storedUserId });
+
+        if (storedRole && storedUserId) {
+          console.log('LoginScreen checkUserSession: session found, auto-redirecting...');
+          if (storedRole === 'Driver') {
+            router.replace({
+              pathname: '/driver',
+              params: { name: storedName || '', userId: storedUserId },
+            });
+          } else if (storedRole === 'Accounts') {
+            router.replace('/accounts-ledger');
+          } else if (storedRole === 'Admin') {
+            router.replace('/(tabs)/admin');
+          } else {
+            router.replace('/(tabs)');
+          }
+        }
+      } catch (error) {
+        console.error('Error reading user session:', error);
+      }
+    };
+    checkUserSession();
+  }, [showWelcome]);
 
   const handleLogin = async () => {
     if (!username || !password) {
@@ -19,22 +59,28 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
+      console.log('Calling authService.login with', username, password);
       const response = await authService.login(username, password);
+      console.log('authService.login response:', response);
       setLoading(false);
       
       if (response.success) {
         const { role, name, id } = response.user;
         
-        if (role === 'Admin') {
-          router.replace('/admin-panel');
+        // Store user info for role-based UI
+        await AsyncStorage.setItem('userRole', role);
+        await AsyncStorage.setItem('userName', name);
+        await AsyncStorage.setItem('userId', id.toString());
+        
+        // Redirect based on role
+        if (role === 'Driver') {
+          router.replace({ pathname: '/driver', params: { name, userId: id.toString() } });
         } else if (role === 'Accounts') {
           router.replace('/accounts-ledger');
-        } else if (role === 'Supervisor' || role === 'Site Engineer') {
-          router.replace({ pathname: '/supervisor-dashboard', params: { name, userId: id } });
-        } else if (role === 'Driver') {
-          router.replace({ pathname: '/driver', params: { name, userId: id } });
+        } else if (role === 'Admin') {
+          router.replace('/(tabs)/admin');
         } else {
-          router.replace('/accounts-ledger');
+          router.replace('/(tabs)');
         }
       } else {
         Alert.alert('Login Failed', response.message || 'Invalid credentials.');
@@ -45,42 +91,58 @@ export default function LoginScreen() {
     }
   };
 
-  return (
+  if (showWelcome) {
+    return (
+      <View style={styles.welcomeScreen}>
+        <StatusBar barStyle="dark-content" />
+        <View style={styles.welcomeLogoPanel}>
+          <Image source={require('../assets/ayyanar-logo.jpg')} style={styles.welcomeLogo} resizeMode="contain" />
+        </View>
+        <Text style={styles.welcomeText}>Construction CRM</Text>
+        <View style={styles.welcomeAccent} />
+      </View>
+    );
+  }
+
+  return (<ScreenWrapper>
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
+      <StatusBar barStyle="dark-content" />
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <FontAwesome5 name="city" size={40} color="#38BDF8" />
+            <Image source={require('../assets/ayyanar-logo.jpg')} style={styles.logo} resizeMode="contain" />
           </View>
           <Text style={styles.title}>Construction CRM</Text>
-          <Text style={styles.subtitle}>Enterprise Resource Planning</Text>
+          <Text style={styles.subtitle}>Infra Engineering Operations</Text>
         </View>
 
         <View style={styles.form}>
           <Text style={styles.label}>USERNAME</Text>
           <View style={styles.inputContainer}>
-            <MaterialIcons name="person" size={20} color="#94A3B8" />
+            <MaterialIcons name="person" size={20} color={COLORS.textLight} />
             <TextInput 
               style={styles.input}
               placeholder="Enter your username"
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
+              placeholderTextColor={COLORS.textLight}
             />
           </View>
 
           <Text style={styles.label}>PASSWORD</Text>
           <View style={styles.inputContainer}>
-            <MaterialIcons name="lock" size={20} color="#94A3B8" />
+            <MaterialIcons name="lock" size={20} color={COLORS.textLight} />
             <TextInput 
               style={styles.input}
               placeholder="Enter your password"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
+              placeholderTextColor={COLORS.textLight}
             />
           </View>
 
@@ -88,6 +150,7 @@ export default function LoginScreen() {
             style={styles.loginButton}
             onPress={handleLogin}
             disabled={loading}
+            activeOpacity={0.8}
           >
             <Text style={styles.loginButtonText}>
               {loading ? 'Authenticating...' : 'LOGIN TO DASHBOARD'}
@@ -96,112 +159,204 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.credentialBox}>
-          <Text style={styles.credentialTitle}>System Credentials (from DB):</Text>
-          <Text style={styles.credentialText}>• Admin: admin / admin123</Text>
-          <Text style={styles.credentialText}>• Accounts: accounts / acc123</Text>
-          <Text style={styles.credentialText}>• Supervisor: super / super123</Text>
-          <Text style={styles.credentialText}>• Driver: driver / driver123</Text>
+          <Text style={styles.credentialTitle}>Quick Access (Demo):</Text>
+          <View style={styles.chipRow}>
+            {['admin', 'accounts', 'super', 'driver'].map((user) => (
+              <TouchableOpacity 
+                key={user} 
+                style={styles.chip}
+                onPress={() => {
+                  setUsername(user);
+                  setPassword(user === 'admin' ? 'admin123' : user === 'accounts' ? 'acc123' : user === 'super' ? 'super123' : 'driver123');
+                }}
+              >
+                <Text style={styles.chipText}>{user}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
+    </ScreenWrapper>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: 'transparent',
   },
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    padding: SPACING.md,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: SPACING.xl,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    backgroundColor: '#0F172A',
-    borderRadius: 20,
+    width: '100%',
+    maxWidth: 320,
+    height: 86,
+    backgroundColor: '#FFFFFF',
+    borderRadius: BORDER_RADIUS.lg,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
-    elevation: 4,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+    elevation: 5,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    paddingHorizontal: SPACING.md,
+  },
+  logo: {
+    width: '100%',
+    height: 58,
   },
   title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#0F172A',
+    fontSize: 28,
+    fontWeight: '800',
+    color: COLORS.primary,
+    letterSpacing: 0,
   },
   subtitle: {
     fontSize: 14,
-    color: '#64748B',
+    color: COLORS.textLight,
     marginTop: 4,
+    letterSpacing: 0,
+    fontWeight: '600',
   },
   form: {
-    backgroundColor: '#FFFFFF',
-    padding: 24,
-    borderRadius: 16,
-    elevation: 2,
+    backgroundColor: COLORS.glassBg,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.xl,
+    elevation: 4,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: COLORS.glassBorder,
   },
   label: {
     fontSize: 11,
-    fontWeight: 'bold',
-    color: '#64748B',
-    marginBottom: 8,
+    fontWeight: '800',
+    color: COLORS.primary,
+    marginBottom: SPACING.xs,
+    marginLeft: 4,
+    letterSpacing: 0,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    marginBottom: 20,
+    backgroundColor: COLORS.steel,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.lg,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: COLORS.border,
   },
   input: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
     paddingHorizontal: 10,
-    fontSize: 15,
-    color: '#0F172A',
+    fontSize: 16,
+    color: COLORS.text,
   },
   loginButton: {
-    backgroundColor: '#0F172A',
-    paddingVertical: 14,
-    borderRadius: 8,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
-    marginTop: 10,
+    marginTop: SPACING.sm,
+    elevation: 6,
+    shadowColor: COLORS.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
   },
   loginButtonText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 15,
+    fontWeight: '800',
+    fontSize: 16,
+    letterSpacing: 0.5,
   },
   credentialBox: {
-    marginTop: 30,
-    backgroundColor: '#F1F5F9',
-    padding: 16,
-    borderRadius: 8,
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    borderColor: '#94A3B8',
+    marginTop: SPACING.xl,
+    padding: SPACING.md,
   },
   credentialTitle: {
-    fontSize: 12,
-    fontWeight: 'bold',
-    color: '#475569',
-    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textLight,
+    marginBottom: SPACING.sm,
+    textAlign: 'center',
   },
-  credentialText: {
+  chipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  chip: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+  },
+  chipText: {
     fontSize: 12,
-    color: '#64748B',
-    marginBottom: 4,
+    color: COLORS.primary,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  welcomeScreen: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.xl,
+  },
+  welcomeLogoPanel: {
+    width: '100%',
+    maxWidth: 380,
+    height: 128,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    elevation: 6,
+    paddingHorizontal: SPACING.lg,
+  },
+  welcomeLogo: {
+    width: '100%',
+    height: 86,
+  },
+  welcomeText: {
+    marginTop: SPACING.lg,
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  welcomeAccent: {
+    width: 72,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.primary,
+    marginTop: SPACING.md,
   },
 });

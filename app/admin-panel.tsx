@@ -1,16 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { ScrollView, Text, View, TextInput, TouchableOpacity, Alert, StyleSheet, Dimensions, ActivityIndicator, Image } from 'react-native';
-import { FontAwesome5, MaterialIcons } from '@expo/vector-icons';
-import { useRouter, Stack } from 'expo-router';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { Stack } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
+import AppBackground from './components/AppBackground';
+import LogoutButton from '../components/LogoutButton';
 import { adminService, fieldService } from '../services/api';
+import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
-const { width } = Dimensions.get('window');
+type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
+type StaffRole = 'Supervisor' | 'Driver' | 'Site Engineer';
 
 interface Staff {
   id: string;
   name: string;
-  role: 'Supervisor' | 'Driver' | 'Site Engineer' | 'Admin';
+  role: StaffRole | 'Admin' | 'Accounts';
   phone: string;
+  username?: string;
 }
 
 interface Site {
@@ -29,218 +45,170 @@ interface Lead {
   status: 'Hot Lead' | 'In Discussion' | 'Converted Client';
 }
 
-export default function AdminPanelScreen() {
-  const router = useRouter();
-  const [currentTab, setCurrentTab] = useState<'ANALYTICS' | 'CRM_LEADS' | 'STAFF_HR' | 'ALLOCATIONS' | 'ADVANCES' | 'REPORTS'>('ANALYTICS');
-  const [loading, setLoading] = useState(false);
+const adminTabs: { id: AdminTab; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
+  { id: 'DASHBOARD', label: 'Overview', icon: 'space-dashboard' },
+  { id: 'ATTENDANCE', label: 'Attendance', icon: 'fact-check' },
+  { id: 'PROJECTS', label: 'Projects', icon: 'business' },
+  { id: 'TEAM', label: 'Team', icon: 'badge' },
+  { id: 'LEADS', label: 'Leads', icon: 'groups' },
+  { id: 'REPORTS', label: 'Reports', icon: 'summarize' },
+];
 
-  // ---- STAFF HR STATE ----
+const getBillImageUris = (imageUrl?: string | null) => {
+  if (!imageUrl) return [];
+  return imageUrl.split('||').map((uri) => uri.trim()).filter(Boolean);
+};
+
+const todayIso = () => new Date().toISOString().split('T')[0];
+
+export default function AdminPanelScreen() {
+  const [activeTab, setActiveTab] = useState<AdminTab>('DASHBOARD');
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [analytics, setAnalytics] = useState<any>(null);
+  const [attendance, setAttendance] = useState<any>({ workers: [], supervisors: [] });
+  const [attendanceDate, setAttendanceDate] = useState(todayIso());
   const [staffList, setStaffList] = useState<Staff[]>([]);
+  const [sitesList, setSitesList] = useState<Site[]>([]);
+  const [leadsList, setLeadsList] = useState<Lead[]>([]);
+  const [reportSiteId, setReportSiteId] = useState<string | null>(null);
+  const [reportData, setReportData] = useState<any[]>([]);
+
   const [staffName, setStaffName] = useState('');
   const [staffUsername, setStaffUsername] = useState('');
   const [staffPassword, setStaffPassword] = useState('');
-  const [staffRole, setStaffRole] = useState<'Supervisor' | 'Driver' | 'Site Engineer'>('Supervisor');
+  const [staffRole, setStaffRole] = useState<StaffRole>('Supervisor');
   const [staffPhone, setStaffPhone] = useState('');
 
-  // ---- ADVANCES STATE ----
-  const [advanceRequests, setAdvanceRequests] = useState<any[]>([]);
-
-  // ---- LEADS STATE ----
-  const [leadsList, setLeadsList] = useState<Lead[]>([]);
-  const [leadName, setLeadName] = useState('');
-  const [leadProject, setLeadProject] = useState('');
-  const [leadSource, setLeadSource] = useState('');
-  const [leadStatus, setLeadStatus] = useState<'Hot Lead' | 'In Discussion' | 'Converted Client'>('Hot Lead');
-
-  // ---- SITES STATE ----
-  const [sitesList, setSitesList] = useState<Site[]>([]);
   const [newSiteName, setNewSiteName] = useState('');
   const [newSiteLocation, setNewSiteLocation] = useState('');
   const [selectedSiteForAllocation, setSelectedSiteForAllocation] = useState<string | null>(null);
   const [selectedSupervisorForAllocation, setSelectedSupervisorForAllocation] = useState<string | null>(null);
 
-  // ---- ANALYTICS STATE ----
-  const [analytics, setAnalytics] = useState<any>(null);
-  const [selectedSiteLedger, setSelectedSiteLedger] = useState<any[]>([]);
-  const [activeLedgerSite, setActiveLedgerSite] = useState<string | null>(null);
+  const [leadName, setLeadName] = useState('');
+  const [leadProject, setLeadProject] = useState('');
+  const [leadSource, setLeadSource] = useState('');
+  const [leadStatus, setLeadStatus] = useState<Lead['status']>('Hot Lead');
 
-  // ---- REPORTS STATE ----
-  const [reportSiteId, setReportSiteId] = useState<string | null>(null);
-  const [reportData, setReportData] = useState<any[]>([]);
+  const supervisors = useMemo(() => staffList.filter((staff) => staff.role === 'Supervisor'), [staffList]);
+  const dashboardStats = useMemo(() => {
+    const siteExpenses = analytics?.siteWiseExpenseBreakdown || [];
+    const leadMetrics = analytics?.leadsChannelPerformance || [];
+    return {
+      activeSites: sitesList.length,
+      staff: staffList.length,
+      leads: leadMetrics.reduce((sum: number, item: any) => sum + Number(item.total_leads || 0), 0),
+      conversions: leadMetrics.reduce((sum: number, item: any) => sum + Number(item.converted_leads || 0), 0),
+      spend: siteExpenses.reduce((sum: number, item: any) => sum + Number(item.total_expenses || 0), 0),
+    };
+  }, [analytics, sitesList.length, staffList.length]);
+
+  const fetchDashboard = async () => {
+    const [analyticsData, sitesData, staffData, leadsData] = await Promise.all([
+      adminService.getAnalytics(),
+      adminService.getSites(),
+      adminService.getStaff(),
+      adminService.getLeads(),
+    ]);
+    setAnalytics(analyticsData);
+    setSitesList(sitesData);
+    setStaffList(staffData);
+    setLeadsList(leadsData);
+  };
+
+  const fetchAttendance = async () => {
+    const data = await adminService.getAttendanceOverview(attendanceDate);
+    setAttendance(data || { workers: [], supervisors: [] });
+  };
+
+  const fetchSitesAndStaff = async () => {
+    const [sitesData, staffData] = await Promise.all([adminService.getSites(), adminService.getStaff()]);
+    setSitesList(sitesData);
+    setStaffList(staffData);
+  };
+
+  const fetchReportData = async (siteId = reportSiteId) => {
+    if (!siteId) return;
+    const data = await fieldService.getLedgerBySite(siteId);
+    setReportData(data);
+  };
+
+  const loadTab = async (tab = activeTab) => {
+    setLoading(true);
+    try {
+      if (tab === 'DASHBOARD') await fetchDashboard();
+      if (tab === 'ATTENDANCE') await fetchAttendance();
+      if (tab === 'PROJECTS') await fetchSitesAndStaff();
+      if (tab === 'TEAM') setStaffList(await adminService.getStaff());
+      if (tab === 'LEADS') setLeadsList(await adminService.getLeads());
+      if (tab === 'REPORTS') {
+        const sites = await adminService.getSites();
+        setSitesList(sites);
+        const selectedSite = reportSiteId || sites[0]?.id || null;
+        setReportSiteId(selectedSite);
+        if (selectedSite) await fetchReportData(selectedSite);
+      }
+    } catch (error) {
+      Alert.alert('Data Error', 'Unable to load this admin workspace.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    if (currentTab === 'ANALYTICS') {
-      fetchAnalytics();
-    } else if (currentTab === 'STAFF_HR') {
-      fetchStaff();
-    } else if (currentTab === 'CRM_LEADS') {
-      fetchLeads();
-    } else if (currentTab === 'ALLOCATIONS' || currentTab === 'REPORTS') {
-      fetchSites();
-      fetchStaff();
-    } else if (currentTab === 'ADVANCES') {
-      fetchAdvanceRequests();
-    }
-  }, [currentTab]);
+    loadTab();
+  }, [activeTab]);
 
   useEffect(() => {
-    if (currentTab === 'REPORTS' && reportSiteId) {
-      fetchReportData();
+    if (activeTab === 'ATTENDANCE') {
+      loadTab('ATTENDANCE');
     }
-  }, [reportSiteId, currentTab]);
+  }, [attendanceDate]);
 
-  const fetchReportData = async () => {
-    if (!reportSiteId) return;
-    setLoading(true);
-    try {
-      const data = await fieldService.getLedgerBySite(reportSiteId);
-      setReportData(data);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to fetch report data.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAnalytics = async () => {
-    setLoading(true);
-    try {
-      const data = await adminService.getAnalytics();
-      setAnalytics(data);
-    } catch (error) {
-      console.error('Error fetching analytics:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchAdvanceRequests = async () => {
-    setLoading(true);
-    try {
-      const data = await adminService.getAdvanceRequests();
-      setAdvanceRequests(data);
-    } catch (error) {
-      console.error('Error fetching advances:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUpdateAdvanceStatus = async (id: string, status: 'APPROVED' | 'REJECTED') => {
-    try {
-      await adminService.updateAdvanceStatus(id, status);
-      fetchAdvanceRequests();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update status.');
-    }
-  };
-
-  const fetchSiteLedger = async (siteId: string) => {
-    setLoading(true);
-    try {
-      const data = await fieldService.getLedgerBySite(siteId);
-      setSelectedSiteLedger(data);
-      setActiveLedgerSite(siteId);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to fetch site ledger.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchStaff = async () => {
-    setLoading(true);
-    try {
-      const data = await adminService.getStaff();
-      setStaffList(data);
-    } catch (error) {
-      console.error('Error fetching staff:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchLeads = async () => {
-    setLoading(true);
-    try {
-      const data = await adminService.getLeads();
-      setLeadsList(data);
-    } catch (error) {
-      console.error('Error fetching leads:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSites = async () => {
-    setLoading(true);
-    try {
-      const data = await adminService.getSites();
-      setSitesList(data);
-    } catch (error) {
-      console.error('Error fetching sites:', error);
-    } finally {
-      setLoading(false);
-    }
+  const onRefresh = () => {
+    setRefreshing(true);
+    loadTab();
   };
 
   const handleAddStaff = async () => {
     if (!staffName || !staffPhone || !staffUsername || !staffPassword) {
-      Alert.alert('Error', 'Please fill out all staff credentials.');
+      Alert.alert('Missing Details', 'Fill staff name, phone, username, and password.');
       return;
     }
-    
     setLoading(true);
     try {
-      await adminService.addStaff({
-        name: staffName,
-        username: staffUsername,
-        role: staffRole,
-        phone: staffPhone,
-        password: staffPassword
-      });
+      await adminService.addStaff({ name: staffName, username: staffUsername, role: staffRole, phone: staffPhone, password: staffPassword });
       setStaffName('');
       setStaffUsername('');
       setStaffPassword('');
       setStaffPhone('');
-      Alert.alert('Success', 'Staff credentials registered.');
-      fetchStaff();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to register staff.');
+      await loadTab('TEAM');
+    } catch {
+      Alert.alert('Staff Error', 'Unable to create staff account.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAddLead = async () => {
-    if (!leadName || !leadProject || !leadSource) {
-      Alert.alert('Error', 'Please fill out all lead details.');
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      await adminService.createLead({
-        name: leadName,
-        projectNeeded: leadProject,
-        source: leadSource,
-        status: leadStatus
-      });
-      setLeadName('');
-      setLeadProject('');
-      setLeadSource('');
-      Alert.alert('Success', 'Lead created successfully.');
-      fetchLeads();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create lead.');
-    } finally {
-      setLoading(false);
-    }
+  const handleDeleteStaff = (id: string) => {
+    Alert.alert('Remove Staff', 'Delete this staff account?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          await adminService.deleteStaff(id);
+          loadTab('TEAM');
+        },
+      },
+    ]);
   };
 
   const handleAddSite = async () => {
     if (!newSiteName || !newSiteLocation) {
-      Alert.alert('Error', 'Please enter site name and location.');
+      Alert.alert('Missing Details', 'Enter project site name and location.');
       return;
     }
     setLoading(true);
@@ -248,564 +216,805 @@ export default function AdminPanelScreen() {
       await adminService.createSite({ name: newSiteName, location: newSiteLocation });
       setNewSiteName('');
       setNewSiteLocation('');
-      Alert.alert('Success', 'Site created.');
-      fetchSites();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to create site.');
+      await loadTab('PROJECTS');
+    } catch {
+      Alert.alert('Project Error', 'Unable to create project site.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteSite = async (id: string) => {
-    Alert.alert('Confirm', 'Delete this site?', [
+  const handleDeleteSite = (id: string) => {
+    Alert.alert('Delete Project', 'Remove this project site?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: async () => {
-        setLoading(true);
-        try {
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
           await adminService.deleteSite(id);
-          fetchSites();
-        } catch (error) {
-          Alert.alert('Error', 'Failed to delete site.');
-        } finally {
-          setLoading(false);
-        }
-      }}
+          loadTab('PROJECTS');
+        },
+      },
     ]);
   };
 
   const handleAllocateSupervisor = async () => {
     if (!selectedSiteForAllocation || !selectedSupervisorForAllocation) {
-      Alert.alert('Error', 'Select both a site and a supervisor.');
+      Alert.alert('Select Details', 'Choose a project and supervisor.');
       return;
     }
     setLoading(true);
     try {
       await adminService.allocateSupervisor(selectedSupervisorForAllocation, selectedSiteForAllocation);
-      Alert.alert('Success', 'Supervisor allocated to site.');
       setSelectedSiteForAllocation(null);
       setSelectedSupervisorForAllocation(null);
-      fetchSites();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to allocate supervisor.');
+      await loadTab('PROJECTS');
+    } catch {
+      Alert.alert('Allocation Error', 'Unable to update supervisor allocation.');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdateLeadStatus = async (id: string, newStatus: string) => {
+  const handleAddLead = async () => {
+    if (!leadName || !leadProject || !leadSource) {
+      Alert.alert('Missing Details', 'Fill lead name, requirement, and source.');
+      return;
+    }
+    setLoading(true);
     try {
-      await adminService.updateLeadStatus(id, newStatus);
-      fetchLeads();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update lead status.');
+      await adminService.createLead({ name: leadName, projectNeeded: leadProject, source: leadSource, status: leadStatus });
+      setLeadName('');
+      setLeadProject('');
+      setLeadSource('');
+      setLeadStatus('Hot Lead');
+      await loadTab('LEADS');
+    } catch {
+      Alert.alert('Lead Error', 'Unable to create lead.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDeleteStaff = async (id: string) => {
-    Alert.alert(
-      'Confirm Delete',
-      'Are you sure you want to remove this staff member?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await adminService.deleteStaff(id);
-              fetchStaff();
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete staff.');
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
+  const handleUpdateLeadStatus = async (id: string, status: Lead['status']) => {
+    await adminService.updateLeadStatus(id, status);
+    loadTab('LEADS');
+  };
+
+  const selectReportSite = async (siteId: string) => {
+    setReportSiteId(siteId);
+    setLoading(true);
+    try {
+      await fetchReportData(siteId);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const renderDashboard = () => (
+    <View>
+      <Text style={styles.screenTitle}>Admin Overview</Text>
+      <Text style={styles.screenSubtitle}>Operations, projects, team, and sales pipeline in one place.</Text>
+
+      <View style={styles.metricsGrid}>
+        <MetricCard icon="business" label="Projects" value={dashboardStats.activeSites.toString()} />
+        <MetricCard icon="badge" label="Staff" value={dashboardStats.staff.toString()} />
+        <MetricCard icon="groups" label="Leads" value={dashboardStats.leads.toString()} />
+        <MetricCard icon="trending-up" label="Converted" value={dashboardStats.conversions.toString()} />
+      </View>
+
+      <View style={styles.heroPanel}>
+        <View>
+          <Text style={styles.heroLabel}>Total Site Spend</Text>
+          <Text style={styles.heroValue}>Rs {dashboardStats.spend.toLocaleString()}</Text>
+        </View>
+        <MaterialIcons name="query-stats" size={34} color={COLORS.white} />
+      </View>
+
+      <SectionTitle title="Project Cost Snapshot" />
+      <View style={styles.card}>
+        {(analytics?.siteWiseExpenseBreakdown || []).slice(0, 5).map((site: any) => (
+          <View key={site.id} style={styles.costRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>{site.site_name}</Text>
+              <Text style={styles.rowMeta}>Direct Rs {Number(site.direct_expenses || 0).toLocaleString()} / Credit Rs {Number(site.indirect_expenses || 0).toLocaleString()}</Text>
+            </View>
+            <Text style={styles.rowAmount}>Rs {Number(site.total_expenses || 0).toLocaleString()}</Text>
+          </View>
+        ))}
+        {(!analytics?.siteWiseExpenseBreakdown || analytics.siteWiseExpenseBreakdown.length === 0) && <EmptyState text="No project cost data yet." />}
+      </View>
+    </View>
+  );
+
+  const renderAttendance = () => {
+    const workerCount = attendance?.workers?.length || 0;
+    const supervisorCount = attendance?.supervisors?.length || 0;
+    return (
+      <View>
+        <Text style={styles.screenTitle}>Daily Attendance</Text>
+        <Text style={styles.screenSubtitle}>Review supervisor check-ins and worker headcount by date.</Text>
+
+        <View style={styles.dateRow}>
+          <TouchableOpacity style={styles.dateButton} onPress={() => setAttendanceDate(todayIso())}>
+            <MaterialIcons name="today" size={18} color={COLORS.primary} />
+            <Text style={styles.dateButtonText}>Today</Text>
+          </TouchableOpacity>
+          <TextInput style={styles.dateInput} value={attendanceDate} onChangeText={setAttendanceDate} placeholder="YYYY-MM-DD" />
+        </View>
+
+        <View style={styles.metricsGrid}>
+          <MetricCard icon="engineering" label="Workers" value={workerCount.toString()} />
+          <MetricCard icon="verified-user" label="Supervisors" value={supervisorCount.toString()} />
+        </View>
+
+        <SectionTitle title="Supervisor Attendance" />
+        <View style={styles.card}>
+          {(attendance?.supervisors || []).map((item: any) => (
+            <AttendanceRow
+              key={`supervisor-${item.id}`}
+              icon="person-pin-circle"
+              title={item.supervisor_name || 'Supervisor'}
+              subtitle={`${item.site_name || 'Unassigned Site'} / ${item.location_name || item.site_location || 'Location not recorded'}`}
+              status={item.status}
+              imageUrl={item.selfie_url}
+            />
+          ))}
+          {supervisorCount === 0 && <EmptyState text="No supervisor attendance for this date." />}
+        </View>
+
+        <SectionTitle title="Worker Attendance" />
+        <View style={styles.card}>
+          {(attendance?.workers || []).map((item: any) => (
+            <AttendanceRow
+              key={`worker-${item.id}`}
+              icon="engineering"
+              title={item.worker_name || 'Worker'}
+              subtitle={`${item.worker_role || 'Worker'} / ${item.site_name || 'Site not recorded'}`}
+              status={item.status}
+            />
+          ))}
+          {workerCount === 0 && <EmptyState text="No worker attendance for this date." />}
+        </View>
+      </View>
     );
   };
 
-  return (
-    <View style={{ flex: 1, backgroundColor: '#F8FAFC' }}>
-      <Stack.Screen 
-        options={{
-          headerTitle: "Admin Panel",
-          headerRight: () => (
-            <TouchableOpacity 
-              onPress={() => router.replace('/')}
-              style={{ marginRight: 15, flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FEE2E2', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}
-            >
-              <MaterialIcons name="logout" size={16} color="#EF4444" />
-              <Text style={{ color: '#EF4444', fontWeight: 'bold', fontSize: 12 }}>LOGOUT</Text>
-            </TouchableOpacity>
-          ),
-        }} 
-      />
+  const renderProjects = () => (
+    <View>
+      <Text style={styles.screenTitle}>Projects</Text>
+      <Text style={styles.screenSubtitle}>Create sites and assign supervisors without leaving admin.</Text>
 
-      {/* Tabs Navigation */}
-      <View style={{ flexDirection: 'row', backgroundColor: '#0F172A', padding: 8 }}>
+      <View style={styles.card}>
+        <Text style={styles.formTitle}>New Project Site</Text>
+        <TextInput style={styles.input} placeholder="Project site name" value={newSiteName} onChangeText={setNewSiteName} placeholderTextColor={COLORS.textLight} />
+        <TextInput style={styles.input} placeholder="Location / address" value={newSiteLocation} onChangeText={setNewSiteLocation} placeholderTextColor={COLORS.textLight} />
+        <PrimaryButton label="Create Project" icon="add-business" onPress={handleAddSite} />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.formTitle}>Supervisor Allocation</Text>
+        <ChipSelect items={sitesList.map((site) => ({ id: site.id, label: site.name }))} value={selectedSiteForAllocation} onChange={setSelectedSiteForAllocation} />
+        <ChipSelect items={supervisors.map((staff) => ({ id: staff.id, label: staff.name }))} value={selectedSupervisorForAllocation} onChange={setSelectedSupervisorForAllocation} />
+        <PrimaryButton label="Update Allocation" icon="sync-alt" onPress={handleAllocateSupervisor} />
+      </View>
+
+      <SectionTitle title="Active Projects" />
+      {sitesList.map((site) => (
+        <View key={site.id} style={styles.listCard}>
+          <View style={styles.listIcon}><MaterialIcons name="business" size={22} color={COLORS.primary} /></View>
+          <View style={styles.listContent}>
+            <Text style={styles.rowTitle}>{site.name}</Text>
+            <Text style={styles.rowMeta}>{site.location}</Text>
+            <Text style={styles.assignmentText}>{site.supervisor_name ? `Supervisor: ${site.supervisor_name}` : 'Supervisor not assigned'}</Text>
+          </View>
+          <TouchableOpacity style={styles.iconButton} onPress={() => handleDeleteSite(site.id)}>
+            <MaterialIcons name="delete-outline" size={22} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderTeam = () => (
+    <View>
+      <Text style={styles.screenTitle}>Team</Text>
+      <Text style={styles.screenSubtitle}>Manage supervisors, site engineers, and drivers.</Text>
+
+      <View style={styles.card}>
+        <Text style={styles.formTitle}>Create Staff Login</Text>
+        <TextInput style={styles.input} placeholder="Full name" value={staffName} onChangeText={setStaffName} placeholderTextColor={COLORS.textLight} />
+        <TextInput style={styles.input} placeholder="Phone number" value={staffPhone} onChangeText={setStaffPhone} placeholderTextColor={COLORS.textLight} keyboardType="phone-pad" />
+        <TextInput style={styles.input} placeholder="Username" value={staffUsername} onChangeText={setStaffUsername} placeholderTextColor={COLORS.textLight} autoCapitalize="none" />
+        <TextInput style={styles.input} placeholder="Password" value={staffPassword} onChangeText={setStaffPassword} placeholderTextColor={COLORS.textLight} secureTextEntry />
+        <ChipSelect
+          items={(['Supervisor', 'Site Engineer', 'Driver'] as StaffRole[]).map((role) => ({ id: role, label: role }))}
+          value={staffRole}
+          onChange={(role) => setStaffRole(role as StaffRole)}
+        />
+        <PrimaryButton label="Create Staff Account" icon="person-add" onPress={handleAddStaff} />
+      </View>
+
+      <SectionTitle title="Staff Directory" />
+      {staffList.map((staff) => (
+        <View key={staff.id} style={styles.listCard}>
+          <View style={styles.avatar}><Text style={styles.avatarText}>{staff.name?.charAt(0)?.toUpperCase() || 'S'}</Text></View>
+          <View style={styles.listContent}>
+            <Text style={styles.rowTitle}>{staff.name}</Text>
+            <Text style={styles.rowMeta}>{staff.role} / {staff.phone}</Text>
+          </View>
+          <TouchableOpacity style={styles.iconButton} onPress={() => handleDeleteStaff(staff.id)}>
+            <MaterialIcons name="delete-outline" size={22} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderLeads = () => (
+    <View>
+      <Text style={styles.screenTitle}>CRM Leads</Text>
+      <Text style={styles.screenSubtitle}>Track enquiry flow from lead to converted client.</Text>
+
+      <View style={styles.card}>
+        <Text style={styles.formTitle}>Register Lead</Text>
+        <TextInput style={styles.input} placeholder="Client / lead name" value={leadName} onChangeText={setLeadName} placeholderTextColor={COLORS.textLight} />
+        <TextInput style={styles.input} placeholder="Project requirement" value={leadProject} onChangeText={setLeadProject} placeholderTextColor={COLORS.textLight} />
+        <TextInput style={styles.input} placeholder="Lead source" value={leadSource} onChangeText={setLeadSource} placeholderTextColor={COLORS.textLight} />
+        <ChipSelect
+          items={(['Hot Lead', 'In Discussion', 'Converted Client'] as Lead['status'][]).map((status) => ({ id: status, label: status }))}
+          value={leadStatus}
+          onChange={(status) => setLeadStatus(status as Lead['status'])}
+        />
+        <PrimaryButton label="Register Lead" icon="add" onPress={handleAddLead} />
+      </View>
+
+      <SectionTitle title="Lead Pipeline" />
+      {leadsList.map((lead) => (
+        <View key={lead.id} style={styles.card}>
+          <View style={styles.pipelineHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>{lead.name}</Text>
+              <Text style={styles.rowMeta}>{lead.project_needed}</Text>
+              <Text style={styles.assignmentText}>Source: {lead.source}</Text>
+            </View>
+            <StatusPill status={lead.status} />
+          </View>
+          <ChipSelect
+            items={(['Hot Lead', 'In Discussion', 'Converted Client'] as Lead['status'][]).map((status) => ({ id: status, label: status }))}
+            value={lead.status}
+            onChange={(status) => handleUpdateLeadStatus(lead.id, status as Lead['status'])}
+          />
+        </View>
+      ))}
+    </View>
+  );
+
+  const renderReports = () => {
+    const direct = reportData.filter((item) => item.payment_mode === 'Direct');
+    const credit = reportData.filter((item) => item.payment_mode !== 'Direct');
+    return (
+      <View>
+        <Text style={styles.screenTitle}>Site Reports</Text>
+        <Text style={styles.screenSubtitle}>Read-only bills and expense ledger for review.</Text>
+
+        <ChipSelect items={sitesList.map((site) => ({ id: site.id, label: site.name }))} value={reportSiteId} onChange={selectReportSite} />
+
+        <SectionTitle title="Direct Cash" />
+        <LedgerList data={direct} empty="No direct cash records." />
+
+        <SectionTitle title="Credit / Vendor Bills" />
+        <LedgerList data={credit} empty="No credit bill records." />
+      </View>
+    );
+  };
+
+  const renderActiveTab = () => {
+    if (activeTab === 'DASHBOARD') return renderDashboard();
+    if (activeTab === 'ATTENDANCE') return renderAttendance();
+    if (activeTab === 'PROJECTS') return renderProjects();
+    if (activeTab === 'TEAM') return renderTeam();
+    if (activeTab === 'LEADS') return renderLeads();
+    return renderReports();
+  };
+
+  return (
+    <View style={styles.outerContainer}>
+      <AppBackground />
+      <Stack.Screen options={{ headerTitle: 'Admin Workspace', headerRight: () => <LogoutButton /> }} />
+
+      <View style={styles.brandHeader}>
+        <Image source={require('../assets/ayyanar-logo.jpg')} style={styles.brandLogo} resizeMode="contain" />
+        <Text style={styles.brandCaption}>Operations Control</Text>
+      </View>
+
+      <View style={styles.tabShell}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {[
-              { id: 'ANALYTICS', label: 'Dashboard', icon: 'dashboard' },
-              { id: 'REPORTS', label: 'Reports', icon: 'description' },
-              { id: 'CRM_LEADS', label: 'CRM Leads', icon: 'people' },
-              { id: 'STAFF_HR', label: 'Staff & Credentials', icon: 'badge' },
-              { id: 'ADVANCES', label: 'Advances', icon: 'payments' },
-              { id: 'ALLOCATIONS', label: 'Site Allocations', icon: 'location-on' }
-            ].map((tab) => (
-              <TouchableOpacity
-                key={tab.id}
-                style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8,
-                  backgroundColor: currentTab === tab.id ? '#38BDF8' : '#1E293B'
-                }}
-                onPress={() => setCurrentTab(tab.id as any)}
-              >
-                <MaterialIcons name={tab.icon as any} size={16} color={currentTab === tab.id ? '#0F172A' : '#94A3B8'} />
-                <Text style={{ color: currentTab === tab.id ? '#0F172A' : '#E2E8F0', fontWeight: 'bold', fontSize: 13 }}>{tab.label}</Text>
+          <View style={styles.tabRow}>
+            {adminTabs.map((tab) => (
+              <TouchableOpacity key={tab.id} style={[styles.tabButton, activeTab === tab.id && styles.tabButtonActive]} onPress={() => setActiveTab(tab.id)}>
+                <MaterialIcons name={tab.icon} size={18} color={activeTab === tab.id ? COLORS.white : COLORS.textLight} />
+                <Text style={[styles.tabText, activeTab === tab.id && styles.tabTextActive]}>{tab.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        
-        {/* ================= WORKSPACE: ANALYTICS DASHBOARD ================= */}
-        {currentTab === 'ANALYTICS' && (
-          <View>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 16 }}>Business Analytics</Text>
-            
-            {loading && !analytics ? (
-              <ActivityIndicator size="large" color="#0F172A" />
-            ) : (
-              <>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
-                  <View style={{ backgroundColor: '#FFF', width: '48%', padding: 16, borderRadius: 12, elevation: 2 }}>
-                    <Text style={{ color: '#64748B', fontSize: 12 }}>Total Leads</Text>
-                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0F172A', marginTop: 4 }}>
-                      {analytics?.leadsChannelPerformance?.reduce((acc: number, curr: any) => acc + curr.total_leads, 0) || 0}
-                    </Text>
-                  </View>
-                  <View style={{ backgroundColor: '#FFF', width: '48%', padding: 16, borderRadius: 12, elevation: 2 }}>
-                    <Text style={{ color: '#64748B', fontSize: 12 }}>Conversions</Text>
-                    <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0F172A', marginTop: 4 }}>
-                      {analytics?.leadsChannelPerformance?.reduce((acc: number, curr: any) => acc + curr.converted_leads, 0) || 0}
-                    </Text>
-                  </View>
-                </View>
-
-                <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0F172A', marginBottom: 12 }}>Site-wise Expenses</Text>
-                <View style={{ backgroundColor: '#FFF', padding: 16, borderRadius: 12, elevation: 2, marginBottom: 20 }}>
-                  {analytics?.siteWiseExpenseBreakdown?.map((exp: any, idx: number) => (
-                    <TouchableOpacity 
-                      key={idx} 
-                      style={{ marginBottom: 16 }}
-                      onPress={() => fetchSiteLedger(exp.id)}
-                    >
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                          <Text style={{ fontSize: 13, color: '#475569', fontWeight: '500' }}>{exp.site_name}</Text>
-                          {activeLedgerSite === exp.id && <MaterialIcons name="arrow-drop-down" size={20} color="#0F172A" />}
-                        </View>
-                        <Text style={{ fontSize: 13, color: '#0F172A', fontWeight: 'bold' }}>₹{Number(exp.total_expenses).toLocaleString()}</Text>
-                      </View>
-                      <View style={{ height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden' }}>
-                        <View style={{ height: '100%', backgroundColor: ['#38BDF8', '#818CF8', '#FB923C'][idx % 3], width: `${Math.min((exp.total_expenses / 100000) * 100, 100)}%` }} />
-                      </View>
-                      
-                      {activeLedgerSite === exp.id && (
-                        <View style={{ marginTop: 12, backgroundColor: '#F8FAFC', padding: 10, borderRadius: 8 }}>
-                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#CBD5E1' }}>
-                            <View>
-                              <Text style={{ fontSize: 9, color: '#64748B', fontWeight: 'bold' }}>DIRECT (CASH)</Text>
-                              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#10B981' }}>₹{Number(exp.direct_expenses).toLocaleString()}</Text>
-                            </View>
-                            <View style={{ alignItems: 'flex-end' }}>
-                              <Text style={{ fontSize: 9, color: '#64748B', fontWeight: 'bold' }}>INDIRECT (CREDIT)</Text>
-                              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#6366F1' }}>₹{Number(exp.indirect_expenses).toLocaleString()}</Text>
-                            </View>
-                          </View>
-
-                          <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748B', marginBottom: 8 }}>RECENT BILLS / EXPENSES</Text>
-                          {selectedSiteLedger.slice(0, 5).map((item: any) => (
-                            <View key={item.id} style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', paddingBottom: 4 }}>
-                              <View style={{ flex: 1 }}>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                                  <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0F172A' }}>{item.category}</Text>
-                                  <View style={{ backgroundColor: item.payment_mode === 'Direct' ? '#DCFCE7' : '#EEF2FF', paddingHorizontal: 4, paddingVertical: 1, borderRadius: 4 }}>
-                                    <Text style={{ fontSize: 7, fontWeight: 'bold', color: item.payment_mode === 'Direct' ? '#166534' : '#4338CA' }}>{item.payment_mode?.toUpperCase()}</Text>
-                                  </View>
-                                </View>
-                                <Text style={{ fontSize: 10, color: '#64748B' }} numberOfLines={1}>{item.description}</Text>
-                              </View>
-                              <Text style={{ fontSize: 11, fontWeight: 'bold', color: item.type === 'CREDIT' ? '#10B981' : '#0F172A' }}>
-                                {item.type === 'DEBIT' ? '-' : '+'} ₹{Number(item.amount).toLocaleString()}
-                              </Text>
-                            </View>
-                          ))}
-                          {selectedSiteLedger.length === 0 && <Text style={{ fontSize: 10, color: '#94A3B8' }}>No records found.</Text>}
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                  {(!analytics?.siteWiseExpenseBreakdown || analytics.siteWiseExpenseBreakdown.length === 0) && (
-                    <Text style={{ color: '#64748B', textAlign: 'center' }}>No expense data recorded yet.</Text>
-                  )}
-                </View>
-              </>
-            )}
-
-            <View style={{ backgroundColor: '#0F172A', padding: 20, borderRadius: 12, alignItems: 'center' }}>
-                <FontAwesome5 name="chart-line" size={40} color="#38BDF8" />
-                <Text style={{ color: '#FFF', fontWeight: 'bold', marginTop: 12 }}>Detailed Reports coming soon</Text>
-            </View>
-          </View>
-        )}
-
-        {/* ================= WORKSPACE: REPORTS (EXPENSES WITH IMAGES) ================= */}
-        {currentTab === 'REPORTS' && (
-          <View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A' }}>Expense Reports</Text>
-              <TouchableOpacity 
-                style={{ backgroundColor: '#10B981', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 6 }}
-                onPress={() => Alert.alert("Print Feature", "PDF generation requires a system printer or additional plugin. Displaying list for review.")}
-              >
-                <MaterialIcons name="picture-as-pdf" size={16} color="#FFF" />
-                <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 11 }}>EXPORT</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#64748B', marginBottom: 8 }}>FILTER BY PROJECT SITE</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {sitesList.map((site) => (
-                  <TouchableOpacity 
-                    key={site.id} 
-                    style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: reportSiteId === site.id ? '#0F172A' : '#E2E8F0' }} 
-                    onPress={() => setReportSiteId(site.id)}
-                  >
-                    <Text style={{ fontSize: 11, color: reportSiteId === site.id ? '#FFF' : '#475569', fontWeight: 'bold' }}>{site.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </ScrollView>
-
-            {loading ? (
-              <ActivityIndicator size="large" color="#0F172A" />
-            ) : reportSiteId ? (
-              <View>
-                {/* Table Header */}
-                <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
-                   <View style={{ flex: 1, backgroundColor: '#064E3B', padding: 8, borderRadius: 6, alignItems: 'center' }}>
-                      <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>DIRECT (CASH)</Text>
-                   </View>
-                   <View style={{ flex: 1, backgroundColor: '#312E81', padding: 8, borderRadius: 6, alignItems: 'center' }}>
-                      <Text style={{ color: '#FFF', fontSize: 10, fontWeight: 'bold' }}>INDIRECT (CREDIT)</Text>
-                   </View>
-                </View>
-
-                {/* Table Content */}
-                <View style={{ flexDirection: 'row', gap: 10 }}>
-                  {/* Column 1: Direct */}
-                  <View style={{ flex: 1 }}>
-                    {reportData.filter(i => i.type === 'DEBIT' && i.payment_mode === 'Direct').length > 0 ? (
-                      reportData.filter(i => i.type === 'DEBIT' && i.payment_mode === 'Direct').map((item) => (
-                        <View key={item.id} style={{ backgroundColor: '#FFF', padding: 8, borderRadius: 10, marginBottom: 10, elevation: 1, borderWidth: 1, borderColor: '#DCFCE7' }}>
-                          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0F172A' }}>{item.category}</Text>
-                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#166534', marginVertical: 2 }}>₹{Number(item.amount).toLocaleString()}</Text>
-                          <Text style={{ fontSize: 9, color: '#64748B' }}>{new Date(item.date).toLocaleDateString()}</Text>
-                          {item.image_url && (
-                            <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 6 }}>
-                              <Image source={{ uri: item.image_url }} style={{ width: '100%', height: 100, borderRadius: 6 }} resizeMode="cover" />
-                            </View>
-                          )}
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={{ fontSize: 10, color: '#94A3B8', textAlign: 'center', marginTop: 10 }}>No cash bills.</Text>
-                    )}
-                  </View>
-
-                  {/* Column 2: Indirect */}
-                  <View style={{ flex: 1 }}>
-                    {reportData.filter(i => i.type === 'DEBIT' && i.payment_mode === 'Indirect').length > 0 ? (
-                      reportData.filter(i => i.type === 'DEBIT' && i.payment_mode === 'Indirect').map((item) => (
-                        <View key={item.id} style={{ backgroundColor: '#FFF', padding: 8, borderRadius: 10, marginBottom: 10, elevation: 1, borderWidth: 1, borderColor: '#EEF2FF' }}>
-                          <Text style={{ fontSize: 11, fontWeight: 'bold', color: '#0F172A' }}>{item.category}</Text>
-                          <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#4338CA', marginVertical: 2 }}>₹{Number(item.amount).toLocaleString()}</Text>
-                          <Text style={{ fontSize: 9, color: '#64748B' }}>{new Date(item.date).toLocaleDateString()}</Text>
-                          {item.image_url && (
-                            <View style={{ marginTop: 6, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 6 }}>
-                              <Image source={{ uri: item.image_url }} style={{ width: '100%', height: 100, borderRadius: 6 }} resizeMode="cover" />
-                            </View>
-                          )}
-                        </View>
-                      ))
-                    ) : (
-                      <Text style={{ fontSize: 10, color: '#94A3B8', textAlign: 'center', marginTop: 10 }}>No credit bills.</Text>
-                    )}
-                  </View>
-                </View>
-              </View>
-            ) : (
-              <View style={{ alignItems: 'center', marginTop: 40 }}>
-                <MaterialIcons name="touch-app" size={48} color="#CBD5E1" />
-                <Text style={{ color: '#94A3B8', marginTop: 12 }}>Select a site above to view detailed reports.</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* ================= WORKSPACE: STAFF & CREDENTIALS ================= */}
-        {currentTab === 'STAFF_HR' && (
-          <View>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 16 }}>Credential Management</Text>
-            
-            <View style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, elevation: 2, marginBottom: 20 }}>
-              <TextInput style={styles.input} placeholder="Staff Full Name" value={staffName} onChangeText={setStaffName} />
-              <TextInput style={styles.input} placeholder="Phone Number" keyboardType="phone-pad" value={staffPhone} onChangeText={setStaffPhone} />
-              <TextInput style={styles.input} placeholder="System Username (for Login)" value={staffUsername} onChangeText={setStaffUsername} autoCapitalize="none" />
-              <TextInput style={styles.input} placeholder="Login Password" value={staffPassword} onChangeText={setStaffPassword} secureTextEntry />
-              
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#64748B', marginBottom: 8 }}>ASSIGN ROLE</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                {['Supervisor', 'Driver', 'Site Engineer'].map((role) => (
-                  <TouchableOpacity key={role} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: staffRole === role ? '#0F172A' : '#E2E8F0' }} onPress={() => setStaffRole(role as any)}>
-                    <Text style={{ fontSize: 11, color: staffRole === role ? '#FFF' : '#475569', fontWeight: 'bold' }}>{role}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <TouchableOpacity style={{ backgroundColor: '#0F172A', padding: 14, borderRadius: 8, alignItems: 'center' }} onPress={handleAddStaff} disabled={loading}>
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Create Staff Account</Text>}
-              </TouchableOpacity>
-            </View>
-
-            <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#64748B', marginBottom: 12 }}>System Users</Text>
-            {loading && staffList.length === 0 ? (
-              <ActivityIndicator color="#0F172A" />
-            ) : (
-              staffList.map((staff) => (
-                <View key={staff.id} style={{ backgroundColor: '#FFF', padding: 12, borderRadius: 10, marginBottom: 10, flexDirection: 'row', alignItems: 'center', elevation: 1 }}>
-                  <View style={{ backgroundColor: '#F3E8FF', padding: 10, borderRadius: 8 }}>
-                    <MaterialIcons name="security" size={20} color="#9333EA" />
-                  </View>
-                  <View style={{ marginLeft: 12, flex: 1 }}>
-                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0F172A' }}>{staff.name}</Text>
-                    <Text style={{ fontSize: 12, color: '#64748B' }}>{staff.role} • {staff.phone}</Text>
-                  </View>
-                  <TouchableOpacity onPress={() => handleDeleteStaff(staff.id)} style={{ padding: 8 }}>
-                    <MaterialIcons name="delete-outline" size={22} color="#EF4444" />
-                  </TouchableOpacity>
-                </View>
-              ))
-            )}
-          </View>
-        )}
-
-        {/* ================= WORKSPACE: ADVANCE REQUESTS ================= */}
-        {currentTab === 'ADVANCES' && (
-          <View>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 16 }}>Advance Approvals</Text>
-            {loading && advanceRequests.length === 0 ? (
-              <ActivityIndicator color="#0F172A" />
-            ) : (
-              advanceRequests.map((req) => (
-                <View key={req.id} style={{ backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 12, elevation: 2 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <View>
-                      <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#0F172A' }}>{req.user_name}</Text>
-                      <Text style={{ fontSize: 11, color: '#64748B' }}>{req.user_role} • {new Date(req.date).toLocaleDateString()}</Text>
-                    </View>
-                    <View style={{ backgroundColor: req.status === 'APPROVED' ? '#DCFCE7' : req.status === 'REJECTED' ? '#FEE2E2' : '#FEF3C7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                      <Text style={{ fontSize: 10, fontWeight: 'bold', color: req.status === 'APPROVED' ? '#166534' : req.status === 'REJECTED' ? '#991B1B' : '#854D0E' }}>{req.status}</Text>
-                    </View>
-                  </View>
-                  <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0F172A', marginTop: 12 }}>₹{Number(req.amount).toLocaleString()}</Text>
-                  <Text style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>Reason: {req.reason}</Text>
-                  
-                  {req.status === 'PENDING' && (
-                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 }}>
-                      <TouchableOpacity 
-                        style={{ flex: 1, backgroundColor: '#10B981', padding: 10, borderRadius: 8, alignItems: 'center' }}
-                        onPress={() => handleUpdateAdvanceStatus(req.id, 'APPROVED')}
-                      >
-                        <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>APPROVE</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity 
-                        style={{ flex: 1, backgroundColor: '#EF4444', padding: 10, borderRadius: 8, alignItems: 'center' }}
-                        onPress={() => handleUpdateAdvanceStatus(req.id, 'REJECTED')}
-                      >
-                        <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 12 }}>REJECT</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              ))
-            )}
-            {advanceRequests.length === 0 && !loading && (
-              <Text style={{ textAlign: 'center', color: '#64748B', marginTop: 20 }}>No pending advance requests.</Text>
-            )}
-          </View>
-        )}
-
-        {/* ================= WORKSPACE: CRM LEADS ================= */}
-        {currentTab === 'CRM_LEADS' && (
-          <View>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 16 }}>Lead Management</Text>
-            
-            <View style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, elevation: 2, marginBottom: 20 }}>
-              <TextInput style={styles.input} placeholder="Lead / Client Name" value={leadName} onChangeText={setLeadName} />
-              <TextInput style={styles.input} placeholder="Project Requirement" value={leadProject} onChangeText={setLeadProject} />
-              <TextInput style={styles.input} placeholder="Lead Source (e.g. Website, Friend)" value={leadSource} onChangeText={setLeadSource} />
-              
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#64748B', marginBottom: 8 }}>INITIAL STATUS</Text>
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
-                {['Hot Lead', 'In Discussion', 'Converted Client'].map((status) => (
-                  <TouchableOpacity key={status} style={{ paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: leadStatus === status ? '#38BDF8' : '#E2E8F0' }} onPress={() => setLeadStatus(status as any)}>
-                    <Text style={{ fontSize: 10, color: leadStatus === status ? '#0F172A' : '#475569', fontWeight: 'bold' }}>{status}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-
-              <TouchableOpacity style={{ backgroundColor: '#0F172A', padding: 14, borderRadius: 8, alignItems: 'center' }} onPress={handleAddLead} disabled={loading}>
-                {loading ? <ActivityIndicator color="#FFF" /> : <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Register New Lead</Text>}
-              </TouchableOpacity>
-            </View>
-
-            <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#64748B', marginBottom: 12 }}>Active Lead Pipeline</Text>
-            {loading && leadsList.length === 0 ? (
-              <ActivityIndicator color="#0F172A" />
-            ) : (
-              leadsList.map((lead) => (
-                <View key={lead.id} style={{ backgroundColor: '#FFF', padding: 16, borderRadius: 10, marginBottom: 10, elevation: 1 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0F172A' }}>{lead.name}</Text>
-                      <Text style={{ fontSize: 13, color: '#64748B', marginTop: 2 }}>{lead.project_needed}</Text>
-                      <Text style={{ fontSize: 11, color: '#94A3B8', marginTop: 4 }}>Source: {lead.source}</Text>
-                    </View>
-                    <View style={{ backgroundColor: lead.status === 'Converted Client' ? '#DCFCE7' : lead.status === 'Hot Lead' ? '#FEE2E2' : '#FEF9C3', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
-                      <Text style={{ fontSize: 10, fontWeight: 'bold', color: lead.status === 'Converted Client' ? '#166534' : lead.status === 'Hot Lead' ? '#991B1B' : '#854D0E' }}>{lead.status.toUpperCase()}</Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 }}>
-                    {['In Discussion', 'Converted Client'].map((status) => (
-                      lead.status !== status && (
-                        <TouchableOpacity key={status} style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, backgroundColor: '#F1F5F9' }} onPress={() => handleUpdateLeadStatus(lead.id, status)}>
-                          <Text style={{ fontSize: 10, color: '#475569', fontWeight: 'bold' }}>MOVE TO {status.toUpperCase()}</Text>
-                        </TouchableOpacity>
-                      )
-                    ))}
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
-        )}
-
-        {/* ================= WORKSPACE: SITE ALLOCATIONS ================= */}
-        {currentTab === 'ALLOCATIONS' && (
-          <View>
-            <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 16 }}>Site Management</Text>
-            
-            {/* Create New Site */}
-            <View style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, elevation: 2, marginBottom: 20 }}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#64748B', marginBottom: 12 }}>CREATE NEW PROJECT SITE</Text>
-              <TextInput style={styles.input} placeholder="Project Site Name (e.g. Alpha Madurai)" value={newSiteName} onChangeText={setNewSiteName} />
-              <TextInput style={styles.input} placeholder="Site Location / Address" value={newSiteLocation} onChangeText={setNewSiteLocation} />
-              <TouchableOpacity style={{ backgroundColor: '#0F172A', padding: 14, borderRadius: 8, alignItems: 'center' }} onPress={handleAddSite} disabled={loading}>
-                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Add Project Site</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Allocate Supervisor */}
-            {sitesList.length > 0 && staffList.filter(s => s.role === 'Supervisor').length > 0 && (
-              <View style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, elevation: 2, marginBottom: 20 }}>
-                <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#64748B', marginBottom: 12 }}>ALLOCATE SUPERVISOR TO SITE</Text>
-                
-                <Text style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>SELECT SITE</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    {sitesList.map((site) => (
-                      <TouchableOpacity key={site.id} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: selectedSiteForAllocation === site.id ? '#0284C7' : '#E2E8F0' }} onPress={() => setSelectedSiteForAllocation(site.id)}>
-                        <Text style={{ fontSize: 11, color: selectedSiteForAllocation === site.id ? '#FFF' : '#475569', fontWeight: 'bold' }}>{site.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
-
-                <Text style={{ fontSize: 11, color: '#94A3B8', marginBottom: 4 }}>SELECT SUPERVISOR</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    {staffList.filter(s => s.role === 'Supervisor').map((staff) => (
-                      <TouchableOpacity key={staff.id} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: selectedSupervisorForAllocation === staff.id ? '#9333EA' : '#E2E8F0' }} onPress={() => setSelectedSupervisorForAllocation(staff.id)}>
-                        <Text style={{ fontSize: 11, color: selectedSupervisorForAllocation === staff.id ? '#FFF' : '#475569', fontWeight: 'bold' }}>{staff.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </ScrollView>
-
-                <TouchableOpacity style={{ backgroundColor: '#0284C7', padding: 14, borderRadius: 8, alignItems: 'center' }} onPress={handleAllocateSupervisor} disabled={loading}>
-                  <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Update Allocation</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#64748B', marginBottom: 12 }}>Active Projects</Text>
-            {loading && sitesList.length === 0 ? (
-              <ActivityIndicator color="#0F172A" />
-            ) : (
-              sitesList.map((site) => (
-                <View key={site.id} style={{ backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 12, elevation: 2 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-                      <View style={{ backgroundColor: '#E0F2FE', padding: 10, borderRadius: 8 }}>
-                        <MaterialIcons name="business" size={24} color="#0284C7" />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0F172A' }}>{site.name}</Text>
-                        <Text style={{ fontSize: 12, color: '#64748B' }}>{site.location}</Text>
-                      </View>
-                    </View>
-                    <TouchableOpacity onPress={() => handleDeleteSite(site.id)} style={{ padding: 8 }}>
-                      <MaterialIcons name="delete-outline" size={22} color="#EF4444" />
-                    </TouchableOpacity>
-                  </View>
-                  
-                  <View style={{ marginTop: 12, padding: 10, backgroundColor: '#F8FAFC', borderRadius: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <View>
-                      <Text style={{ fontSize: 10, fontWeight: 'bold', color: '#64748B' }}>ALLOCATED SUPERVISOR</Text>
-                      <Text style={{ fontSize: 13, color: site.supervisor_name ? '#0F172A' : '#94A3B8', fontWeight: 'bold', marginTop: 2 }}>
-                        {site.supervisor_name || 'NOT ASSIGNED'}
-                      </Text>
-                    </View>
-                    {site.supervisor_name && (
-                      <MaterialIcons name="verified-user" size={18} color="#10B981" />
-                    )}
-                  </View>
-                </View>
-              ))
-            )}
-          </View>
-        )}
-
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
+      >
+        {loading && !refreshing ? <ActivityIndicator color={COLORS.primary} style={styles.loader} /> : null}
+        {renderActiveTab()}
       </ScrollView>
     </View>
   );
 }
 
+function MetricCard({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string }) {
+  return (
+    <View style={styles.metricCard}>
+      <View style={styles.metricIcon}><MaterialIcons name={icon} size={20} color={COLORS.primary} /></View>
+      <Text style={styles.metricValue}>{value}</Text>
+      <Text style={styles.metricLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function SectionTitle({ title }: { title: string }) {
+  return <Text style={styles.sectionTitle}>{title}</Text>;
+}
+
+function PrimaryButton({ label, icon, onPress }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; onPress: () => void }) {
+  return (
+    <TouchableOpacity style={styles.primaryButton} onPress={onPress}>
+      <MaterialIcons name={icon} size={18} color={COLORS.white} />
+      <Text style={styles.primaryButtonText}>{label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+function ChipSelect({ items, value, onChange }: { items: { id: string; label: string }[]; value: string | null; onChange: (id: string) => void }) {
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+      <View style={styles.chipRow}>
+        {items.map((item) => (
+          <TouchableOpacity key={item.id} style={[styles.chip, value === item.id && styles.chipActive]} onPress={() => onChange(item.id)}>
+            <Text style={[styles.chipText, value === item.id && styles.chipTextActive]}>{item.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </ScrollView>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const isConverted = status === 'Converted Client';
+  return (
+    <View style={[styles.statusPill, isConverted && styles.statusPillGood]}>
+      <Text style={[styles.statusPillText, isConverted && styles.statusPillTextGood]}>{status}</Text>
+    </View>
+  );
+}
+
+function AttendanceRow({ icon, title, subtitle, status, imageUrl }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; subtitle: string; status: string; imageUrl?: string }) {
+  return (
+    <View style={styles.attendanceRow}>
+      {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.attendanceImage} /> : <View style={styles.listIcon}><MaterialIcons name={icon} size={22} color={COLORS.primary} /></View>}
+      <View style={styles.listContent}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        <Text style={styles.rowMeta}>{subtitle}</Text>
+      </View>
+      <StatusPill status={status || 'Present'} />
+    </View>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <Text style={styles.emptyText}>{text}</Text>;
+}
+
+function LedgerList({ data, empty }: { data: any[]; empty: string }) {
+  return (
+    <View style={styles.card}>
+      {data.map((item) => {
+        const images = getBillImageUris(item.image_url);
+        return (
+          <View key={item.id} style={styles.ledgerCard}>
+            <View style={styles.pipelineHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{item.category || 'Ledger Entry'}</Text>
+                <Text style={styles.rowMeta}>{item.description || 'No description'}</Text>
+                <Text style={styles.assignmentText}>{new Date(item.date).toLocaleDateString()}</Text>
+              </View>
+              <Text style={styles.rowAmount}>Rs {Number(item.amount || 0).toLocaleString()}</Text>
+            </View>
+            {images.length > 0 && (
+              <View style={styles.imageStrip}>
+                {images.map((uri) => <Image key={uri} source={{ uri }} style={styles.thumb} />)}
+              </View>
+            )}
+          </View>
+        );
+      })}
+      {data.length === 0 && <EmptyState text={empty} />}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  input: {
-    backgroundColor: '#F1F5F9',
-    padding: 12,
+  outerContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  container: {
+    flex: 1,
+  },
+  content: {
+    padding: SPACING.md,
+    paddingBottom: 96,
+  },
+  brandHeader: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  brandLogo: {
+    width: 210,
+    height: 44,
+  },
+  brandCaption: {
+    color: COLORS.textLight,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  tabShell: {
+    backgroundColor: COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingVertical: SPACING.sm,
+  },
+  tabRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+  },
+  tabButton: {
+    minWidth: 92,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.steel,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  tabButtonActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  tabText: {
+    color: COLORS.textLight,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  tabTextActive: {
+    color: COLORS.white,
+  },
+  loader: {
+    marginBottom: SPACING.md,
+  },
+  screenTitle: {
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: '900',
+  },
+  screenSubtitle: {
+    color: COLORS.textLight,
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+    marginTop: 4,
+    marginBottom: SPACING.md,
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  metricCard: {
+    width: '48.7%',
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+  },
+  metricIcon: {
+    width: 34,
+    height: 34,
     borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: 'rgba(226, 26, 18, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.sm,
+  },
+  metricValue: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  metricLabel: {
+    color: COLORS.textLight,
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginTop: 2,
+  },
+  heroPanel: {
+    backgroundColor: COLORS.headerBackground,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.lg,
+  },
+  heroLabel: {
+    color: '#BFC5CC',
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  heroValue: {
+    color: COLORS.white,
+    fontSize: 26,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  sectionTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+  },
+  card: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  costRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.steel,
+  },
+  rowTitle: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  rowMeta: {
+    color: COLORS.textLight,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  rowAmount: {
+    color: COLORS.primary,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  dateRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  dateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: SPACING.md,
+  },
+  dateButtonText: {
+    color: COLORS.primary,
+    fontWeight: '900',
+  },
+  dateInput: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    padding: 12,
+    color: COLORS.text,
+    fontWeight: '700',
+  },
+  attendanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.steel,
+  },
+  attendanceImage: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: COLORS.steel,
+  },
+  listIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: 'rgba(226, 26, 18, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  listCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  listContent: {
+    flex: 1,
+  },
+  assignmentText: {
+    color: COLORS.textLight,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 5,
+  },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.steel,
+  },
+  formTitle: {
+    color: COLORS.text,
     fontSize: 14,
+    fontWeight: '900',
+    marginBottom: SPACING.sm,
+  },
+  input: {
+    backgroundColor: COLORS.steel,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+    padding: 13,
+    marginBottom: SPACING.sm,
+  },
+  primaryButton: {
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: SPACING.xs,
+  },
+  primaryButtonText: {
+    color: COLORS.white,
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  chipScroll: {
+    marginBottom: SPACING.sm,
+  },
+  chipRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    paddingVertical: 2,
+  },
+  chip: {
+    backgroundColor: COLORS.steel,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+  },
+  chipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  chipText: {
+    color: COLORS.textLight,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  chipTextActive: {
+    color: COLORS.white,
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: COLORS.headerBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: COLORS.white,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  pipelineHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.sm,
+  },
+  statusPill: {
+    backgroundColor: 'rgba(226, 26, 18, 0.08)',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
+  statusPillGood: {
+    backgroundColor: 'rgba(21, 128, 61, 0.1)',
+  },
+  statusPillText: {
+    color: COLORS.primary,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  statusPillTextGood: {
+    color: COLORS.success,
+  },
+  ledgerCard: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.steel,
+  },
+  imageStrip: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  thumb: {
+    width: 58,
+    height: 58,
+    borderRadius: 8,
+    backgroundColor: COLORS.steel,
+  },
+  emptyText: {
+    color: COLORS.textLight,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingVertical: SPACING.lg,
   },
 });

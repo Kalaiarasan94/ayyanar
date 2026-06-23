@@ -1,0 +1,219 @@
+import React, { useState, useEffect } from 'react';
+import { ScrollView, Text, View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { useRouter } from 'expo-router';
+import { MaterialIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { COLORS, BORDER_RADIUS, SPACING } from '../../constants/Theme';
+import AppBackground from '../components/AppBackground';
+
+const { width } = Dimensions.get('window');
+const GRID_SPACING = SPACING.lg;
+const CARD_WIDTH = (width - GRID_SPACING * 3) / 2;
+
+export default function ActionsScreen() {
+  const router = useRouter();
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('userRole').then(setRole);
+  }, []);
+
+  const allActions = [
+    {
+      title: 'Material Bill',
+      subtitle: 'Upload site bills',
+      icon: 'receipt-long',
+      route: '/upload-bill',
+      color: COLORS.primary,
+      roles: ['Admin', 'Supervisor', 'Site Engineer'],
+    },
+    {
+      title: 'Attendance',
+      subtitle: 'Daily staff count',
+      icon: 'how-to-reg',
+      route: '/attendance',
+      color: COLORS.success,
+      roles: ['Admin', 'Supervisor', 'Site Engineer'],
+    },
+    {
+      title: 'Supervisor Clock-In',
+      subtitle: 'Selfie & Site Check-in',
+      icon: 'add-a-photo',
+      route: '/supervisor-attendance',
+      color: COLORS.accent,
+      roles: ['Admin', 'Supervisor', 'Site Engineer'],
+    },
+    {
+      title: 'Daily Expense',
+      subtitle: 'Petty cash log',
+      icon: 'payments',
+      route: '/cash-expense',
+      color: COLORS.warning,
+      roles: ['Admin', 'Accounts'],
+    },
+    {
+      title: 'Vehicle Trip',
+      subtitle: 'Log fuel & trips',
+      icon: 'local-shipping',
+      route: '/log-trip',
+      color: COLORS.secondary,
+      roles: ['Admin', 'Driver'],
+    },
+    {
+      title: 'Fuel Log',
+      subtitle: 'Odometer reading',
+      icon: 'ev-station',
+      route: '/fuel-log',
+      color: COLORS.primary,
+      roles: ['Admin', 'Driver'],
+    },
+    {
+      title: 'Cash Advance',
+      subtitle: 'Request funds',
+      icon: 'account-balance-wallet',
+      route: '/advance-request',
+      color: COLORS.accent,
+      roles: ['Admin', 'Supervisor', 'Site Engineer', 'Driver'],
+    },
+  ];
+
+  const filteredActions = allActions.filter(action => 
+    role === 'Admin' || (role && action.roles.includes(role))
+  );
+
+  return (
+    <View style={{ flex: 1 }}>
+      <AppBackground />
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Action Center</Text>
+          <Text style={styles.subtitle}>Tasks for {role || 'User'}</Text>
+        </View>
+
+        <View style={styles.grid}>
+          {filteredActions.map((action, index) => (
+            <TouchableOpacity 
+              key={index} 
+              style={styles.card}
+              onPress={() => router.push(action.route as any)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.iconWrapper, { backgroundColor: action.color + '15' }]}>
+                <MaterialIcons name={action.icon as any} size={32} color={action.color} />
+              </View>
+              <Text style={styles.cardTitle}>{action.title}</Text>
+              <Text style={styles.cardSubtitle}>{action.subtitle}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        
+        {role === 'Admin' && (
+          <View style={styles.adminSection}>
+            <Text style={styles.adminTitle}>Administration</Text>
+            <TouchableOpacity 
+              style={styles.adminButton}
+              onPress={() => router.push('/admin-panel')}
+            >
+              <MaterialIcons name="admin-panel-settings" size={24} color={COLORS.white} />
+              <Text style={styles.adminButtonText}>Open Admin Control Panel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
+  content: {
+    paddingBottom: SPACING.xl,
+  },
+  header: {
+    padding: SPACING.lg,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.primary,
+  },
+  subtitle: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    padding: SPACING.lg,
+    gap: GRID_SPACING,
+  },
+  card: {
+    backgroundColor: COLORS.glassBg,
+    width: CARD_WIDTH,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.xl,
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    borderWidth: 1,
+    borderColor: COLORS.glassBorder,
+  },
+  iconWrapper: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    textAlign: 'center',
+  },
+  cardSubtitle: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    textAlign: 'center',
+    marginTop: 4,
+    fontWeight: '600',
+  },
+  adminSection: {
+    padding: SPACING.lg,
+    marginTop: SPACING.md,
+  },
+  adminTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  adminButton: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.primary,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    elevation: 6,
+    shadowColor: COLORS.secondary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+  },
+  adminButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+});

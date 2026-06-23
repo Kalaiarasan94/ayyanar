@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScrollView, Text, View, TextInput, TouchableOpacity, Alert, Linking, ActivityIndicator } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { fieldService } from '../services/api';
+import { Picker } from '@react-native-picker/picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fieldService, adminService } from '../services/api';
 
 export default function CashExpenseScreen() {
   const router = useRouter();
@@ -9,6 +11,43 @@ export default function CashExpenseScreen() {
   const [description, setDescription] = useState('');
   const [cost, setCost] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const [assignedSites, setAssignedSites] = useState<any[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(siteId ? siteId.toString() : null);
+  const [selectedSiteName, setSelectedSiteName] = useState<string | null>(siteName ? siteName.toString() : null);
+
+  useEffect(() => {
+    const loadSites = async () => {
+      try {
+        const storedRole = await AsyncStorage.getItem('userRole');
+        const storedUserId = await AsyncStorage.getItem('userId');
+        
+        let sitesData = [];
+        if (storedRole === 'Admin' || storedRole === 'Accounts') {
+          sitesData = await adminService.getSites();
+        } else if (storedUserId) {
+          sitesData = await fieldService.getSupervisorSites(storedUserId);
+        }
+        
+        setAssignedSites(sitesData);
+        if (sitesData.length > 0 && !selectedSiteId) {
+          setSelectedSiteId(sitesData[0].id.toString());
+          setSelectedSiteName(sitesData[0].name);
+        }
+      } catch (err) {
+        console.error('Error loading sites for petty cash log:', err);
+      }
+    };
+    loadSites();
+  }, [userId]);
+
+  const handleSiteChange = (val: string) => {
+    setSelectedSiteId(val);
+    const siteObj = assignedSites.find(s => s.id.toString() === val);
+    if (siteObj) {
+      setSelectedSiteName(siteObj.name);
+    }
+  };
 
   const sendToWhatsApp = (message: string) => {
     const phoneNumber = '919876543210'; // Replace with actual supervisor/admin number
@@ -23,6 +62,10 @@ export default function CashExpenseScreen() {
   };
 
   const handleSave = async () => {
+    if (!selectedSiteId) {
+      Alert.alert('Error', 'Please select a project site.');
+      return;
+    }
     if (!description || !cost) {
       Alert.alert('Incomplete Fields', 'Please add an item description and cost.');
       return;
@@ -30,9 +73,11 @@ export default function CashExpenseScreen() {
 
     setLoading(true);
     try {
+      const rawUserId = userId || await AsyncStorage.getItem('userId');
+      const storedUserId = Array.isArray(rawUserId) ? rawUserId[0] : rawUserId;
       await fieldService.logExpense({
-        siteId: siteId,
-        userId: userId,
+        siteId: selectedSiteId,
+        userId: storedUserId,
         type: 'DEBIT',
         category: 'Petty Cash',
         description: description,
@@ -41,7 +86,7 @@ export default function CashExpenseScreen() {
       });
 
       const expenseMessage = `💸 *CASH EXPENSE REPORT*\n\n` +
-        `📍 *Site:* ${siteName || 'Not Specified'}\n` +
+        `📍 *Site:* ${selectedSiteName || 'Not Specified'}\n` +
         `📝 *Description:* ${description}\n` +
         `💰 *Amount:* ₹${cost}\n` +
         `📅 *Date:* ${new Date().toLocaleDateString()}\n` +
@@ -63,8 +108,25 @@ export default function CashExpenseScreen() {
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: '#F8FAFC', padding: 20 }}>
-      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0F172A', marginBottom: 5 }}>Site: {siteName || 'General'}</Text>
-      <View style={{ height: 20 }} />
+      
+      <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 8 }}>SELECT CONSTRUCTION SITE</Text>
+      {assignedSites.length > 0 ? (
+        <View style={{ backgroundColor: '#FFF', borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', overflow: 'hidden', marginBottom: 20 }}>
+          <Picker
+            selectedValue={selectedSiteId || ''}
+            onValueChange={handleSiteChange}
+            style={{ height: 50, width: '100%' }}
+          >
+            {assignedSites.map((site) => (
+              <Picker.Item key={site.id} label={site.name} value={site.id.toString()} />
+            ))}
+          </Picker>
+        </View>
+      ) : (
+        <View style={{ backgroundColor: '#FEF2F2', padding: 12, borderRadius: 8, marginBottom: 20 }}>
+          <Text style={{ color: '#EF4444', fontSize: 12, fontWeight: 'bold' }}>No project sites found</Text>
+        </View>
+      )}
       
       <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 8 }}>EXPENSE ITEM DESCRIPTION</Text>
       <TextInput style={{ backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', padding: 14, borderRadius: 8, marginBottom: 20 }} placeholder="e.g. Tea & Snacks for laborers, Unloading tips" value={description} onChangeText={setDescription} />

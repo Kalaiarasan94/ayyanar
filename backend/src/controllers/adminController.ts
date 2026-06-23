@@ -138,6 +138,56 @@ export const adminController = {
     }
   },
 
+  getAttendanceOverview: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+
+      const workerAttendance = await db.query(`
+        SELECT 
+          a.id,
+          a.date,
+          a.status,
+          w.name as worker_name,
+          w.role as worker_role,
+          s.name as site_name,
+          s.location as site_location
+        FROM attendance a
+        LEFT JOIN workers w ON a.worker_id = w.id
+        LEFT JOIN sites s ON a.site_id = s.id
+        WHERE a.date = ?
+        ORDER BY s.name ASC, w.name ASC
+      `, [date]);
+
+      const supervisorAttendance = await db.query(`
+        SELECT 
+          sa.id,
+          sa.date,
+          sa.status,
+          sa.selfie_url,
+          sa.location_name,
+          sa.latitude,
+          sa.longitude,
+          u.name as supervisor_name,
+          u.role as supervisor_role,
+          s.name as site_name,
+          s.location as site_location
+        FROM supervisor_attendance sa
+        LEFT JOIN users u ON sa.user_id = u.id
+        LEFT JOIN sites s ON sa.site_id = s.id
+        WHERE sa.date = ?
+        ORDER BY s.name ASC, u.name ASC
+      `, [date]);
+
+      res.status(200).json({
+        date,
+        workers: workerAttendance.rows,
+        supervisors: supervisorAttendance.rows,
+      });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   // Compiles CRM metrics and site-by-site material/fuel logs for charts
   getAnalyticsOverview: async (req: Request, res: Response): Promise<void> => {
     try {

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { ScrollView, Text, View, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { fieldService } from '../services/api';
+import LogoutButton from '../components/LogoutButton';
 
 // ==========================================
 // 2. DRIVER MODULE USER INTERFACE
 // ==========================================
 export default function DriverLogScreen() {
-  const router = useRouter();
   const { name: paramName, userId } = useLocalSearchParams();
   const [activeTab, setActiveTab] = useState<'material' | 'fuel'>('material');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,13 +92,7 @@ export default function DriverLogScreen() {
     <ScrollView style={{ flex: 1, backgroundColor: '#F8FAFC', padding: 20 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <Text style={{ fontSize: 24, fontWeight: 'bold', color: '#0F172A' }}>Logistics & Driver Desk</Text>
-        <TouchableOpacity 
-          onPress={() => router.replace('/')}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#EF4444', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6 }}
-        >
-          <MaterialIcons name="logout" size={14} color="#FFFFFF" />
-          <Text style={{ color: '#FFFFFF', fontWeight: 'bold', fontSize: 11 }}>LOGOUT</Text>
-        </TouchableOpacity>
+        <LogoutButton variant="solid" />
       </View>
       <Text style={{ fontSize: 14, color: '#64748B', marginBottom: 20 }}>Submit raw transit data directly into the database system</Text>
 
