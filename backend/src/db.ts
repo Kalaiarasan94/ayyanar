@@ -61,6 +61,61 @@ export const initDb = async () => {
       );
     `);
 
+    // Create driver_records table if not exists (daily trip log submitted from driver login)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS driver_records (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NULL,
+          vehicle_name VARCHAR(120) NOT NULL,
+          driver_name VARCHAR(120) NOT NULL,
+          starting_km DECIMAL(12, 2) NOT NULL,
+          ending_km DECIMAL(12, 2) NOT NULL,
+          total_km DECIMAL(12, 2) NOT NULL,
+          distance VARCHAR(120) NULL,
+          diesel_fare DECIMAL(12, 2) NULL,
+          load_name VARCHAR(150) NULL,
+          load_type ENUM('Rent', 'Own') DEFAULT 'Own',
+          customer_name VARCHAR(150) NULL,
+          place VARCHAR(150) NULL,
+          load_weight VARCHAR(120) NULL,
+          starting_time VARCHAR(50) NULL,
+          ending_time VARCHAR(50) NULL,
+          date DATE NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Create account_transactions table (role-wise money in/out ledgers for Admin, Supervisor, Owner)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS account_transactions (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          role ENUM('Admin', 'Supervisor', 'Owner') NOT NULL,
+          user_id INT NULL,
+          flow ENUM('IN', 'OUT') NOT NULL,
+          category VARCHAR(100) NOT NULL,
+          description TEXT NULL,
+          amount DECIMAL(15, 2) NOT NULL,
+          date DATE NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Extend users.role enum with Owner and TotalAccounts, then seed their logins
+    const [roleColResult] = await pool.execute("SHOW COLUMNS FROM users LIKE 'role'");
+    const roleCols = roleColResult as any[];
+    if (roleCols.length > 0 && !roleCols[0].Type.includes('Owner')) {
+      await db.query(`
+        ALTER TABLE users MODIFY COLUMN role
+        ENUM('Admin', 'Supervisor', 'Driver', 'Site Engineer', 'Accounts', 'Owner', 'TotalAccounts') NOT NULL;
+      `);
+      console.log('Extended users.role enum with Owner and TotalAccounts.');
+    }
+    await db.query(`
+      INSERT IGNORE INTO users (username, name, role, phone, password) VALUES
+      ('owner', 'Company Owner', 'Owner', '0000000001', 'owner123'),
+      ('totacc', 'Total Accounts', 'TotalAccounts', '0000000002', 'totacc123');
+    `);
+
     // 2. Add status column to sites if it doesn't exist
     const [columnsResult] = await pool.execute("SHOW COLUMNS FROM sites LIKE 'status'");
     const columns = columnsResult as any[];

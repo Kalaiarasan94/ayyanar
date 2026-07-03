@@ -208,10 +208,10 @@ export default function UploadBill() {
       Alert.alert('Batch Submitted', `Logged ${billsList.length} bills totaling ₹${totalAmount.toLocaleString()} to Database.`, [
         { text: 'Send WhatsApp Report', onPress: () => {
           sendToWhatsApp(reportMessage);
-          router.replace('/(tabs)');
+          router.replace('/(tabs)/home');
         }},
         { text: 'OK', onPress: () => {
-          router.replace('/(tabs)');
+          router.replace('/(tabs)/home');
         }}
       ]);
     } catch (error) {

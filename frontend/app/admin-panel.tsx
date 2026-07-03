@@ -3,6 +3,8 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Linking,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -12,10 +14,12 @@ import {
   View,
 } from 'react-native';
 import { Stack } from 'expo-router';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
 import AppBackground from './components/AppBackground';
 import LogoutButton from '../components/LogoutButton';
-import { adminService, fieldService } from '../services/api';
+import { accountsService, adminService, fieldService } from '../services/api';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
 type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
@@ -74,6 +78,13 @@ export default function AdminPanelScreen() {
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
   const [reportSiteId, setReportSiteId] = useState<string | null>(null);
   const [reportData, setReportData] = useState<any[]>([]);
+  const [reportType, setReportType] = useState<'SITE' | 'DRIVER' | 'IO'>('SITE');
+  const [driverRecords, setDriverRecords] = useState<any[]>([]);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [ioRole, setIoRole] = useState<'Admin' | 'Supervisor' | 'Owner'>('Admin');
+  const [ioFrom, setIoFrom] = useState('');
+  const [ioTo, setIoTo] = useState('');
+  const [ioReport, setIoReport] = useState<any>(null);
 
   const [staffName, setStaffName] = useState('');
   const [staffUsername, setStaffUsername] = useState('');
@@ -143,8 +154,12 @@ export default function AdminPanelScreen() {
       if (tab === 'TEAM') setStaffList(await adminService.getStaff());
       if (tab === 'LEADS') setLeadsList(await adminService.getLeads());
       if (tab === 'REPORTS') {
-        const sites = await adminService.getSites();
+        const [sites, drivers] = await Promise.all([
+          adminService.getSites(),
+          fieldService.getDriverRecords(),
+        ]);
         setSitesList(sites);
+        setDriverRecords(drivers);
         const selectedSite = reportSiteId || sites[0]?.id || null;
         setReportSiteId(selectedSite);
         if (selectedSite) await fetchReportData(selectedSite);
@@ -288,6 +303,144 @@ export default function AdminPanelScreen() {
       await fetchReportData(siteId);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const buildDriverReportHtml = () => {
+    const rows = driverRecords
+      .map(
+        (rec: any, index: number) => `
+        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+          <td>${index + 1}</td>
+          <td>${new Date(rec.date).toLocaleDateString('en-IN')}</td>
+          <td>${rec.vehicle_name || '-'}</td>
+          <td>${rec.driver_name || '-'}</td>
+          <td>${Number(rec.starting_km || 0)}</td>
+          <td>${Number(rec.ending_km || 0)}</td>
+          <td><b>${Number(rec.total_km || 0)}</b></td>
+          <td>${rec.distance || '-'}</td>
+          <td>Rs ${Number(rec.diesel_fare || 0).toLocaleString('en-IN')}</td>
+          <td>${rec.load_name || '-'}</td>
+          <td>${rec.load_type || '-'}</td>
+          <td>${rec.customer_name || '-'}</td>
+          <td>${rec.place || '-'}</td>
+          <td>${rec.load_weight || '-'}</td>
+          <td>${rec.starting_time || '-'}</td>
+          <td>${rec.ending_time || '-'}</td>
+        </tr>`
+      )
+      .join('');
+
+    const totalKmSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.total_km || 0), 0);
+    const dieselSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.diesel_fare || 0), 0);
+
+    return `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #0F172A; }
+            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
+            .sub { color: #64748B; font-size: 11px; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 9px; }
+            th { background: #0F172A; color: #FFFFFF; padding: 6px 4px; text-align: left; }
+            td { padding: 5px 4px; border-bottom: 1px solid #E2E8F0; }
+            .summary { margin-top: 14px; font-size: 12px; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Ayyanar Construction - Driver Trip Report</h1>
+          <div class="sub">Generated on ${new Date().toLocaleString('en-IN')} &bull; ${driverRecords.length} record(s)</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Date</th><th>Vehicle</th><th>Driver</th>
+                <th>Start KM</th><th>End KM</th><th>Total KM</th><th>Distance</th>
+                <th>Diesel Fare</th><th>Load</th><th>Type</th><th>Customer</th>
+                <th>Place</th><th>Weight</th><th>Start Time</th><th>End Time</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <div class="summary">
+            Total KM Travelled: ${totalKmSum.toLocaleString('en-IN')} km &nbsp;&bull;&nbsp;
+            Total Diesel Fare: Rs ${dieselSum.toLocaleString('en-IN')}
+          </div>
+        </body>
+      </html>`;
+  };
+
+  const generateDriverPdf = async () => {
+    const html = buildDriverReportHtml();
+    const { uri } = await Print.printToFileAsync({ html });
+    return uri;
+  };
+
+  const handleDownloadDriverPdf = async () => {
+    if (driverRecords.length === 0) {
+      Alert.alert('No Data', 'There are no driver records to export yet.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      if (Platform.OS === 'web') {
+        // On web expo-print opens the browser print dialog; user picks "Save as PDF"
+        await Print.printAsync({ html: buildDriverReportHtml() });
+        return;
+      }
+      const uri = await generateDriverPdf();
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Download Driver Report PDF',
+        });
+      } else {
+        Alert.alert('Saved', `PDF generated at:\n${uri}`);
+      }
+    } catch (error: any) {
+      Alert.alert('PDF Error', error?.message || 'Unable to generate the driver report PDF.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleShareDriverWhatsApp = async () => {
+    if (driverRecords.length === 0) {
+      Alert.alert('No Data', 'There are no driver records to share yet.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      if (Platform.OS === 'web') {
+        // Browsers cannot attach a local file to WhatsApp; share a text summary instead
+        const totalKmSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.total_km || 0), 0);
+        const dieselSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.diesel_fare || 0), 0);
+        const latest = driverRecords[0];
+        const text =
+          `*Ayyanar Construction - Driver Trip Report*\n` +
+          `Records: ${driverRecords.length}\n` +
+          `Total KM: ${totalKmSum.toLocaleString('en-IN')} km\n` +
+          `Total Diesel Fare: Rs ${dieselSum.toLocaleString('en-IN')}\n` +
+          (latest ? `Latest Trip: ${latest.vehicle_name} by ${latest.driver_name} (${Number(latest.total_km || 0)} km)` : '');
+        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        return;
+      }
+      // On native, generate the PDF and open the share sheet — pick WhatsApp there
+      const uri = await generateDriverPdf();
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Share Driver Report on WhatsApp',
+        });
+      } else {
+        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
+      }
+    } catch (error: any) {
+      Alert.alert('Share Error', error?.message || 'Unable to share the driver report.');
+    } finally {
+      setGeneratingPdf(false);
     }
   };
 
@@ -459,7 +612,12 @@ export default function AdminPanelScreen() {
       <View style={styles.card}>
         <Text style={styles.formTitle}>Register Lead</Text>
         <TextInput style={styles.input} placeholder="Client / lead name" value={leadName} onChangeText={setLeadName} placeholderTextColor={COLORS.textLight} />
-        <TextInput style={styles.input} placeholder="Project requirement" value={leadProject} onChangeText={setLeadProject} placeholderTextColor={COLORS.textLight} />
+        <Text style={styles.fieldCaption}>PROJECT REQUIREMENT</Text>
+        <ChipSelect
+          items={['Construction', 'Aggregate'].map((option) => ({ id: option, label: option }))}
+          value={leadProject || null}
+          onChange={setLeadProject}
+        />
         <TextInput style={styles.input} placeholder="Lead source" value={leadSource} onChangeText={setLeadSource} placeholderTextColor={COLORS.textLight} />
         <ChipSelect
           items={(['Hot Lead', 'In Discussion', 'Converted Client'] as Lead['status'][]).map((status) => ({ id: status, label: status }))}
@@ -490,14 +648,11 @@ export default function AdminPanelScreen() {
     </View>
   );
 
-  const renderReports = () => {
+  const renderSiteReports = () => {
     const direct = reportData.filter((item) => item.payment_mode === 'Direct');
     const credit = reportData.filter((item) => item.payment_mode !== 'Direct');
     return (
       <View>
-        <Text style={styles.screenTitle}>Site Reports</Text>
-        <Text style={styles.screenSubtitle}>Read-only bills and expense ledger for review.</Text>
-
         <ChipSelect items={sitesList.map((site) => ({ id: site.id, label: site.name }))} value={reportSiteId} onChange={selectReportSite} />
 
         <SectionTitle title="Direct Cash" />
@@ -508,6 +663,66 @@ export default function AdminPanelScreen() {
       </View>
     );
   };
+
+  const renderDriverReports = () => (
+    <View>
+      <View style={styles.pdfActionsRow}>
+        <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={handleDownloadDriverPdf} disabled={generatingPdf}>
+          {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
+          <Text style={styles.pdfButtonText}>Download PDF</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={handleShareDriverWhatsApp} disabled={generatingPdf}>
+          <MaterialIcons name="share" size={18} color={COLORS.white} />
+          <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+        </TouchableOpacity>
+      </View>
+
+      <SectionTitle title={`Driver Trip Records (${driverRecords.length})`} />
+      <View style={styles.card}>
+        {driverRecords.map((rec: any) => (
+          <View key={rec.id} style={styles.ledgerCard}>
+            <View style={styles.pipelineHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowTitle}>{rec.vehicle_name} — {rec.driver_name}</Text>
+                <Text style={styles.rowMeta}>
+                  {new Date(rec.date).toLocaleDateString('en-IN')} / {rec.starting_time || '--'} to {rec.ending_time || '--'}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  KM: {Number(rec.starting_km)} → {Number(rec.ending_km)} (Total {Number(rec.total_km)} km)
+                  {rec.distance ? ` / Distance: ${rec.distance}` : ''}
+                </Text>
+                <Text style={styles.rowMeta}>
+                  Load: {rec.load_name || '-'} ({rec.load_type}){rec.load_weight ? ` / ${rec.load_weight}` : ''}
+                  {rec.customer_name ? ` / Customer: ${rec.customer_name}` : ''}
+                  {rec.place ? ` / ${rec.place}` : ''}
+                </Text>
+              </View>
+              <Text style={styles.rowAmount}>Rs {Number(rec.diesel_fare || 0).toLocaleString()}</Text>
+            </View>
+          </View>
+        ))}
+        {driverRecords.length === 0 && <EmptyState text="No driver trip records yet." />}
+      </View>
+    </View>
+  );
+
+  const renderReports = () => (
+    <View>
+      <Text style={styles.screenTitle}>Reports</Text>
+      <Text style={styles.screenSubtitle}>Site expense ledgers and driver trip reports with PDF export.</Text>
+
+      <ChipSelect
+        items={[
+          { id: 'SITE', label: 'Site Reports' },
+          { id: 'DRIVER', label: 'Driver Reports' },
+        ]}
+        value={reportType}
+        onChange={(id) => setReportType(id as 'SITE' | 'DRIVER')}
+      />
+
+      {reportType === 'SITE' ? renderSiteReports() : renderDriverReports()}
+    </View>
+  );
 
   const renderActiveTab = () => {
     if (activeTab === 'DASHBOARD') return renderDashboard();
@@ -905,6 +1120,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginBottom: SPACING.sm,
   },
+  fieldCaption: {
+    color: COLORS.textLight,
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
   input: {
     backgroundColor: COLORS.steel,
     borderRadius: BORDER_RADIUS.md,
@@ -1016,5 +1237,28 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     paddingVertical: SPACING.lg,
+  },
+  pdfActionsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  pdfButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 13,
+  },
+  whatsappButton: {
+    backgroundColor: '#25D366',
+  },
+  pdfButtonText: {
+    color: COLORS.white,
+    fontWeight: '900',
+    fontSize: 13,
   },
 });

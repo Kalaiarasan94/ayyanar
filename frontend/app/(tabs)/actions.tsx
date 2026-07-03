@@ -52,19 +52,11 @@ export default function ActionsScreen() {
       roles: ['Admin', 'Accounts'],
     },
     {
-      title: 'Vehicle Trip',
-      subtitle: 'Log fuel & trips',
+      title: 'Trip Record',
+      subtitle: 'Daily driver trip log',
       icon: 'local-shipping',
-      route: '/log-trip',
+      route: '/driver',
       color: COLORS.secondary,
-      roles: ['Admin', 'Driver'],
-    },
-    {
-      title: 'Fuel Log',
-      subtitle: 'Odometer reading',
-      icon: 'ev-station',
-      route: '/fuel-log',
-      color: COLORS.primary,
       roles: ['Admin', 'Driver'],
     },
     {

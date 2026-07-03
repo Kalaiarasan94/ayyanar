@@ -221,6 +221,41 @@ export const adminService = {
     }),
 };
 
+export const accountsService = {
+  addTransaction: (txn: Record<string, any>) =>
+    request<ApiResponse>('/accounts/transactions', {
+      method: 'POST',
+      body: JSON.stringify(txn),
+    }),
+  getTransactions: (role: string, flow?: 'IN' | 'OUT', from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (flow) params.append('flow', flow);
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const qs = params.toString();
+    return request<any[]>(`/accounts/transactions/${role}${qs ? `?${qs}` : ''}`);
+  },
+  getIOReport: (role: string, from?: string, to?: string) => {
+    const params = new URLSearchParams({ role });
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    return request<any>(`/accounts/io-report?${params.toString()}`);
+  },
+  getSummary: (role: string) => request<any>(`/accounts/summary/${role}`),
+  getTotalSummary: () => request<any>('/accounts/total-summary'),
+  getDayBook: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const qs = params.toString();
+    return request<any[]>(`/accounts/daybook${qs ? `?${qs}` : ''}`);
+  },
+  getLedger: () => request<any[]>('/accounts/ledger'),
+  getPeriods: () => request<{ months: string[]; years: string[] }>('/accounts/periods'),
+  getReport: (type: 'monthly' | 'yearly', period: string) =>
+    request<any>(`/accounts/report?type=${type}&period=${encodeURIComponent(period)}`),
+};
+
 export const fieldService = {
   logExpense: (expense: Record<string, any>) =>
     request<ApiResponse>('/expenses', {
@@ -246,16 +281,18 @@ export const fieldService = {
       body: JSON.stringify(photo),
     }),
   getRecentSitePhotos: () => request<any[]>('/site-photos/recent'),
-  logFuel: (fuel: Record<string, any>) =>
-    request<ApiResponse>('/fuel', {
+  saveDriverRecord: (record: Record<string, any>) =>
+    request<ApiResponse>('/driver-records', {
       method: 'POST',
-      body: JSON.stringify(fuel),
+      body: JSON.stringify(record),
     }),
-  logTrip: (trip: Record<string, any>) =>
-    request<ApiResponse>('/trips', {
-      method: 'POST',
-      body: JSON.stringify(trip),
-    }),
+  getDriverRecords: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const qs = params.toString();
+    return request<any[]>(`/driver-records${qs ? `?${qs}` : ''}`);
+  },
   requestAdvance: (advance: Record<string, any>) =>
     request<ApiResponse>('/advance-request', {
       method: 'POST',

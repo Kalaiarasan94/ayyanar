@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { fieldController } from '../controllers/fieldController';
 import { adminController } from '../controllers/adminController';
 import { authController } from '../controllers/authController';
+import { accountsController } from '../controllers/accountsController';
 
 const router = Router();
 
@@ -17,10 +18,21 @@ router.post('/attendance', fieldController.submitAttendance);
 router.post('/supervisor-attendance', fieldController.submitSupervisorAttendance);
 router.post('/site-photos', fieldController.uploadSitePhoto);
 router.get('/site-photos/recent', fieldController.getRecentSitePhotos);
-router.post('/fuel', fieldController.logFuel);
-router.post('/trips', fieldController.logTrip);
+router.post('/driver-records', fieldController.saveDriverRecord);
+router.get('/driver-records', fieldController.getDriverRecords);
 router.post('/advance-request', fieldController.requestAdvance);
 router.post('/advance-request/pay', fieldController.payAdvance);
+
+// Role Accounts (Admin / Supervisor / Owner money in-out ledgers + TotalAccounts overview)
+router.post('/accounts/transactions', accountsController.addTransaction);
+router.get('/accounts/total-summary', accountsController.getTotalSummary);
+router.get('/accounts/daybook', accountsController.getDayBook);
+router.get('/accounts/ledger', accountsController.getLedger);
+router.get('/accounts/periods', accountsController.getPeriods);
+router.get('/accounts/report', accountsController.getReport);
+router.get('/accounts/io-report', accountsController.getIOReport);
+router.get('/accounts/summary/:role', accountsController.getSummary);
+router.get('/accounts/transactions/:role', accountsController.getTransactions);
 
 // Administration & Management Panel Routes
 router.post('/staff', adminController.addStaff);

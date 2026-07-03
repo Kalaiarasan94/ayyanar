@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
-    role ENUM('Admin', 'Supervisor', 'Driver', 'Site Engineer', 'Accounts') NOT NULL,
+    role ENUM('Admin', 'Supervisor', 'Driver', 'Site Engineer', 'Accounts', 'Owner', 'TotalAccounts') NOT NULL,
     phone VARCHAR(20) NOT NULL,
     password VARCHAR(255) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -70,29 +70,39 @@ CREATE TABLE IF NOT EXISTS leads (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Fuel Logs table
-CREATE TABLE IF NOT EXISTS fuel_logs (
+-- Driver Trip Records table (submitted from the driver login screen)
+CREATE TABLE IF NOT EXISTS driver_records (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    odometer INT NOT NULL,
-    cost DECIMAL(15, 2) NOT NULL,
-    receipt_url VARCHAR(255),
+    user_id INT NULL,
+    vehicle_name VARCHAR(120) NOT NULL,
+    driver_name VARCHAR(120) NOT NULL,
+    starting_km DECIMAL(12, 2) NOT NULL,
+    ending_km DECIMAL(12, 2) NOT NULL,
+    total_km DECIMAL(12, 2) NOT NULL,
+    distance VARCHAR(120) NULL,
+    diesel_fare DECIMAL(12, 2) NULL,
+    load_name VARCHAR(150) NULL,
+    load_type ENUM('Rent', 'Own') DEFAULT 'Own',
+    customer_name VARCHAR(150) NULL,
+    place VARCHAR(150) NULL,
+    load_weight VARCHAR(120) NULL,
+    starting_time VARCHAR(50) NULL,
+    ending_time VARCHAR(50) NULL,
     date DATE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Trips table
-CREATE TABLE IF NOT EXISTS trips (
+-- Role Accounts table (money in/out ledgers for Admin, Supervisor and Owner)
+CREATE TABLE IF NOT EXISTS account_transactions (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    vehicle_no VARCHAR(50) NOT NULL,
-    vehicle_type ENUM('Owned', 'Rented') NOT NULL,
-    material_details TEXT,
-    toll_fee DECIMAL(15, 2) DEFAULT 0.00,
+    role ENUM('Admin', 'Supervisor', 'Owner') NOT NULL,
+    user_id INT NULL,
+    flow ENUM('IN', 'OUT') NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    description TEXT NULL,
+    amount DECIMAL(15, 2) NOT NULL,
     date DATE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Advance Requests table
@@ -124,8 +134,10 @@ INSERT INTO sites (name, location) VALUES
 ('Beta (Chennai)', 'Chennai'),
 ('Gamma (Trichy)', 'Trichy');
 
-INSERT INTO users (username, name, role, phone, password) VALUES 
+INSERT INTO users (username, name, role, phone, password) VALUES
 ('admin', 'Admin User', 'Admin', '1234567890', 'admin123'),
 ('super', 'Palani Kumar', 'Supervisor', '9876543210', 'super123'),
 ('driver', 'Selvam Arumugam', 'Driver', '8765432109', 'driver123'),
-('accounts', 'Accounts Manager', 'Accounts', '7654321098', 'acc123');
+('accounts', 'Accounts Manager', 'Accounts', '7654321098', 'acc123'),
+('owner', 'Company Owner', 'Owner', '0000000001', 'owner123'),
+('totacc', 'Total Accounts', 'TotalAccounts', '0000000002', 'totacc123');

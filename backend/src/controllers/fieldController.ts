@@ -126,30 +126,92 @@ export const fieldController = {
     }
   },
 
-  // Logs fuel fill details
-  logFuel: async (req: Request, res: Response): Promise<void> => {
+  // Saves a driver's daily trip record from the driver login screen
+  saveDriverRecord: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { userId, odometer, cost, receiptUrl, date } = req.body;
+      const {
+        userId, vehicleName, driverName, startingKm, endingKm,
+        distance, dieselFare, loadName, loadType, customerName,
+        place, loadWeight, startingTime, endingTime, date
+      } = req.body;
+
+      if (!vehicleName || !driverName || startingKm === undefined || endingKm === undefined) {
+        res.status(400).json({ success: false, error: 'vehicleName, driverName, startingKm and endingKm are required.' });
+        return;
+      }
+
+      const cleanUserId = userId ? parseInt(userId.toString()) : null;
+      const start = parseFloat(startingKm.toString());
+      const end = parseFloat(endingKm.toString());
+
+      if (isNaN(start) || isNaN(end)) {
+        res.status(400).json({ success: false, error: 'startingKm and endingKm must be numbers.' });
+        return;
+      }
+
+      // Total KM is always derived on the server so it can never be spoofed
+      const totalKm = Math.abs(end - start);
+      const cleanLoadType = loadType === 'Rent' ? 'Rent' : 'Own';
+
+      console.log('--- SAVE DRIVER RECORD ATTEMPT ---');
+      console.log('Payload:', { cleanUserId, vehicleName, driverName, start, end, totalKm, cleanLoadType });
+
       await db.query(
-        'INSERT INTO fuel_logs (user_id, odometer, cost, receipt_url, date) VALUES (?, ?, ?, ?, ?)',
-        [userId, odometer, cost, receiptUrl, date]
+        `INSERT INTO driver_records
+          (user_id, vehicle_name, driver_name, starting_km, ending_km, total_km, distance,
+           diesel_fare, load_name, load_type, customer_name, place, load_weight,
+           starting_time, ending_time, date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          cleanUserId,
+          vehicleName,
+          driverName,
+          start,
+          end,
+          totalKm,
+          distance || null,
+          dieselFare !== undefined && dieselFare !== null && dieselFare !== '' ? parseFloat(dieselFare.toString()) : null,
+          loadName || null,
+          cleanLoadType,
+          cleanLoadType === 'Rent' ? (customerName || null) : null,
+          place || null,
+          loadWeight || null,
+          startingTime || null,
+          endingTime || null,
+          date || new Date().toISOString().split('T')[0]
+        ]
       );
-      res.status(201).json({ success: true, message: 'Fuel log saved.' });
+
+      res.status(201).json({ success: true, message: 'Driver record saved.', totalKm });
     } catch (error: any) {
+      console.error('saveDriverRecord Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   },
 
-  // Logs trip details
-  logTrip: async (req: Request, res: Response): Promise<void> => {
+  // Fetches driver trip records for admin reports (optional ?from=YYYY-MM-DD&to=YYYY-MM-DD)
+  getDriverRecords: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { userId, vehicleNo, vehicleType, materialDetails, tollFee, date } = req.body;
-      await db.query(
-        'INSERT INTO trips (user_id, vehicle_no, vehicle_type, material_details, toll_fee, date) VALUES (?, ?, ?, ?, ?, ?)',
-        [userId, vehicleNo, vehicleType, materialDetails, tollFee, date]
-      );
-      res.status(201).json({ success: true, message: 'Trip log saved.' });
+      const { from, to } = req.query;
+      let sql = 'SELECT * FROM driver_records';
+      const params: any[] = [];
+
+      if (from && to) {
+        sql += ' WHERE date BETWEEN ? AND ?';
+        params.push(from, to);
+      } else if (from) {
+        sql += ' WHERE date >= ?';
+        params.push(from);
+      } else if (to) {
+        sql += ' WHERE date <= ?';
+        params.push(to);
+      }
+
+      sql += ' ORDER BY date DESC, id DESC';
+      const result = await db.query(sql, params);
+      res.status(200).json(result.rows || []);
     } catch (error: any) {
+      console.error('getDriverRecords Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   },

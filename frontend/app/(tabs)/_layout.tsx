@@ -46,7 +46,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
-        name="index"
+        name="home"
         options={{
           title: 'Dashboard',
           tabBarIcon: ({ color, size }) => (
@@ -72,6 +72,16 @@ export default function TabsLayout() {
             <MaterialIcons name="admin-panel-settings" size={size} color={color} />
           ),
           href: role === 'Admin' ? '/admin' : null,
+        }}
+      />
+      <Tabs.Screen
+        name="accounts"
+        options={{
+          title: 'Accounts',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="account-balance-wallet" size={size} color={color} />
+          ),
+          href: role === 'Admin' || role === 'Supervisor' ? '/accounts' : null,
         }}
       />
       <Tabs.Screen

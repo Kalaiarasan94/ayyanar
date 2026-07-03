@@ -37,10 +37,14 @@ export default function LoginScreen() {
             });
           } else if (storedRole === 'Accounts') {
             router.replace('/accounts-ledger');
+          } else if (storedRole === 'Owner') {
+            router.replace('/owner-accounts');
+          } else if (storedRole === 'TotalAccounts') {
+            router.replace('/total-accounts');
           } else if (storedRole === 'Admin') {
             router.replace('/(tabs)/admin');
           } else {
-            router.replace('/(tabs)');
+            router.replace('/(tabs)/home');
           }
         }
       } catch (error) {
@@ -77,10 +81,14 @@ export default function LoginScreen() {
           router.replace({ pathname: '/driver', params: { name, userId: id.toString() } });
         } else if (role === 'Accounts') {
           router.replace('/accounts-ledger');
+        } else if (role === 'Owner') {
+          router.replace('/owner-accounts');
+        } else if (role === 'TotalAccounts') {
+          router.replace('/total-accounts');
         } else if (role === 'Admin') {
           router.replace('/(tabs)/admin');
         } else {
-          router.replace('/(tabs)');
+          router.replace('/(tabs)/home');
         }
       } else {
         Alert.alert('Login Failed', response.message || 'Invalid credentials.');
@@ -161,13 +169,21 @@ export default function LoginScreen() {
         <View style={styles.credentialBox}>
           <Text style={styles.credentialTitle}>Quick Access (Demo):</Text>
           <View style={styles.chipRow}>
-            {['admin', 'accounts', 'super', 'driver'].map((user) => (
-              <TouchableOpacity 
-                key={user} 
+            {['admin', 'accounts', 'super', 'driver', 'owner', 'totacc'].map((user) => (
+              <TouchableOpacity
+                key={user}
                 style={styles.chip}
                 onPress={() => {
                   setUsername(user);
-                  setPassword(user === 'admin' ? 'admin123' : user === 'accounts' ? 'acc123' : user === 'super' ? 'super123' : 'driver123');
+                  const passwords: Record<string, string> = {
+                    admin: 'admin123',
+                    accounts: 'acc123',
+                    super: 'super123',
+                    driver: 'driver123',
+                    owner: 'owner123',
+                    totacc: 'totacc123',
+                  };
+                  setPassword(passwords[user]);
                 }}
               >
                 <Text style={styles.chipText}>{user}</Text>

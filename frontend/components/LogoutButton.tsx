@@ -16,38 +16,20 @@ export default function LogoutButton({ variant = 'header', showText = true }: Lo
   const performLogout = async () => {
     try {
       console.log('Logout: clearing storage...');
-      
-      // Clear web storage directly if window is defined
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.removeItem('userRole');
-          localStorage.removeItem('userName');
-          localStorage.removeItem('userId');
-          localStorage.clear();
-        } catch (e) {
-          console.error('Error clearing localStorage:', e);
-        }
-      }
 
-      // Clear using AsyncStorage
-      try {
-        await AsyncStorage.multiRemove(['userRole', 'userName', 'userId']);
-        await AsyncStorage.removeItem('userRole');
-        await AsyncStorage.removeItem('userName');
-        await AsyncStorage.removeItem('userId');
-      } catch (e) {
-        console.error('Error clearing AsyncStorage:', e);
-      }
-      
+      // AsyncStorage works on every platform (it is backed by localStorage on web)
+      await AsyncStorage.multiRemove(['userRole', 'userName', 'userId']);
+
       console.log('Logout: storage cleared successfully');
     } catch (error) {
       console.error('Logout: error clearing storage:', error);
     }
 
-    // On Web, direct browser redirection is 100% reliable and resets React state
-    if (typeof window !== 'undefined') {
-      console.log('Logout: Web platform detected, redirecting via window.location.href...');
-      window.location.href = '/';
+    // Hermes defines a global `window` on native, so we must check Platform.OS —
+    // window.location / localStorage only exist on real web browsers.
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location) {
+      console.log('Logout: Web platform detected, redirecting via window.location...');
+      window.location.assign('/');
       return;
     }
 
@@ -57,14 +39,9 @@ export default function LogoutButton({ variant = 'header', showText = true }: Lo
     } catch (routerError) {
       console.error('Logout: router.replace / failed:', routerError);
       try {
-        router.replace('/index' as any);
-      } catch (fallbackError) {
-        console.error('Logout: fallback routing failed:', fallbackError);
-        try {
-          router.navigate('/' as any);
-        } catch (navigateError) {
-          console.error('Logout: router.navigate failed:', navigateError);
-        }
+        router.navigate('/' as any);
+      } catch (navigateError) {
+        console.error('Logout: router.navigate failed:', navigateError);
       }
     }
   };
