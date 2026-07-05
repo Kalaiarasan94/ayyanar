@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { logError } from './logger';
 
 // Connection settings come from environment variables in production (Hostinger hPanel);
 // the defaults below keep local XAMPP development working with zero setup.
@@ -24,6 +25,7 @@ export const db = {
       return { rows: rows as any[] };
     } catch (error) {
       console.error('Database Query Error:', { sql, params, error });
+      logError(`SQL: ${sql.trim().slice(0, 90)}`, error);
       throw error;
     }
   }
@@ -149,5 +151,6 @@ export const initDb = async () => {
     console.log('MySQL Database initialized successfully.');
   } catch (error) {
     console.error('Failed to initialize database schema:', error);
+    logError('Database initialization (initDb)', error);
   }
 };
