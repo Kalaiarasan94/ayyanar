@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -73,17 +74,21 @@ export default function AccountsBookScreen() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const [dayBook, setDayBook] = useState<any[]>([]);
+  const [dayFlowFilter, setDayFlowFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
+  const [dbFrom, setDbFrom] = useState('');
+  const [dbTo, setDbTo] = useState('');
+  const [dbRange, setDbRange] = useState<{ from?: string; to?: string }>({});
   const [ledger, setLedger] = useState<any[]>([]);
   const [periods, setPeriods] = useState<{ months: string[]; years: string[] }>({ months: [], years: [] });
   const [reportType, setReportType] = useState<'monthly' | 'yearly'>('monthly');
   const [reportPeriod, setReportPeriod] = useState<string | null>(null);
   const [report, setReport] = useState<any>(null);
 
-  const loadTab = async (target: BookTab = tab) => {
+  const loadTab = async (target: BookTab = tab, range = dbRange) => {
     setLoading(true);
     try {
       if (target === 'DAYBOOK') {
-        setDayBook(await accountsService.getDayBook());
+        setDayBook(await accountsService.getDayBook(range.from, range.to));
       } else if (target === 'LEDGER') {
         setLedger(await accountsService.getLedger());
       } else {
@@ -137,15 +142,48 @@ export default function AccountsBookScreen() {
     }
   };
 
+  const applyDayBookRange = () => {
+    const dateOk = (v: string) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+    if (!dateOk(dbFrom) || !dateOk(dbTo)) {
+      Alert.alert('Invalid Date', 'Use the YYYY-MM-DD format, e.g., 2026-07-01.');
+      return;
+    }
+    const range = { from: dbFrom || undefined, to: dbTo || undefined };
+    setDbRange(range);
+    loadTab('DAYBOOK', range);
+  };
+
+  const clearDayBookRange = () => {
+    setDbFrom('');
+    setDbTo('');
+    setDbRange({});
+    loadTab('DAYBOOK', {});
+  };
+
+  // Credit/Debit filter applied on top of the loaded (date-filtered) day book
+  const filteredDayBook = useMemo(() => {
+    if (dayFlowFilter === 'DEBIT') return dayBook.filter((t) => t.flow === 'OUT');
+    if (dayFlowFilter === 'CREDIT') return dayBook.filter((t) => t.flow === 'IN');
+    return dayBook;
+  }, [dayBook, dayFlowFilter]);
+
+  const dayBookTotals = useMemo(
+    () => ({
+      debit: dayBook.filter((t) => t.flow === 'OUT').reduce((s, t) => s + Number(t.amount), 0),
+      credit: dayBook.filter((t) => t.flow === 'IN').reduce((s, t) => s + Number(t.amount), 0),
+    }),
+    [dayBook]
+  );
+
   const dayBookSections = useMemo(() => {
     const map = new Map<string, any[]>();
-    dayBook.forEach((t) => {
+    filteredDayBook.forEach((t) => {
       const day = t.date.toString().split('T')[0];
       if (!map.has(day)) map.set(day, []);
       map.get(day)!.push(t);
     });
     return Array.from(map.entries());
-  }, [dayBook]);
+  }, [filteredDayBook]);
 
   // ---------- PDF ----------
   const periodTitle = report ? (report.type === 'monthly' ? monthLabel(report.period) : `Year ${report.period}`) : '';
@@ -313,6 +351,59 @@ export default function AccountsBookScreen() {
       <Text style={styles.screenTitle}>Day Book</Text>
       <Text style={styles.screenSubtitle}>All vouchers across Owner, Admin and Supervisor books — recorded automatically as Debit and Credit, day by day.</Text>
 
+      {/* Date range picker */}
+      <View style={styles.card}>
+        <Text style={styles.filterLabel}>PICK DATE RANGE (YYYY-MM-DD)</Text>
+        <View style={styles.dateRow}>
+          <TextInput style={styles.dateInput} placeholder="From: 2026-07-01" placeholderTextColor={COLORS.textLight} value={dbFrom} onChangeText={setDbFrom} />
+          <TextInput style={styles.dateInput} placeholder="To: 2026-07-31" placeholderTextColor={COLORS.textLight} value={dbTo} onChangeText={setDbTo} />
+        </View>
+        <View style={styles.dateActions}>
+          <TouchableOpacity style={styles.applyButton} onPress={applyDayBookRange}>
+            <MaterialIcons name="filter-alt" size={16} color={COLORS.white} />
+            <Text style={styles.applyButtonText}>Apply</Text>
+          </TouchableOpacity>
+          {(dbRange.from || dbRange.to) && (
+            <TouchableOpacity style={styles.clearButton} onPress={clearDayBookRange}>
+              <Text style={styles.clearButtonText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      {/* Total Debit / Total Credit for the selected range */}
+      <View style={styles.totalsRow}>
+        <View style={[styles.totalsCard, { backgroundColor: 'rgba(226, 26, 18, 0.06)' }]}>
+          <Text style={[styles.totalsValue, { color: COLORS.primary }]}>{rupees(dayBookTotals.debit)}</Text>
+          <Text style={styles.totalsLabel}>Total Debit</Text>
+        </View>
+        <View style={[styles.totalsCard, { backgroundColor: 'rgba(21, 128, 61, 0.08)' }]}>
+          <Text style={[styles.totalsValue, { color: COLORS.success }]}>{rupees(dayBookTotals.credit)}</Text>
+          <Text style={styles.totalsLabel}>Total Credit</Text>
+        </View>
+      </View>
+
+      {/* Credit / Debit separation */}
+      <View style={styles.flowFilterRow}>
+        {(['ALL', 'DEBIT', 'CREDIT'] as const).map((f) => (
+          <TouchableOpacity
+            key={f}
+            style={[
+              styles.flowFilterButton,
+              dayFlowFilter === f && {
+                backgroundColor: f === 'DEBIT' ? COLORS.primary : f === 'CREDIT' ? COLORS.success : COLORS.headerBackground,
+                borderColor: 'transparent',
+              },
+            ]}
+            onPress={() => setDayFlowFilter(f)}
+          >
+            <Text style={[styles.flowFilterText, dayFlowFilter === f && { color: COLORS.white }]}>
+              {f === 'ALL' ? 'All' : f === 'DEBIT' ? 'Debit' : 'Credit'}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       {dayBookSections.map(([day, items]) => {
         const dayCredit = items.filter((t) => t.flow === 'IN').reduce((s, t) => s + Number(t.amount), 0);
         const dayDebit = items.filter((t) => t.flow === 'OUT').reduce((s, t) => s + Number(t.amount), 0);
@@ -334,7 +425,7 @@ export default function AccountsBookScreen() {
         );
       })}
       {dayBookSections.length === 0 && !loading && (
-        <View style={styles.card}><Text style={styles.emptyText}>No transactions recorded yet.</Text></View>
+        <View style={styles.card}><Text style={styles.emptyText}>No {dayFlowFilter === 'ALL' ? '' : dayFlowFilter.toLowerCase() + ' '}vouchers in this range.</Text></View>
       )}
     </View>
   );
@@ -876,6 +967,103 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     paddingVertical: SPACING.lg,
+  },
+  filterLabel: {
+    color: COLORS.textLight,
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  dateRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  dateInput: {
+    flex: 1,
+    backgroundColor: COLORS.steel,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '700',
+    padding: 11,
+  },
+  dateActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  applyButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.headerBackground,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 11,
+  },
+  applyButtonText: {
+    color: COLORS.white,
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  clearButton: {
+    paddingHorizontal: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.steel,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  clearButtonText: {
+    color: COLORS.text,
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  totalsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  totalsCard: {
+    flex: 1,
+    borderRadius: BORDER_RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
+    gap: 3,
+  },
+  totalsValue: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  totalsLabel: {
+    color: COLORS.textLight,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  flowFilterRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  flowFilterButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  flowFilterText: {
+    color: COLORS.textLight,
+    fontSize: 12,
+    fontWeight: '900',
   },
   bottomBar: {
     flexDirection: 'row',

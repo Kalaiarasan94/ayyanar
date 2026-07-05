@@ -306,6 +306,111 @@ export default function AdminPanelScreen() {
     }
   };
 
+  const fetchIoReport = async (role = ioRole, from = ioFrom, to = ioTo) => {
+    const dateOk = (v: string) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
+    if (!dateOk(from) || !dateOk(to)) {
+      Alert.alert('Invalid Date', 'Use the YYYY-MM-DD format, e.g., 2026-07-01.');
+      return;
+    }
+    setLoading(true);
+    try {
+      setIoReport(await accountsService.getIOReport(role, from || undefined, to || undefined));
+    } catch {
+      Alert.alert('Data Error', 'Unable to load the I/O report.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const ioRangeTitle = ioFrom || ioTo ? `${ioFrom || 'Beginning'} to ${ioTo || 'Today'}` : 'All Time';
+
+  const buildIoReportHtml = () => {
+    const rows = (ioReport?.rows || [])
+      .map(
+        (r: any, index: number) => `
+        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+          <td>${new Date(r.date).toLocaleDateString('en-IN')}</td>
+          <td style="text-align:right; color:#15803D;">${r.input ? Number(r.input).toLocaleString('en-IN') : '-'}</td>
+          <td style="text-align:right; color:#E21A12;">${r.output ? Number(r.output).toLocaleString('en-IN') : '-'}</td>
+          <td style="text-align:right; font-weight:bold;">${Number(r.balance).toLocaleString('en-IN')}</td>
+        </tr>`
+      )
+      .join('');
+
+    return `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
+            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
+            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th { background: #0F172A; color: #FFF; padding: 8px 6px; text-align: left; }
+            th.r { text-align: right; }
+            td { padding: 7px 6px; border-bottom: 1px solid #E2E8F0; }
+          </style>
+        </head>
+        <body>
+          <h1>Ayyanar Construction — ${ioRole} I/O Report</h1>
+          <div class="sub">Date-wise Input / Output / Balance &bull; ${ioRangeTitle} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+          <table>
+            <thead>
+              <tr><th>Date</th><th class="r">Input (Rs)</th><th class="r">Output (Rs)</th><th class="r">Balance (Rs)</th></tr>
+            </thead>
+            <tbody>
+              ${ioFrom ? `<tr><td><i>Opening Balance</i></td><td></td><td></td><td style="text-align:right; font-weight:bold;">${Number(ioReport?.opening || 0).toLocaleString('en-IN')}</td></tr>` : ''}
+              ${rows}
+              <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
+                <td>TOTAL</td>
+                <td style="text-align:right;">${Number(ioReport?.totals?.input || 0).toLocaleString('en-IN')}</td>
+                <td style="text-align:right;">${Number(ioReport?.totals?.output || 0).toLocaleString('en-IN')}</td>
+                <td style="text-align:right;">${Number(ioReport?.totals?.closing || 0).toLocaleString('en-IN')}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+      </html>`;
+  };
+
+  const handleIoPdf = async (viaWhatsApp: boolean) => {
+    if (!ioReport || (ioReport.rows || []).length === 0) {
+      Alert.alert('No Data', 'There are no transactions for this account in the selected range.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      if (Platform.OS === 'web') {
+        if (viaWhatsApp) {
+          const text =
+            `*Ayyanar Construction - ${ioRole} I/O Report*\n` +
+            `Period: ${ioRangeTitle}\n` +
+            `Total Input: Rs ${Number(ioReport.totals.input).toLocaleString('en-IN')}\n` +
+            `Total Output: Rs ${Number(ioReport.totals.output).toLocaleString('en-IN')}\n` +
+            `Closing Balance: Rs ${Number(ioReport.totals.closing).toLocaleString('en-IN')}`;
+          await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        } else {
+          await Print.printAsync({ html: buildIoReportHtml() });
+        }
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: buildIoReportHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: viaWhatsApp ? 'Share I/O Report on WhatsApp' : `${ioRole} I/O Report`,
+        });
+      } else {
+        Alert.alert('Saved', `PDF generated at:\n${uri}`);
+      }
+    } catch (error: any) {
+      Alert.alert('PDF Error', error?.message || 'Unable to generate the I/O report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   const buildDriverReportHtml = () => {
     const rows = driverRecords
       .map(
@@ -706,21 +811,96 @@ export default function AdminPanelScreen() {
     </View>
   );
 
+  const renderIoReports = () => (
+    <View>
+      <Text style={styles.formTitle}>Account</Text>
+      <ChipSelect
+        items={(['Admin', 'Supervisor', 'Owner'] as const).map((r) => ({ id: r, label: r }))}
+        value={ioRole}
+        onChange={(r) => {
+          setIoRole(r as 'Admin' | 'Supervisor' | 'Owner');
+          fetchIoReport(r as 'Admin' | 'Supervisor' | 'Owner');
+        }}
+      />
+
+      <View style={styles.card}>
+        <Text style={styles.formTitle}>Pick Date Range (YYYY-MM-DD)</Text>
+        <View style={styles.dateRow}>
+          <TextInput style={styles.dateInput} placeholder="From: 2026-07-01" placeholderTextColor={COLORS.textLight} value={ioFrom} onChangeText={setIoFrom} />
+          <TextInput style={styles.dateInput} placeholder="To: 2026-07-31" placeholderTextColor={COLORS.textLight} value={ioTo} onChangeText={setIoTo} />
+        </View>
+        <PrimaryButton label="Apply Date Range" icon="filter-alt" onPress={() => fetchIoReport()} />
+      </View>
+
+      <View style={styles.pdfActionsRow}>
+        <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={() => handleIoPdf(false)} disabled={generatingPdf}>
+          {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
+          <Text style={styles.pdfButtonText}>Download PDF</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={() => handleIoPdf(true)} disabled={generatingPdf}>
+          <MaterialIcons name="share" size={18} color={COLORS.white} />
+          <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+        </TouchableOpacity>
+      </View>
+
+      <SectionTitle title={`${ioRole} Statement — ${ioRangeTitle}`} />
+      <View style={styles.card}>
+        <View style={styles.ioHeaderRow}>
+          <Text style={[styles.ioHeaderText, { flex: 1.2, textAlign: 'left' }]}>Date</Text>
+          <Text style={styles.ioHeaderText}>Input</Text>
+          <Text style={styles.ioHeaderText}>Output</Text>
+          <Text style={styles.ioHeaderText}>Balance</Text>
+        </View>
+        {ioFrom ? (
+          <View style={styles.ioRow}>
+            <Text style={[styles.ioDateCell, { fontStyle: 'italic' }]}>Opening</Text>
+            <Text style={styles.ioCell}> </Text>
+            <Text style={styles.ioCell}> </Text>
+            <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(ioReport?.opening || 0).toLocaleString('en-IN')}</Text>
+          </View>
+        ) : null}
+        {(ioReport?.rows || []).map((r: any) => (
+          <View key={r.date} style={styles.ioRow}>
+            <Text style={styles.ioDateCell}>{new Date(r.date).toLocaleDateString('en-IN')}</Text>
+            <Text style={[styles.ioCell, { color: COLORS.success }]}>{r.input ? Number(r.input).toLocaleString('en-IN') : '-'}</Text>
+            <Text style={[styles.ioCell, { color: COLORS.primary }]}>{r.output ? Number(r.output).toLocaleString('en-IN') : '-'}</Text>
+            <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(r.balance).toLocaleString('en-IN')}</Text>
+          </View>
+        ))}
+        {ioReport && (ioReport.rows || []).length > 0 && (
+          <View style={[styles.ioRow, styles.ioTotalRow]}>
+            <Text style={[styles.ioDateCell, { fontWeight: '900' }]}>TOTAL</Text>
+            <Text style={[styles.ioCell, { color: COLORS.success, fontWeight: '900' }]}>{Number(ioReport.totals.input).toLocaleString('en-IN')}</Text>
+            <Text style={[styles.ioCell, { color: COLORS.primary, fontWeight: '900' }]}>{Number(ioReport.totals.output).toLocaleString('en-IN')}</Text>
+            <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(ioReport.totals.closing).toLocaleString('en-IN')}</Text>
+          </View>
+        )}
+        {(!ioReport || (ioReport.rows || []).length === 0) && <EmptyState text="No transactions for this account in the selected range." />}
+      </View>
+    </View>
+  );
+
   const renderReports = () => (
     <View>
       <Text style={styles.screenTitle}>Reports</Text>
-      <Text style={styles.screenSubtitle}>Site expense ledgers and driver trip reports with PDF export.</Text>
+      <Text style={styles.screenSubtitle}>Site ledgers, driver trips, and account I/O statements with PDF export.</Text>
 
       <ChipSelect
         items={[
           { id: 'SITE', label: 'Site Reports' },
           { id: 'DRIVER', label: 'Driver Reports' },
+          { id: 'IO', label: 'I/O Reports' },
         ]}
         value={reportType}
-        onChange={(id) => setReportType(id as 'SITE' | 'DRIVER')}
+        onChange={(id) => {
+          setReportType(id as 'SITE' | 'DRIVER' | 'IO');
+          if (id === 'IO') fetchIoReport();
+        }}
       />
 
-      {reportType === 'SITE' ? renderSiteReports() : renderDriverReports()}
+      {reportType === 'SITE' && renderSiteReports()}
+      {reportType === 'DRIVER' && renderDriverReports()}
+      {reportType === 'IO' && renderIoReports()}
     </View>
   );
 
@@ -1260,5 +1440,43 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '900',
     fontSize: 13,
+  },
+  ioHeaderRow: {
+    flexDirection: 'row',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  ioHeaderText: {
+    flex: 1,
+    color: COLORS.textLight,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    textAlign: 'right',
+  },
+  ioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.steel,
+  },
+  ioTotalRow: {
+    borderBottomWidth: 0,
+    borderTopWidth: 1.5,
+    borderTopColor: COLORS.border,
+  },
+  ioDateCell: {
+    flex: 1.2,
+    color: COLORS.text,
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  ioCell: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
   },
 });

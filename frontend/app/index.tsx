@@ -7,15 +7,34 @@ import ScreenWrapper from './components/ScreenWrapper';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
 import { api as authService } from '../services/api';
 
+// The welcome splash should only appear on app launch — never again after logout.
+let welcomeAlreadyShown = false;
+
+const shouldSkipWelcome = () => {
+  if (welcomeAlreadyShown) return true;
+  // On web, logout does a full page reload, so the module flag resets — use sessionStorage instead
+  if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
+    return sessionStorage.getItem('welcomeShown') === '1';
+  }
+  return false;
+};
+
 export default function LoginScreen() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(!shouldSkipWelcome());
 
   useEffect(() => {
-    const welcomeTimer = setTimeout(() => setShowWelcome(false), 3000);
+    if (!showWelcome) return;
+    const welcomeTimer = setTimeout(() => {
+      welcomeAlreadyShown = true;
+      if (Platform.OS === 'web' && typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('welcomeShown', '1');
+      }
+      setShowWelcome(false);
+    }, 3000);
     return () => clearTimeout(welcomeTimer);
   }, []);
 

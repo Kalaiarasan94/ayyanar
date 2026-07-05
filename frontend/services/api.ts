@@ -3,7 +3,7 @@ import { Platform, NativeModules } from 'react-native';
 
 const IS_PRODUCTION = !__DEV__;
 
-const PRODUCTION_BACKEND_URL = process.env.EXPO_PUBLIC_PRODUCTION_API_URL || 'https://ayyanar-construction-crm-backend.example.com';
+const PRODUCTION_BACKEND_URL = process.env.EXPO_PUBLIC_PRODUCTION_API_URL || 'https://apkayyanar.nexoraapp.in';
 
 const getDevelopmentBackendUrl = () => {
   if (process.env.EXPO_PUBLIC_API_URL) {

@@ -1,11 +1,13 @@
 import mysql from 'mysql2/promise';
 
-// Configure your local MySQL database connection details here
+// Connection settings come from environment variables in production (Hostinger hPanel);
+// the defaults below keep local XAMPP development working with zero setup.
 const pool = mysql.createPool({
-  host: 'localhost',
-  user: 'root',             // Default MySQL username
-  password: '',                 // Default PHPMyAdmin/XAMPP password is empty
-  database: 'construction_erp',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '3306'),
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'construction_erp',
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0
