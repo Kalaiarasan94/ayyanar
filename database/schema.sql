@@ -105,18 +105,6 @@ CREATE TABLE IF NOT EXISTS account_transactions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Advance Requests table
-CREATE TABLE IF NOT EXISTS advance_requests (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
-    reason TEXT,
-    status ENUM('PENDING', 'APPROVED', 'REJECTED', 'PAID') DEFAULT 'PENDING',
-    date DATE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
 -- Site Allocations table
 CREATE TABLE IF NOT EXISTS site_allocations (
     id INT AUTO_INCREMENT PRIMARY KEY,

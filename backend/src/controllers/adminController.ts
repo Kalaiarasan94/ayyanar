@@ -112,32 +112,6 @@ export const adminController = {
     }
   },
 
-  // ---- ADVANCE REQUESTS MGMT ----
-  getAdvanceRequests: async (req: Request, res: Response): Promise<void> => {
-    try {
-      const result = await db.query(`
-        SELECT ar.*, u.name as user_name, u.role as user_role 
-        FROM advance_requests ar
-        JOIN users u ON ar.user_id = u.id
-        ORDER BY ar.created_at DESC
-      `);
-      res.status(200).json(result.rows);
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  },
-
-  updateAdvanceStatus: async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const { status } = req.body; // APPROVED or REJECTED
-      await db.query('UPDATE advance_requests SET status = ? WHERE id = ?', [status, id]);
-      res.status(200).json({ success: true, message: `Request ${status.toLowerCase()}.` });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  },
-
   getAttendanceOverview: async (req: Request, res: Response): Promise<void> => {
     try {
       const date = (req.query.date as string) || new Date().toISOString().split('T')[0];

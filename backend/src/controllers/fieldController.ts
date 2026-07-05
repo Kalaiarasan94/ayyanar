@@ -216,40 +216,6 @@ export const fieldController = {
     }
   },
 
-  // Submits an advance request
-  requestAdvance: async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { userId, amount, reason, date } = req.body;
-      await db.query(
-        'INSERT INTO advance_requests (user_id, amount, reason, date) VALUES (?, ?, ?, ?)',
-        [userId, amount, reason, date]
-      );
-      res.status(201).json({ success: true, message: 'Advance request submitted.' });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  },
-
-  // Accounts marks advance as PAID and logs to ledger
-  payAdvance: async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { requestId, siteId, userId, amount, date } = req.body;
-      
-      // 1. Update advance request status to PAID
-      await db.query('UPDATE advance_requests SET status = "PAID" WHERE id = ?', [requestId]); 
-      
-      // 2. Insert CREDIT into ledger for that site and user
-      await db.query(
-        'INSERT INTO ledger (site_id, user_id, type, category, description, amount, date) VALUES (?, ?, "CREDIT", "Advance", "Cash received from Accounts", ?, ?)',
-        [siteId, userId, amount, date]
-      );
-
-      res.status(200).json({ success: true, message: 'Advance amount disbursed and logged.' });
-    } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  },
-
   // Saves daily supervisor attendance selfie log
   submitSupervisorAttendance: async (req: Request, res: Response): Promise<void> => {
     try {

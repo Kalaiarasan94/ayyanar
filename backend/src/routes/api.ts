@@ -20,8 +20,6 @@ router.post('/site-photos', fieldController.uploadSitePhoto);
 router.get('/site-photos/recent', fieldController.getRecentSitePhotos);
 router.post('/driver-records', fieldController.saveDriverRecord);
 router.get('/driver-records', fieldController.getDriverRecords);
-router.post('/advance-request', fieldController.requestAdvance);
-router.post('/advance-request/pay', fieldController.payAdvance);
 
 // Role Accounts (Admin / Supervisor / Owner money in-out ledgers + TotalAccounts overview)
 router.post('/accounts/transactions', accountsController.addTransaction);
@@ -38,8 +36,6 @@ router.get('/accounts/transactions/:role', accountsController.getTransactions);
 router.post('/staff', adminController.addStaff);
 router.get('/staff', adminController.getStaff);
 router.delete('/staff/:id', adminController.deleteStaff);
-router.get('/advance-requests', adminController.getAdvanceRequests);
-router.put('/advance-requests/:id/status', adminController.updateAdvanceStatus);
 router.get('/attendance/overview', adminController.getAttendanceOverview);
 router.get('/sites', adminController.getSites);
 router.post('/sites', adminController.createSite);

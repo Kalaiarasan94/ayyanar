@@ -59,14 +59,6 @@ export default function ActionsScreen() {
       color: COLORS.secondary,
       roles: ['Admin', 'Driver'],
     },
-    {
-      title: 'Cash Advance',
-      subtitle: 'Request funds',
-      icon: 'account-balance-wallet',
-      route: '/advance-request',
-      color: COLORS.accent,
-      roles: ['Admin', 'Supervisor', 'Site Engineer', 'Driver'],
-    },
   ];
 
   const filteredActions = allActions.filter(action => 

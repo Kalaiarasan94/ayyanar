@@ -183,12 +183,6 @@ export const api = {
 
 export const adminService = {
   getAnalytics: () => request<any>('/analytics/dashboard'),
-  getAdvanceRequests: () => request<any[]>('/advance-requests'),
-  updateAdvanceStatus: (id: string | number, status: string) =>
-    request<ApiResponse>(`/advance-requests/${id}/status`, {
-      method: 'PUT',
-      body: JSON.stringify({ status }),
-    }),
   getAttendanceOverview: (date?: string) =>
     request<any>(`/attendance/overview${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   getStaff: () => request<any[]>('/staff'),
@@ -301,14 +295,4 @@ export const fieldService = {
     const qs = params.toString();
     return request<any[]>(`/driver-records${qs ? `?${qs}` : ''}`);
   },
-  requestAdvance: (advance: Record<string, any>) =>
-    request<ApiResponse>('/advance-request', {
-      method: 'POST',
-      body: JSON.stringify(advance),
-    }),
-  payAdvance: (advance: Record<string, any>) =>
-    request<ApiResponse>('/advance-request/pay', {
-      method: 'POST',
-      body: JSON.stringify(advance),
-    }),
 };

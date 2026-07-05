@@ -19,7 +19,7 @@ app.use('/api', apiRoutes);
 // The tables the app expects (from database/schema.sql + auto-migrations)
 const EXPECTED_TABLES = [
   'users', 'sites', 'workers', 'attendance', 'ledger', 'leads',
-  'advance_requests', 'site_allocations', 'supervisor_attendance',
+  'site_allocations', 'supervisor_attendance',
   'site_photos', 'driver_records', 'account_transactions',
 ];
 
