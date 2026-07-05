@@ -40,6 +40,14 @@ export const IMAGE_BASE_URL = IS_PRODUCTION
 
 const API_BASE_URL = `${IMAGE_BASE_URL}/api`;
 
+// Logged once at startup so you always know which backend the app is talking to.
+// Labeled by the actual URL in use — dev mode can be pointed at production via .env.
+console.log(
+  IMAGE_BASE_URL === PRODUCTION_BACKEND_URL
+    ? `🌐 Backend: PRODUCTION → ${IMAGE_BASE_URL}`
+    : `💻 Backend: LOCALHOST / DEV → ${IMAGE_BASE_URL}`
+);
+
 type Registration = Record<string, any>;
 type BankDetails = Record<string, any>;
 type ApiResponse = {
