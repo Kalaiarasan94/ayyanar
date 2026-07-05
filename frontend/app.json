@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Ayyanar Construction CRM",
+    "slug": "ayyanar-construction-crm",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "ayyanarcrm",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "in.nexoraapp.ayyanar",
+      "buildNumber": "1"
+    },
+    "android": {
+      "package": "in.nexoraapp.ayyanar",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "This app uses the camera for attendance selfies and site progress photos.",
+          "photosPermission": "This app accesses your photos to upload material bills and site photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "This app uses your location to tag attendance check-ins and site photos."
+        }
+      ]
+    ]
+  }
+}
