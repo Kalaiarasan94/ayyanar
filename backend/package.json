@@ -16,9 +16,11 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/multer": "^2.2.0",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
+    "multer": "^2.2.0",
     "mysql2": "^3.9.2"
   },
   "devDependencies": {

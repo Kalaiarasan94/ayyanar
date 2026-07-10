@@ -8,7 +8,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Picker } from '@react-native-picker/picker';
-import { fieldService } from '../services/api';
+import { fieldService, uploadPhoto } from '../services/api';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
 
 export default function SupervisorAttendanceScreen() {
@@ -21,6 +21,7 @@ export default function SupervisorAttendanceScreen() {
   const [loading, setLoading] = useState(false);
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [location, setLocation] = useState<any>(null);
+  const [locationName, setLocationName] = useState<string>('');
   const [modalVisible, setModalVisible] = useState(false);
   const [fetchingSites, setFetchingSites] = useState(true);
 
@@ -73,11 +74,28 @@ export default function SupervisorAttendanceScreen() {
 
     if (!result.canceled) {
       setSelfieUri(result.assets[0].uri);
-      // Get current location
+      // Get current GPS position
       const { status: locStatus } = await Location.requestForegroundPermissionsAsync();
       if (locStatus === 'granted') {
-        const loc = await Location.getCurrentPositionAsync({});
-        setLocation(loc.coords);
+        try {
+          const loc = await Location.getCurrentPositionAsync({});
+          setLocation(loc.coords);
+
+          // Turn coordinates into a readable place name for the admin
+          const places = await Location.reverseGeocodeAsync({
+            latitude: loc.coords.latitude,
+            longitude: loc.coords.longitude,
+          });
+          const place = places[0];
+          if (place) {
+            const parts = [place.name || place.street, place.district || place.subregion, place.city || place.region].filter(Boolean);
+            setLocationName(parts.join(', '));
+          }
+        } catch (locError) {
+          console.log('Location lookup failed (attendance still works):', locError);
+        }
+      } else {
+        Alert.alert('Location Off', 'GPS permission denied — attendance will be saved without location.');
       }
     }
   };
@@ -114,23 +132,27 @@ export default function SupervisorAttendanceScreen() {
     setLoading(true);
     try {
       const dateStr = new Date().toISOString().split('T')[0];
-      const timeStr = new Date().toLocaleTimeString();
-      
+
+      // 1. Upload the selfie to the server so the admin can actually see it
+      const hostedSelfieUrl = await uploadPhoto(selfieUri);
+
+      // 2. Save attendance with the hosted photo URL and GPS location
       await fieldService.submitSupervisorAttendance({
         userId,
         siteId: selectedSiteId,
         date: dateStr,
         status: 'Present',
-        selfieUrl: selfieUri,
+        selfieUrl: hostedSelfieUrl,
         latitude: location?.latitude,
         longitude: location?.longitude,
+        locationName: locationName || null,
       });
 
       setLoading(false);
       setModalVisible(true);
-    } catch (error) {
+    } catch (error: any) {
       setLoading(false);
-      Alert.alert('Attendance Error', 'Failed to register attendance in the database.');
+      Alert.alert('Attendance Error', error?.message || 'Failed to register attendance in the database.');
     }
   };
 
@@ -218,7 +240,9 @@ export default function SupervisorAttendanceScreen() {
               <Image source={{ uri: selfieUri }} style={styles.modalImage} resizeMode="cover" />
             )}
             {location && (
-              <Text style={styles.modalText}>Location: {location.latitude?.toFixed(5)}, {location.longitude?.toFixed(5)}</Text>
+              <Text style={styles.modalText}>
+                📍 {locationName ? `${locationName}\n` : ''}GPS: {location.latitude?.toFixed(5)}, {location.longitude?.toFixed(5)}
+              </Text>
             )}
           <TouchableOpacity
             style={styles.buttonClose}

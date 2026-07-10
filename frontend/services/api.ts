@@ -258,6 +258,32 @@ export const accountsService = {
     request<any>(`/accounts/report?type=${type}&period=${encodeURIComponent(period)}`),
 };
 
+// Uploads a local photo (file:// or blob uri) to the backend and returns its public URL
+export const uploadPhoto = async (localUri: string): Promise<string> => {
+  const formData = new FormData();
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(localUri)).blob();
+    formData.append('photo', blob, `photo-${Date.now()}.jpg`);
+  } else {
+    formData.append('photo', {
+      uri: localUri,
+      name: `photo-${Date.now()}.jpg`,
+      type: 'image/jpeg',
+    } as any);
+  }
+
+  // No Content-Type header: fetch sets the multipart boundary automatically
+  const response = await fetch(`${API_BASE_URL}/upload`, {
+    method: 'POST',
+    body: formData,
+  });
+  const data = await response.json();
+  if (!response.ok || !data?.url) {
+    throw new Error(data?.error || 'Photo upload failed.');
+  }
+  return `${IMAGE_BASE_URL}${data.url}`;
+};
+
 export const fieldService = {
   logExpense: (expense: Record<string, any>) =>
     request<ApiResponse>('/expenses', {

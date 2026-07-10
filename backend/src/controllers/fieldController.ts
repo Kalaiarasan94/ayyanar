@@ -216,26 +216,36 @@ export const fieldController = {
     }
   },
 
-  // Saves daily supervisor attendance selfie log
+  // Saves daily supervisor attendance selfie log with GPS location
   submitSupervisorAttendance: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { userId, siteId, date, status, selfieUrl } = req.body;
-      
+      const { userId, siteId, date, status, selfieUrl, latitude, longitude, locationName } = req.body;
+
       const cleanUserId = userId ? parseInt(userId.toString()) : null;
       const cleanSiteId = siteId ? parseInt(siteId.toString()) : null;
       const cleanDate = date || new Date().toISOString().split('T')[0];
       const cleanStatus = status || 'Present';
-      
+      const cleanLat = latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude.toString()) : null;
+      const cleanLng = longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude.toString()) : null;
+
       console.log('--- LOG SUPERVISOR ATTENDANCE ATTEMPT ---');
-      console.log('Payload:', { cleanUserId, cleanSiteId, cleanDate, cleanStatus, selfieUrl: selfieUrl ? 'Present' : 'Missing' });
-      
+      console.log('Payload:', { cleanUserId, cleanSiteId, cleanDate, cleanStatus, selfieUrl: selfieUrl ? 'Present' : 'Missing', cleanLat, cleanLng, locationName });
+
       const queryText = `
-        INSERT INTO supervisor_attendance (user_id, site_id, date, status, selfie_url)
-        VALUES (?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE status = VALUES(status), selfie_url = VALUES(selfie_url);
+        INSERT INTO supervisor_attendance (user_id, site_id, date, status, selfie_url, latitude, longitude, location_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          status = VALUES(status),
+          selfie_url = VALUES(selfie_url),
+          latitude = VALUES(latitude),
+          longitude = VALUES(longitude),
+          location_name = VALUES(location_name);
       `;
-      await db.query(queryText, [cleanUserId, cleanSiteId, cleanDate, cleanStatus, selfieUrl || null]);
-      
+      await db.query(queryText, [
+        cleanUserId, cleanSiteId, cleanDate, cleanStatus,
+        selfieUrl || null, cleanLat, cleanLng, locationName || null,
+      ]);
+
       res.status(201).json({ success: true, message: 'Supervisor attendance logged successfully.' });
     } catch (error: any) {
       console.error('submitSupervisorAttendance Error:', error);

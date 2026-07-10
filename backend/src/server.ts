@@ -1,9 +1,12 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import fs from 'fs';
+import multer from 'multer';
 import apiRoutes from './routes/api';
 import { db, initDb } from './db';
-import { getErrorLogs } from './logger';
+import { getErrorLogs, logError } from './logger';
 
 const app = express();
 // Hostinger (and most hosts) inject the port via the PORT env variable
@@ -12,6 +15,36 @@ const startedAt = new Date();
 
 app.use(cors());
 app.use(express.json());
+
+// ---------- Photo uploads (attendance selfies, site photos) ----------
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+fs.mkdirSync(uploadsDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: uploadsDir,
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname) || '.jpg';
+      cb(null, `photo-${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (req, file, cb) => {
+    cb(null, file.mimetype.startsWith('image/'));
+  },
+});
+
+// Serve uploaded photos publicly so the admin app can display them
+app.use('/uploads', express.static(uploadsDir));
+
+app.post('/api/upload', upload.single('photo'), (req, res) => {
+  if (!req.file) {
+    logError('POST /api/upload', new Error('No image file received'));
+    res.status(400).json({ success: false, error: 'No image file received.' });
+    return;
+  }
+  res.status(201).json({ success: true, url: `/uploads/${req.file.filename}` });
+});
 
 // Attach all endpoints prefixed with /api
 app.use('/api', apiRoutes);

@@ -616,6 +616,8 @@ export default function AdminPanelScreen() {
               subtitle={`${item.site_name || 'Unassigned Site'} / ${item.location_name || item.site_location || 'Location not recorded'}`}
               status={item.status}
               imageUrl={item.selfie_url}
+              latitude={item.latitude}
+              longitude={item.longitude}
             />
           ))}
           {supervisorCount === 0 && <EmptyState text="No supervisor attendance for this date." />}
@@ -994,13 +996,25 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function AttendanceRow({ icon, title, subtitle, status, imageUrl }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; subtitle: string; status: string; imageUrl?: string }) {
+function AttendanceRow({ icon, title, subtitle, status, imageUrl, latitude, longitude }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; subtitle: string; status: string; imageUrl?: string; latitude?: number | string | null; longitude?: number | string | null }) {
+  const hasGps = latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null;
+  const openInMaps = () => {
+    if (hasGps) Linking.openURL(`https://www.google.com/maps?q=${latitude},${longitude}`);
+  };
   return (
     <View style={styles.attendanceRow}>
       {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.attendanceImage} /> : <View style={styles.listIcon}><MaterialIcons name={icon} size={22} color={COLORS.primary} /></View>}
       <View style={styles.listContent}>
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowMeta}>{subtitle}</Text>
+        {hasGps && (
+          <TouchableOpacity style={styles.gpsLink} onPress={openInMaps}>
+            <MaterialIcons name="location-on" size={13} color={COLORS.success} />
+            <Text style={styles.gpsLinkText}>
+              GPS {Number(latitude).toFixed(5)}, {Number(longitude).toFixed(5)} — Open in Maps
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
       <StatusPill status={status || 'Present'} />
     </View>
@@ -1478,5 +1492,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'right',
+  },
+  gpsLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginTop: 4,
+  },
+  gpsLinkText: {
+    color: COLORS.success,
+    fontSize: 11,
+    fontWeight: '800',
   },
 });

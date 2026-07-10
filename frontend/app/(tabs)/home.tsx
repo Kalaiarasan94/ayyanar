@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { ScrollView, Text, View, ActivityIndicator, Dimensions, StyleSheet, TouchableOpacity, RefreshControl, Image, Alert, Linking, Platform } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Svg, Circle, G } from 'react-native-svg';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { adminService, fieldService } from '../../services/api';
+import { accountsService, adminService, fieldService } from '../../services/api';
 import { COLORS, BORDER_RADIUS, SPACING } from '../../constants/Theme';
 import AppBackground from '../components/AppBackground';
 
@@ -129,11 +130,16 @@ export default function DashboardScreen() {
         setRecentPhotos(photosData || []);
       } else if (storedRole === 'Supervisor' || storedRole === 'Site Engineer') {
         if (storedUserId) {
-          const [walletData, sitesData] = await Promise.all([
-            fieldService.getSupervisorWallet(storedUserId),
+          // Financial summary comes from the Supervisor accounts book (account_transactions)
+          const [accountsSummary, sitesData] = await Promise.all([
+            accountsService.getSummary('Supervisor'),
             fieldService.getSupervisorSites(storedUserId)
           ]);
-          setWallet(walletData);
+          setWallet({
+            cashInHand: accountsSummary?.balance || 0,
+            totalDebits: accountsSummary?.totalOut || 0,
+            totalCredits: accountsSummary?.totalIn || 0,
+          });
           setSites(sitesData);
           if (sitesData.length > 0 && !selectedUploadSiteId) {
             const activeSites = sitesData.filter((s: any) => s.status !== 'Completed');
@@ -288,9 +294,13 @@ export default function DashboardScreen() {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // Refetch every time the Dashboard tab gains focus so entries made in the
+  // Accounts tab (or by Admin/Owner) show up immediately
+  useFocusEffect(
+    useCallback(() => {
+      fetchData();
+    }, [])
+  );
 
   const onRefresh = () => {
     setRefreshing(true);
