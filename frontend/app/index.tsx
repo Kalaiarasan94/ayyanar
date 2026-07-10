@@ -42,6 +42,7 @@ export default function LoginScreen() {
     if (showWelcome) return;
     const checkUserSession = async () => {
       try {
+        console.log('LoginScreen: checking user session...');
         const storedRole = await AsyncStorage.getItem('userRole');
         const storedName = await AsyncStorage.getItem('userName');
         const storedUserId = await AsyncStorage.getItem('userId');
@@ -67,7 +68,7 @@ export default function LoginScreen() {
           }
         }
       } catch (error) {
-        console.error('Error reading user session:', error);
+        console.log('Error reading user session (non-fatal):', error);
       }
     };
     checkUserSession();

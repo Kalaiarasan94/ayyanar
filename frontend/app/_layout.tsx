@@ -1,10 +1,25 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect } from 'react';
 import { COLORS } from '../constants/Theme';
 import LogoutButton from '../components/LogoutButton';
 
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync().catch(() => {
+  /* reloading the app might cause some errors here, safe to ignore */
+});
+
 export default function RootLayout() {
+  useEffect(() => {
+    // Hide splash screen after 500ms to ensure everything is rendered
+    const timer = setTimeout(async () => {
+      await SplashScreen.hideAsync().catch(() => {});
+    }, 500);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" backgroundColor={COLORS.headerBackground} />
