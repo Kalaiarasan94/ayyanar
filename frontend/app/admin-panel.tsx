@@ -194,7 +194,14 @@ export default function AdminPanelScreen() {
     }
     setLoading(true);
     try {
-      await adminService.addStaff({ name: staffName, username: staffUsername, role: staffRole, phone: staffPhone, password: staffPassword });
+      // Trim so the saved username/password match exactly what the staff member will type at login
+      await adminService.addStaff({
+        name: staffName.trim(),
+        username: staffUsername.trim().toLowerCase(),
+        role: staffRole,
+        phone: staffPhone.trim(),
+        password: staffPassword.trim(),
+      });
       setStaffName('');
       setStaffUsername('');
       setStaffPassword('');

@@ -83,8 +83,8 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
-      console.log('Calling authService.login with', username, password);
-      const response = await authService.login(username, password);
+      // Trim invisible spaces that mobile keyboards add after autocomplete
+      const response = await authService.login(username.trim(), password.trim());
       console.log('authService.login response:', response);
       setLoading(false);
       
