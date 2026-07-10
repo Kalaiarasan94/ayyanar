@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { ScrollView, Text, View, ActivityIndicator, Dimensions, StyleSheet, TouchableOpacity, RefreshControl, Image, Alert, Linking, Platform } from 'react-native';
+import { ScrollView, Text, View, ActivityIndicator, useWindowDimensions, StyleSheet, TouchableOpacity, RefreshControl, Image, Alert, Linking, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -11,7 +11,8 @@ import { accountsService, adminService, fieldService } from '../../services/api'
 import { COLORS, BORDER_RADIUS, SPACING } from '../../constants/Theme';
 import AppBackground from '../components/AppBackground';
 
-const { width } = Dimensions.get('window');
+// The web shell caps the app at 1180px on desktop
+const MAX_CONTENT_WIDTH = 1180;
 
 // Simple Pie Chart Component
 const SimplePieChart = ({ data }: { data: { label: string, value: number, color: string }[] }) => {
@@ -99,6 +100,9 @@ const SimplePieChart = ({ data }: { data: { label: string, value: number, color:
 };
 
 export default function DashboardScreen() {
+  const { width } = useWindowDimensions();
+  // Stat cards: half-width pair sized against the actual visible container
+  const statCardWidth = (Math.min(width, MAX_CONTENT_WIDTH) - SPACING.lg * 3) / 2;
   const [role, setRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -330,7 +334,7 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { width: statCardWidth }]}>
             <View style={[styles.iconContainer, { backgroundColor: 'rgba(226, 26, 18, 0.1)' }]}>
               <MaterialIcons name="people" size={24} color={COLORS.primary} />
             </View>
@@ -340,7 +344,7 @@ export default function DashboardScreen() {
             </Text>
           </View>
 
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { width: statCardWidth }]}>
             <View style={[styles.iconContainer, { backgroundColor: 'rgba(21, 128, 61, 0.12)' }]}>
               <MaterialIcons name="trending-up" size={24} color={COLORS.success} />
             </View>
@@ -455,7 +459,7 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { width: statCardWidth }]}>
             <View style={[styles.iconContainer, { backgroundColor: '#DCFCE7' }]}>
               <MaterialIcons name="account-balance-wallet" size={24} color="#15803D" />
             </View>
@@ -465,7 +469,7 @@ export default function DashboardScreen() {
             </Text>
           </View>
 
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { width: statCardWidth }]}>
             <View style={[styles.iconContainer, { backgroundColor: '#FEE2E2' }]}>
               <MaterialIcons name="payments" size={24} color="#B91C1C" />
             </View>
@@ -648,7 +652,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     backgroundColor: COLORS.glassBg,
-    width: (width - SPACING.lg * 3) / 2,
+
     padding: SPACING.md,
     borderRadius: BORDER_RADIUS.xl,
     borderWidth: 1,

@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { Stack } from 'expo-router';
@@ -958,8 +959,10 @@ export default function AdminPanelScreen() {
 }
 
 function MetricCard({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string }) {
+  // 2 cards per row on phones, 4 across on desktop/laptop web
+  const { width } = useWindowDimensions();
   return (
-    <View style={styles.metricCard}>
+    <View style={[styles.metricCard, width >= 900 && { width: '23.8%' }]}>
       <View style={styles.metricIcon}><MaterialIcons name={icon} size={20} color={COLORS.primary} /></View>
       <Text style={styles.metricValue}>{value}</Text>
       <Text style={styles.metricLabel}>{label}</Text>

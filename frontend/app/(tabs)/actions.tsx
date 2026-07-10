@@ -1,18 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { ScrollView, Text, View, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
+import { ScrollView, Text, View, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, BORDER_RADIUS, SPACING } from '../../constants/Theme';
 import AppBackground from '../components/AppBackground';
 
-const { width } = Dimensions.get('window');
 const GRID_SPACING = SPACING.lg;
-const CARD_WIDTH = (width - GRID_SPACING * 3) / 2;
+// The web shell caps the app at 1180px on desktop
+const MAX_CONTENT_WIDTH = 1180;
 
 export default function ActionsScreen() {
   const router = useRouter();
   const [role, setRole] = useState<string | null>(null);
+  const { width } = useWindowDimensions();
+
+  // Responsive grid: 2 cards per row on phones, 4 on desktop/laptop
+  const containerWidth = Math.min(width, MAX_CONTENT_WIDTH);
+  const columns = width >= 900 ? 4 : 2;
+  const cardWidth = (containerWidth - GRID_SPACING * (columns + 1)) / columns;
 
   useEffect(() => {
     AsyncStorage.getItem('userRole').then(setRole);
@@ -76,9 +82,9 @@ export default function ActionsScreen() {
 
         <View style={styles.grid}>
           {filteredActions.map((action, index) => (
-            <TouchableOpacity 
-              key={index} 
-              style={styles.card}
+            <TouchableOpacity
+              key={index}
+              style={[styles.card, { width: cardWidth }]}
               onPress={() => router.push(action.route as any)}
               activeOpacity={0.7}
             >
@@ -138,7 +144,6 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.glassBg,
-    width: CARD_WIDTH,
     padding: SPACING.lg,
     borderRadius: BORDER_RADIUS.xl,
     alignItems: 'center',

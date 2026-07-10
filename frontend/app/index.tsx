@@ -139,6 +139,7 @@ export default function LoginScreen() {
     >
       <StatusBar barStyle="dark-content" />
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        <View style={styles.loginColumn}>
         <View style={styles.header}>
           <View style={styles.logoContainer}>
             <Image source={require('../assets/ayyanar-logo.jpg')} style={styles.logo} resizeMode="contain" />
