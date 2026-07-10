@@ -50,12 +50,15 @@ const dateLabel = (isoDate: string) => {
 // Receipt = money in (Credit), Payment = money out (Debit), Contra = internal transfer (Debit).
 const describeTxn = (t: any) => {
   if (t.flow === 'IN') {
-    return { from: t.category, to: `${t.role} A/c`, kind: 'RECEIPT' as const };
+    const from = `${t.category}${t.party_name ? ` • ${t.party_name}` : ''}`;
+    return { from, to: `${t.role} A/c`, kind: 'RECEIPT' as const };
   }
+  // party_name = the real person behind the category (e.g. which supervisor was paid)
+  const to = t.party_name || t.category;
   if (ROLE_PARTIES.includes(t.category)) {
-    return { from: `${t.role} A/c`, to: t.category, kind: 'TRANSFER' as const };
+    return { from: `${t.role} A/c`, to, kind: 'TRANSFER' as const };
   }
-  return { from: `${t.role} A/c`, to: t.category, kind: 'PAYMENT' as const };
+  return { from: `${t.role} A/c`, to, kind: 'PAYMENT' as const };
 };
 
 const KIND_STYLES = {
@@ -436,13 +439,16 @@ export default function AccountsBookScreen() {
       <Text style={styles.screenSubtitle}>Party-wise ledger accounts with Debit, Credit and closing balance.</Text>
 
       {ledger.map((item: any) => (
-        <View key={item.party} style={styles.ledgerCard}>
+        <View key={`${item.category}-${item.party}`} style={styles.ledgerCard}>
           <View style={styles.ledgerHeader}>
             <View style={styles.partyAvatar}>
               <Text style={styles.partyAvatarText}>{item.party.charAt(0).toUpperCase()}</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.partyName}>{item.party}{ROLE_PARTIES.includes(item.party) ? '  (Internal)' : ''}</Text>
+              <Text style={styles.partyName}>
+                {item.party}
+                {item.party !== item.category && item.category === 'Supervisors' ? '  (Supervisor)' : ROLE_PARTIES.includes(item.category) && item.party === item.category ? '  (Internal)' : ''}
+              </Text>
               <Text style={styles.partyMeta}>{item.entries} voucher{item.entries === 1 ? '' : 's'} • Last on {dateLabel(item.lastDate)}</Text>
             </View>
             <View style={[styles.closingPill, { backgroundColor: item.net >= 0 ? 'rgba(21, 128, 61, 0.1)' : 'rgba(226, 26, 18, 0.08)' }]}>

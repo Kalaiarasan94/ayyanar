@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS account_transactions (
     user_id INT NULL,
     flow ENUM('IN', 'OUT') NOT NULL,
     category VARCHAR(100) NOT NULL,
+    party_name VARCHAR(150) NULL,
     description TEXT NULL,
     amount DECIMAL(15, 2) NOT NULL,
     date DATE NOT NULL,

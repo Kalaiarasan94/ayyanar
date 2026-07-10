@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
-import { accountsService } from '../services/api';
+import { accountsService, adminService } from '../services/api';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
 type AccountsRole = 'Admin' | 'Supervisor' | 'Owner';
@@ -62,6 +62,9 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [description, setDescription] = useState('');
+  // The specific person behind the category (e.g. which real supervisor gets paid)
+  const [party, setParty] = useState<{ name: string; userId: any } | null>(null);
+  const [supervisors, setSupervisors] = useState<{ id: any; name: string }[]>([]);
 
   const isInput = flowTab === 'INPUT';
   // Only the Owner records money-in by hand; other inputs arrive automatically
@@ -89,6 +92,15 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     loadData(flowTab);
   }, [flowTab]);
 
+  // Load the real supervisors created by the admin so payments go to actual people
+  useEffect(() => {
+    if (!outputTargets.includes('Supervisors')) return;
+    adminService
+      .getStaff()
+      .then((staff) => setSupervisors((staff || []).filter((s: any) => s.role === 'Supervisor').map((s: any) => ({ id: s.id, name: s.name }))))
+      .catch(() => setSupervisors([]));
+  }, []);
+
   const applyDateRange = () => {
     if ((fromDate && !isValidDate(fromDate)) || (toDate && !isValidDate(toDate))) {
       Alert.alert('Invalid Date', 'Use the YYYY-MM-DD format, e.g., 2026-07-01.');
@@ -109,6 +121,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const openEntry = () => {
     setAmount('');
     setCategory(null);
+    setParty(null);
     setDescription('');
     setEntryVisible(true);
   };
@@ -132,6 +145,8 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         userId,
         flow,
         category,
+        partyName: party?.name || null,
+        recipientUserId: party?.userId || null,
         description,
         amount: cleanAmount,
         date: new Date().toISOString().split('T')[0],
@@ -255,8 +270,12 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
             <Text style={styles.sectionTitle}>{isInput ? 'Received From' : 'Paid To'}</Text>
             <View style={styles.card}>
               {(breakdown || []).map((item: any) => (
-                <View key={`${flowTab}-${item.category}`} style={styles.breakdownRow}>
-                  <Text style={styles.breakdownName}>{item.category}</Text>
+                <View key={`${flowTab}-${item.category}-${item.party_name || ''}`} style={styles.breakdownRow}>
+                  <Text style={styles.breakdownName}>
+                    {isInput
+                      ? `${item.category}${item.party_name ? ` • ${item.party_name}` : ''}`
+                      : item.party_name || item.category}
+                  </Text>
                   <Text style={[styles.breakdownAmount, { color: accent }]}>{rupees(item.total)}</Text>
                 </View>
               ))}
@@ -316,7 +335,11 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
               <MaterialIcons name={isInput ? 'south-west' : 'north-east'} size={18} color={accent} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.txnTitle}>{isInput ? `From ${item.category}` : `To ${item.category}`}</Text>
+              <Text style={styles.txnTitle}>
+                {isInput
+                  ? `From ${item.category}${item.party_name ? ` • ${item.party_name}` : ''}`
+                  : `To ${item.party_name || item.category}`}
+              </Text>
               <Text style={styles.txnMeta}>
                 {dateLabel(item.date)}{item.description ? ` / ${item.description}` : ''}
               </Text>
@@ -403,22 +426,47 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
             <Text style={styles.fieldLabel}>{isInput ? 'RECEIVED FROM' : 'GIVEN TO / SPENT ON'}</Text>
             <View style={styles.chipRow}>
-              {(isInput ? inputSources : outputTargets).map((option) => (
-                <TouchableOpacity
-                  key={option}
-                  style={[styles.chip, category === option && { backgroundColor: accent, borderColor: accent }]}
-                  onPress={() => setCategory(option)}
-                >
-                  <Text style={[styles.chipText, category === option && styles.chipTextActive]}>{option}</Text>
-                </TouchableOpacity>
-              ))}
+              {(isInput ? inputSources : outputTargets).map((option) => {
+                // "Supervisors" expands into the real supervisors created by the admin
+                if (!isInput && option === 'Supervisors' && supervisors.length > 0) {
+                  return supervisors.map((sup) => {
+                    const selected = category === 'Supervisors' && party?.userId === sup.id;
+                    return (
+                      <TouchableOpacity
+                        key={`sup-${sup.id}`}
+                        style={[styles.chip, selected && { backgroundColor: accent, borderColor: accent }]}
+                        onPress={() => {
+                          setCategory('Supervisors');
+                          setParty({ name: sup.name, userId: sup.id });
+                        }}
+                      >
+                        <MaterialIcons name="person" size={13} color={selected ? COLORS.white : COLORS.textLight} />
+                        <Text style={[styles.chipText, selected && styles.chipTextActive]}>{sup.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  });
+                }
+                const selected = category === option && !party;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[styles.chip, selected && { backgroundColor: accent, borderColor: accent }]}
+                    onPress={() => {
+                      setCategory(option);
+                      setParty(null);
+                    }}
+                  >
+                    <Text style={[styles.chipText, selected && styles.chipTextActive]}>{option}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
 
             {!isInput && category && ROLE_TARGETS.includes(category) && (
               <View style={styles.infoCard}>
                 <MaterialIcons name="sync-alt" size={18} color={COLORS.textLight} />
                 <Text style={styles.infoText}>
-                  This amount will automatically appear as money-in on the {category === 'Supervisors' ? 'Supervisor' : category} account.
+                  This amount will automatically appear as money-in on {party ? `${party.name}'s Supervisor account` : `the ${category === 'Supervisors' ? 'Supervisor' : category} account`}.
                 </Text>
               </View>
             )}
@@ -778,6 +826,9 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.sm,
   },
   chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: COLORS.steel,
     borderWidth: 1,
     borderColor: COLORS.border,

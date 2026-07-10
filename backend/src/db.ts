@@ -97,12 +97,21 @@ export const initDb = async () => {
           user_id INT NULL,
           flow ENUM('IN', 'OUT') NOT NULL,
           category VARCHAR(100) NOT NULL,
+          party_name VARCHAR(150) NULL,
           description TEXT NULL,
           amount DECIMAL(15, 2) NOT NULL,
           date DATE NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Add party_name to account_transactions (the specific person behind a category,
+    // e.g. which real supervisor a payment went to) if it doesn't exist yet
+    const [partyColResult] = await pool.execute("SHOW COLUMNS FROM account_transactions LIKE 'party_name'");
+    if ((partyColResult as any[]).length === 0) {
+      await db.query('ALTER TABLE account_transactions ADD COLUMN party_name VARCHAR(150) NULL AFTER category;');
+      console.log('Added party_name column to account_transactions.');
+    }
 
     // Extend users.role enum with Owner and TotalAccounts, then seed their logins
     const [roleColResult] = await pool.execute("SHOW COLUMNS FROM users LIKE 'role'");

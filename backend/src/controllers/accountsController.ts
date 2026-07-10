@@ -24,7 +24,7 @@ export const accountsController = {
   // Records a money-in or money-out entry for a role ledger (Admin / Supervisor / Owner)
   addTransaction: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { role, userId, flow, category, description, amount, date } = req.body;
+      const { role, userId, flow, category, description, amount, date, partyName, recipientUserId } = req.body;
 
       if (!role || !flow || !category || amount === undefined || amount === null || amount === '') {
         res.status(400).json({ success: false, error: 'role, flow, category and amount are required.' });
@@ -50,30 +50,45 @@ export const accountsController = {
       }
 
       const cleanDate = date || new Date().toISOString().split('T')[0];
+      const cleanPartyName = partyName || null;
 
       await db.query(
-        `INSERT INTO account_transactions (role, user_id, flow, category, description, amount, date)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO account_transactions (role, user_id, flow, category, party_name, description, amount, date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           role,
           userId ? parseInt(userId.toString()) : null,
           flow,
           category,
+          cleanPartyName,
           description || null,
           cleanAmount,
           cleanDate,
         ]
       );
 
-      // Mirror internal transfers into the receiving role's ledger as an IN entry
+      // Mirror internal transfers into the receiving role's ledger as an IN entry.
+      // When a specific supervisor was chosen, the mirrored entry carries their
+      // user_id and name so the receipt is attributed to that real person.
       const recipientRole = flow === 'OUT' ? TRANSFER_TARGETS[category] : undefined;
       if (recipientRole && recipientRole !== role) {
         await db.query(
-          `INSERT INTO account_transactions (role, user_id, flow, category, description, amount, date)
-           VALUES (?, NULL, 'IN', ?, ?, ?, ?)`,
-          [recipientRole, role, description || `Transfer from ${role}`, cleanAmount, cleanDate]
+          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, description, amount, date)
+           VALUES (?, ?, 'IN', ?, ?, ?, ?, ?)`,
+          [
+            recipientRole,
+            recipientUserId ? parseInt(recipientUserId.toString()) : null,
+            role,
+            cleanPartyName,
+            description || `Transfer from ${role}`,
+            cleanAmount,
+            cleanDate,
+          ]
         );
-        res.status(201).json({ success: true, message: `Payment recorded and credited to ${recipientRole} account.` });
+        res.status(201).json({
+          success: true,
+          message: `Payment recorded and credited to ${cleanPartyName || recipientRole} (${recipientRole} account).`,
+        });
         return;
       }
 
@@ -193,9 +208,9 @@ export const accountsController = {
       );
 
       const breakdownResult = await db.query(
-        `SELECT flow, category, COALESCE(SUM(amount), 0) AS total
+        `SELECT flow, category, party_name, COALESCE(SUM(amount), 0) AS total
          FROM account_transactions WHERE role = ?
-         GROUP BY flow, category
+         GROUP BY flow, category, party_name
          ORDER BY flow, total DESC`,
         [role]
       );
@@ -249,22 +264,24 @@ export const accountsController = {
   // Party-wise ledger: for every party, how much we received from them and paid to them
   getLedger: async (req: Request, res: Response): Promise<void> => {
     try {
+      // Real people (party_name, e.g. a specific supervisor) get their own ledger account
       const result = await db.query(
-        `SELECT category AS party,
+        `SELECT category, party_name,
            COALESCE(SUM(IF(flow = 'IN', amount, 0)), 0) AS receivedFrom,
            COALESCE(SUM(IF(flow = 'OUT', amount, 0)), 0) AS paidTo,
            COUNT(*) AS entries,
            MAX(date) AS lastDate
          FROM account_transactions
          WHERE ${singleEntryFilter}
-         GROUP BY category
+         GROUP BY category, party_name
          ORDER BY SUM(amount) DESC`,
         [...INTERNAL_PARTIES]
       );
 
       res.status(200).json(
         (result.rows || []).map((r: any) => ({
-          party: r.party,
+          party: r.party_name || r.category,
+          category: r.category,
           receivedFrom: Number(r.receivedFrom),
           paidTo: Number(r.paidTo),
           net: Number(r.receivedFrom) - Number(r.paidTo),
@@ -328,10 +345,10 @@ export const accountsController = {
       );
 
       const paidResult = await db.query(
-        `SELECT category, COALESCE(SUM(amount), 0) AS total
+        `SELECT category, party_name, COALESCE(SUM(amount), 0) AS total
          FROM account_transactions
          WHERE ${periodExpr} = ? AND flow = 'OUT'
-         GROUP BY category ORDER BY total DESC`,
+         GROUP BY category, party_name ORDER BY total DESC`,
         [p]
       );
 
@@ -351,7 +368,10 @@ export const accountsController = {
         transfers: Number(transfers),
         profit: Number(revenue) - Number(expenses),
         receivedBreakdown: receivedResult.rows.map((r: any) => ({ category: r.category, total: Number(r.total) })),
-        paidBreakdown: paidResult.rows.map((r: any) => ({ category: r.category, total: Number(r.total) })),
+        paidBreakdown: paidResult.rows.map((r: any) => ({
+          category: r.party_name ? `${r.party_name} (${r.category})` : r.category,
+          total: Number(r.total),
+        })),
         transactions: transactionsResult.rows,
       });
     } catch (error: any) {
