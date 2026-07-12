@@ -31,11 +31,10 @@ yarn-error.*
 *.pem
 
 # local env files
-.env
-.env.local
 
-# uploaded photos (attendance selfies, site photos)
+# uploaded photos (attendance selfies, site photos, bills)
 backend/uploads/
+backend/images/
 
 # typescript
 *.tsbuildinfo

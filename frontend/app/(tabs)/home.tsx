@@ -7,7 +7,7 @@ import { Svg, Circle, G } from 'react-native-svg';
 import { Picker } from '@react-native-picker/picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import { accountsService, adminService, fieldService } from '../../services/api';
+import { accountsService, adminService, fieldService, uploadPhoto } from '../../services/api';
 import { COLORS, BORDER_RADIUS, SPACING } from '../../constants/Theme';
 import AppBackground from '../components/AppBackground';
 
@@ -103,6 +103,8 @@ export default function DashboardScreen() {
   const { width } = useWindowDimensions();
   // Stat cards: half-width pair sized against the actual visible container
   const statCardWidth = (Math.min(width, MAX_CONTENT_WIDTH) - SPACING.lg * 3) / 2;
+  // Laptop/desktop web: sections flow in two columns like a real website
+  const isWide = width >= 1024;
   const [role, setRole] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -270,13 +272,18 @@ export default function DashboardScreen() {
       
       const cleanUserId = userId ? parseInt(userId.toString()) : null;
       const cleanSiteId = selectedUploadSiteId ? parseInt(selectedUploadSiteId.toString()) : null;
-      
+
       const resolvedLocationName = activeLocation ? activeLocation.locationName : 'Location Unspecified';
+
+      // Upload the photo to the server (images/supervisor/<username>/site-photo-...)
+      // so the admin can actually see it — local device paths don't work cross-device
+      const username = (await AsyncStorage.getItem('userUsername')) || 'unknown';
+      const hostedImageUrl = await uploadPhoto(capturedImageUri, { role: 'supervisor', username, type: 'site-photo' });
 
       const response = await fieldService.uploadSitePhoto({
         siteId: cleanSiteId,
         userId: cleanUserId,
-        imageUrl: capturedImageUri,
+        imageUrl: hostedImageUrl,
         latitude: activeLocation ? activeLocation.latitude : null,
         longitude: activeLocation ? activeLocation.longitude : null,
         locationName: resolvedLocationName
@@ -355,19 +362,47 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Expense Distribution</Text>
-          <View style={styles.card}>
-            <SimplePieChart data={expenseChartData} />
+        {/* Desktop: chart and site-wise expenses side by side; mobile: stacked */}
+        <View style={isWide && styles.twoColRow}>
+          <View style={[styles.section, isWide && styles.twoColItem]}>
+            <Text style={styles.sectionTitle}>Expense Distribution</Text>
+            <View style={styles.card}>
+              <SimplePieChart data={expenseChartData} />
+            </View>
+          </View>
+
+          <View style={[styles.section, isWide && styles.twoColItem]}>
+            <Text style={styles.sectionTitle}>Site-wise Expenses</Text>
+            <View style={styles.card}>
+              {data?.siteWiseExpenseBreakdown?.map((exp: any, idx: number) => (
+                <View key={idx} style={styles.expenseItem}>
+                  <View style={styles.expenseInfo}>
+                    <Text style={styles.siteName}>{exp.site_name}</Text>
+                    <Text style={styles.amount}>₹{Number(exp.total_expenses).toLocaleString()}</Text>
+                  </View>
+                  <View style={styles.progressBarBg}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        {
+                          backgroundColor: [COLORS.primary, COLORS.accent, COLORS.warning][idx % 3],
+                          width: `${Math.min((exp.total_expenses / 100000) * 100, 100)}%`
+                        }
+                      ]}
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
           </View>
         </View>
 
-        {/* Recent Site Photo Submissions Feed */}
+        {/* Recent Site Photo Submissions Feed (only server-hosted photos can display) */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Recent Site Photo Submissions</Text>
-          {recentPhotos.length > 0 ? (
+          {recentPhotos.filter((p: any) => p.image_url?.startsWith('http')).length > 0 ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalFeedContainer}>
-              {recentPhotos.map((photo: any) => (
+              {recentPhotos.filter((p: any) => p.image_url?.startsWith('http')).map((photo: any) => (
                 <View key={photo.id} style={styles.adminFeedCard}>
                   <View style={styles.adminCardHeader}>
                     <View style={styles.avatarContainer}>
@@ -415,30 +450,6 @@ export default function DashboardScreen() {
           )}
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Site-wise Expenses</Text>
-          <View style={styles.card}>
-            {data?.siteWiseExpenseBreakdown?.map((exp: any, idx: number) => (
-              <View key={idx} style={styles.expenseItem}>
-                <View style={styles.expenseInfo}>
-                  <Text style={styles.siteName}>{exp.site_name}</Text>
-                  <Text style={styles.amount}>₹{Number(exp.total_expenses).toLocaleString()}</Text>
-                </View>
-                <View style={styles.progressBarBg}>
-                  <View 
-                    style={[
-                      styles.progressBarFill, 
-                      { 
-                        backgroundColor: [COLORS.primary, COLORS.accent, COLORS.warning][idx % 3],
-                        width: `${Math.min((exp.total_expenses / 100000) * 100, 100)}%` 
-                      }
-                    ]} 
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
       </>
     );
   };
@@ -480,7 +491,9 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        <View style={styles.section}>
+        {/* Desktop: summary and upload side by side; mobile: stacked */}
+        <View style={isWide && styles.twoColRow}>
+        <View style={[styles.section, isWide && styles.twoColItem]}>
           <Text style={styles.sectionTitle}>Financial Summary</Text>
           <View style={styles.card}>
             <SimplePieChart data={walletChartData} />
@@ -488,7 +501,7 @@ export default function DashboardScreen() {
         </View>
 
         {/* Quick Site Progress Photo Upload Widget */}
-        <View style={styles.section}>
+        <View style={[styles.section, isWide && styles.twoColItem]}>
           <Text style={styles.sectionTitle}>Site Progress Upload</Text>
           <View style={styles.card}>
             <Text style={styles.formLabel}>SELECT ACTIVE PROJECT SITE</Text>
@@ -571,6 +584,7 @@ export default function DashboardScreen() {
               )}
             </TouchableOpacity>
           </View>
+        </View>
         </View>
 
         <View style={styles.section}>
@@ -686,6 +700,14 @@ const styles = StyleSheet.create({
   section: {
     paddingHorizontal: SPACING.lg,
     marginTop: SPACING.md,
+  },
+  // Desktop web: sections placed side by side like a real website
+  twoColRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  twoColItem: {
+    flex: 1,
   },
   sectionTitle: {
     fontSize: 18,

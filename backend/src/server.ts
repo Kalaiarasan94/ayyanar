@@ -16,16 +16,31 @@ const startedAt = new Date();
 app.use(cors());
 app.use(express.json());
 
-// ---------- Photo uploads (attendance selfies, site photos) ----------
-const uploadsDir = path.join(__dirname, '..', 'uploads');
+// ---------- Photo uploads (attendance selfies, site photos, bills) ----------
+// Stored organized: images/<role>/<username>/<type>-<timestamp>.jpg
+// e.g. images/supervisor/sup1/attendance-1783680000000-12345.jpg
+const imagesDir = path.join(__dirname, '..', 'images');
+const uploadsDir = path.join(__dirname, '..', 'uploads'); // legacy photos keep working
+fs.mkdirSync(imagesDir, { recursive: true });
 fs.mkdirSync(uploadsDir, { recursive: true });
+
+// Folder/file name segments come from the client — keep them safe and predictable
+const sanitizeSegment = (value: any, fallback: string) =>
+  (value ? value.toString().trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') : '') || fallback;
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: uploadsDir,
+    destination: (req, file, cb) => {
+      const role = sanitizeSegment(req.query.role, 'general');
+      const username = sanitizeSegment(req.query.username, 'unknown');
+      const dir = path.join(imagesDir, role, username);
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
     filename: (req, file, cb) => {
+      const type = sanitizeSegment(req.query.type, 'photo');
       const ext = path.extname(file.originalname) || '.jpg';
-      cb(null, `photo-${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
+      cb(null, `${type}-${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
     },
   }),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
@@ -34,7 +49,8 @@ const upload = multer({
   },
 });
 
-// Serve uploaded photos publicly so the admin app can display them
+// Serve stored photos publicly so the admin app can display them
+app.use('/images', express.static(imagesDir));
 app.use('/uploads', express.static(uploadsDir));
 
 app.post('/api/upload', upload.single('photo'), (req, res) => {
@@ -43,7 +59,9 @@ app.post('/api/upload', upload.single('photo'), (req, res) => {
     res.status(400).json({ success: false, error: 'No image file received.' });
     return;
   }
-  res.status(201).json({ success: true, url: `/uploads/${req.file.filename}` });
+  const role = sanitizeSegment(req.query.role, 'general');
+  const username = sanitizeSegment(req.query.username, 'unknown');
+  res.status(201).json({ success: true, url: `/images/${role}/${username}/${req.file.filename}` });
 });
 
 // Attach all endpoints prefixed with /api

@@ -64,7 +64,8 @@ const adminTabs: { id: AdminTab; label: string; icon: keyof typeof MaterialIcons
 
 const getBillImageUris = (imageUrl?: string | null) => {
   if (!imageUrl) return [];
-  return imageUrl.split('||').map((uri) => uri.trim()).filter(Boolean);
+  // Only server-hosted photos can display on other devices; old local paths are skipped
+  return imageUrl.split('||').map((uri) => uri.trim()).filter((uri) => uri.startsWith('http'));
 };
 
 const todayIso = () => new Date().toISOString().split('T')[0];
@@ -918,7 +919,7 @@ export default function AdminPanelScreen() {
               title={item.supervisor_name || 'Supervisor'}
               subtitle={`${item.site_name || 'Unassigned Site'} / ${item.location_name || item.site_location || 'Location not recorded'}`}
               status={item.status}
-              imageUrl={item.selfie_url}
+              imageUrl={item.selfie_url?.startsWith('http') ? item.selfie_url : undefined}
               latitude={item.latitude}
               longitude={item.longitude}
               onPress={() => setAttendanceDetail(item)}
@@ -1371,7 +1372,7 @@ export default function AdminPanelScreen() {
                   <StatusPill status={attendanceDetail.status || 'Present'} />
                 </View>
 
-                {attendanceDetail.selfie_url ? (
+                {attendanceDetail.selfie_url?.startsWith('http') ? (
                   <Image source={{ uri: attendanceDetail.selfie_url }} style={styles.detailPhoto} resizeMode="cover" />
                 ) : (
                   <View style={styles.detailNoPhoto}>

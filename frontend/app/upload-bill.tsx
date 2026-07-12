@@ -5,7 +5,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { fieldService } from '../services/api';
+import { fieldService, uploadPhoto } from '../services/api';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
 import AppBackground from './components/AppBackground';
 
@@ -169,8 +169,16 @@ export default function UploadBill() {
     try {
       const rawUserId = userId || await AsyncStorage.getItem('userId');
       const storedUserId = Array.isArray(rawUserId) ? rawUserId[0] : rawUserId;
-      
+      const username = (await AsyncStorage.getItem('userUsername')) || 'unknown';
+
       for (const bill of billsList) {
+        // Upload every bill photo to the server (images/supervisor/<username>/bill-...)
+        // so the admin report can display them from any device
+        const hostedUris: string[] = [];
+        for (const localUri of bill.imageUris) {
+          hostedUris.push(await uploadPhoto(localUri, { role: 'supervisor', username, type: 'bill' }));
+        }
+
         await fieldService.logExpense({
           siteId: selectedSiteId,
           userId: storedUserId,
@@ -180,7 +188,7 @@ export default function UploadBill() {
           amount: parseFloat(bill.amount),
           paymentMode: bill.paymentMode,
           isGst: bill.isGst,
-          imageUrl: bill.imageUris.join('||'),
+          imageUrl: hostedUris.join('||'),
           date: new Date().toISOString().split('T')[0]
         });
       }

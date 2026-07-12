@@ -95,6 +95,7 @@ export default function LoginScreen() {
         await AsyncStorage.setItem('userRole', role);
         await AsyncStorage.setItem('userName', name);
         await AsyncStorage.setItem('userId', id.toString());
+        await AsyncStorage.setItem('userUsername', response.user.username || '');
         
         // Redirect based on role
         if (role === 'Driver') {

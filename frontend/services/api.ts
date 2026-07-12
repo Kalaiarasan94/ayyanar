@@ -258,8 +258,12 @@ export const accountsService = {
     request<any>(`/accounts/report?type=${type}&period=${encodeURIComponent(period)}`),
 };
 
-// Uploads a local photo (file:// or blob uri) to the backend and returns its public URL
-export const uploadPhoto = async (localUri: string): Promise<string> => {
+// Uploads a local photo (file:// or blob uri) to the backend and returns its public URL.
+// Photos are stored organized on the server: images/<role>/<username>/<type>-...jpg
+export const uploadPhoto = async (
+  localUri: string,
+  opts: { role?: string; username?: string; type?: string } = {}
+): Promise<string> => {
   const formData = new FormData();
   if (Platform.OS === 'web') {
     const blob = await (await fetch(localUri)).blob();
@@ -272,8 +276,14 @@ export const uploadPhoto = async (localUri: string): Promise<string> => {
     } as any);
   }
 
+  const params = new URLSearchParams();
+  if (opts.role) params.append('role', opts.role);
+  if (opts.username) params.append('username', opts.username);
+  if (opts.type) params.append('type', opts.type);
+  const qs = params.toString();
+
   // No Content-Type header: fetch sets the multipart boundary automatically
-  const response = await fetch(`${API_BASE_URL}/upload`, {
+  const response = await fetch(`${API_BASE_URL}/upload${qs ? `?${qs}` : ''}`, {
     method: 'POST',
     body: formData,
   });

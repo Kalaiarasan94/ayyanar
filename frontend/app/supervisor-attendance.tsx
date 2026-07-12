@@ -136,8 +136,13 @@ export default function SupervisorAttendanceScreen() {
       const now = new Date();
       const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      // Upload the selfie only for Present check-ins
-      const hostedSelfieUrl = status === 'Present' && selfieUri ? await uploadPhoto(selfieUri) : null;
+      // Upload the selfie only for Present check-ins.
+      // Stored on the server under images/supervisor/<username>/attendance-...
+      const username = (await AsyncStorage.getItem('userUsername')) || userName || 'unknown';
+      const hostedSelfieUrl =
+        status === 'Present' && selfieUri
+          ? await uploadPhoto(selfieUri, { role: 'supervisor', username, type: 'attendance' })
+          : null;
 
       await fieldService.submitSupervisorAttendance({
         userId,
