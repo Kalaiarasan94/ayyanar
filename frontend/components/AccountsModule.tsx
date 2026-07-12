@@ -15,7 +15,9 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
 import { accountsService, adminService } from '../services/api';
+import { printHtmlOnWeb } from '../services/printReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
+import DatePickerField from './DatePickerField';
 
 type AccountsRole = 'Admin' | 'Supervisor' | 'Owner';
 type FlowTab = 'INPUT' | 'OUTPUT';
@@ -65,6 +67,10 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   // The specific person behind the category (e.g. which real supervisor gets paid)
   const [party, setParty] = useState<{ name: string; userId: any } | null>(null);
   const [supervisors, setSupervisors] = useState<{ id: any; name: string }[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Bank'>('Cash');
+  // Free-text name on every entry (who gave / person / site / shop) — editable
+  const [entryName, setEntryName] = useState('');
+  const [sites, setSites] = useState<{ id: any; name: string }[]>([]);
 
   const isInput = flowTab === 'INPUT';
   // Only the Owner records money-in by hand; other inputs arrive automatically
@@ -101,6 +107,15 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
       .catch(() => setSupervisors([]));
   }, []);
 
+  // Load the created sites so Site Expenses can be tagged to a real site
+  useEffect(() => {
+    if (!outputTargets.includes('Site Expenses')) return;
+    adminService
+      .getSites()
+      .then((data) => setSites((data || []).map((s: any) => ({ id: s.id, name: s.name }))))
+      .catch(() => setSites([]));
+  }, []);
+
   const applyDateRange = () => {
     if ((fromDate && !isValidDate(fromDate)) || (toDate && !isValidDate(toDate))) {
       Alert.alert('Invalid Date', 'Use the YYYY-MM-DD format, e.g., 2026-07-01.');
@@ -122,6 +137,8 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     setAmount('');
     setCategory(null);
     setParty(null);
+    setEntryName('');
+    setPaymentMethod('Cash');
     setDescription('');
     setEntryVisible(true);
   };
@@ -145,8 +162,9 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         userId,
         flow,
         category,
-        partyName: party?.name || null,
+        partyName: entryName.trim() || party?.name || null,
         recipientUserId: party?.userId || null,
+        paymentMethod,
         description,
         amount: cleanAmount,
         date: new Date().toISOString().split('T')[0],
@@ -166,20 +184,42 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     ? `${appliedRange.from ? dateLabel(appliedRange.from) : 'Beginning'} to ${appliedRange.to ? dateLabel(appliedRange.to) : 'Today'}`
     : 'All Time';
 
-  const buildTransactionsHtml = () => {
-    const total = transactions.reduce((s, t) => s + Number(t.amount), 0);
-    const rows = transactions
-      .map(
-        (t: any, index: number) => `
-        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td>${index + 1}</td>
-          <td>${dateLabel(t.date)}</td>
-          <td>${isInput ? `From ${t.category}` : `To ${t.category}`}</td>
-          <td>${t.description || '-'}</td>
-          <td style="text-align:right; color:${isInput ? '#15803D' : '#E21A12'};">${Number(t.amount).toLocaleString('en-IN')}</td>
-        </tr>`
-      )
-      .join('');
+  // Full account report: Input | Output | Balance summary, then detailed
+  // Input section (who gave, method, reason) and Output section (paid to whom, method, reason)
+  const buildAccountReportHtml = (inTxns: any[], outTxns: any[]) => {
+    const totalIn = inTxns.reduce((s, t) => s + Number(t.amount), 0);
+    const totalOut = outTxns.reduce((s, t) => s + Number(t.amount), 0);
+    const balance = totalIn - totalOut;
+
+    const detailRows = (txns: any[], forInput: boolean) =>
+      txns
+        .map(
+          (t: any, index: number) => `
+          <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+            <td>${index + 1}</td>
+            <td>${dateLabel(t.date)}</td>
+            <td>${forInput ? `${t.category}${t.party_name ? ` • ${t.party_name}` : ''}` : (t.party_name || t.category)}</td>
+            <td>${t.payment_method || 'Cash'}</td>
+            <td>${t.description || '-'}</td>
+            <td style="text-align:right; color:${forInput ? '#15803D' : '#E21A12'};">${Number(t.amount).toLocaleString('en-IN')}</td>
+          </tr>`
+        )
+        .join('');
+
+    const detailTable = (title: string, txns: any[], forInput: boolean, total: number) => `
+      <h3 style="color:${forInput ? '#15803D' : '#E21A12'};">${title} (${txns.length} entries)</h3>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Date</th><th>${forInput ? 'Who Gave (From)' : 'Paid To'}</th><th>Method</th><th>Reason / Note</th><th class="r">Amount (Rs)</th></tr>
+        </thead>
+        <tbody>
+          ${txns.length ? detailRows(txns, forInput) : '<tr><td colspan="6" style="text-align:center; color:#64748B;">No entries in this period</td></tr>'}
+          <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
+            <td colspan="5">TOTAL ${forInput ? 'INPUT' : 'OUTPUT'}</td>
+            <td style="text-align:right;">${total.toLocaleString('en-IN')}</td>
+          </tr>
+        </tbody>
+      </table>`;
 
     return `
       <html>
@@ -188,7 +228,12 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
           <style>
             body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
             h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
+            h3 { font-size: 13px; margin: 20px 0 8px; }
             .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
+            .boxes { display: flex; gap: 10px; margin-bottom: 6px; }
+            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
+            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
+            .box .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
             table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
             th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
             th.r { text-align: right; }
@@ -197,35 +242,37 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         </head>
         <body>
           <h1>Ayyanar Construction — ${heading}</h1>
-          <div class="sub">${isInput ? 'Money Received (Input)' : 'Money Paid (Output)'} &bull; ${rangeTitle} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
-          <table>
-            <thead>
-              <tr><th>#</th><th>Date</th><th>${isInput ? 'Received From' : 'Paid To'}</th><th>Reason / Note</th><th class="r">Amount (Rs)</th></tr>
-            </thead>
-            <tbody>
-              ${rows}
-              <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-                <td colspan="4">TOTAL (${transactions.length} entries)</td>
-                <td style="text-align:right;">${total.toLocaleString('en-IN')}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="sub">${rangeTitle} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+
+          <div class="boxes">
+            <div class="box"><div class="label">Input (Received)</div><div class="value" style="color:#15803D;">${rupees(totalIn)}</div></div>
+            <div class="box"><div class="label">Output (Paid)</div><div class="value" style="color:#E21A12;">${rupees(totalOut)}</div></div>
+            <div class="box"><div class="label">Balance</div><div class="value">${rupees(balance)}</div></div>
+          </div>
+
+          ${detailTable('INPUT — Money Received', inTxns, true, totalIn)}
+          ${detailTable('OUTPUT — Money Paid', outTxns, false, totalOut)}
         </body>
       </html>`;
   };
 
   const handleDownloadReport = async () => {
-    if (transactions.length === 0) {
-      Alert.alert('No Data', 'There are no transactions in the selected date range.');
-      return;
-    }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        await Print.printAsync({ html: buildTransactionsHtml() });
+      // Report always covers BOTH input and output for the selected range
+      const [inTxns, outTxns] = await Promise.all([
+        accountsService.getTransactions(role, 'IN', appliedRange.from, appliedRange.to),
+        accountsService.getTransactions(role, 'OUT', appliedRange.from, appliedRange.to),
+      ]);
+      if (inTxns.length === 0 && outTxns.length === 0) {
+        Alert.alert('No Data', 'There are no transactions in the selected date range.');
         return;
       }
-      const { uri } = await Print.printToFileAsync({ html: buildTransactionsHtml() });
+      if (Platform.OS === 'web') {
+        await printHtmlOnWeb(buildAccountReportHtml(inTxns, outTxns));
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: buildAccountReportHtml(inTxns, outTxns) });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
@@ -290,22 +337,10 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     <View>
       {/* Date range picker */}
       <View style={styles.card}>
-        <Text style={styles.fieldLabel}>PICK DATE RANGE (YYYY-MM-DD)</Text>
+        <Text style={styles.fieldLabel}>PICK DATE RANGE</Text>
         <View style={styles.dateRow}>
-          <TextInput
-            style={styles.dateInput}
-            placeholder="From: 2026-07-01"
-            placeholderTextColor={COLORS.textLight}
-            value={fromDate}
-            onChangeText={setFromDate}
-          />
-          <TextInput
-            style={styles.dateInput}
-            placeholder="To: 2026-07-31"
-            placeholderTextColor={COLORS.textLight}
-            value={toDate}
-            onChangeText={setToDate}
-          />
+          <DatePickerField style={{ flex: 1 }} placeholder="From date" value={fromDate} onChange={setFromDate} />
+          <DatePickerField style={{ flex: 1 }} placeholder="To date" value={toDate} onChange={setToDate} />
         </View>
         <View style={styles.dateActions}>
           <TouchableOpacity style={styles.applyButton} onPress={applyDateRange}>
@@ -341,7 +376,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                   : `To ${item.party_name || item.category}`}
               </Text>
               <Text style={styles.txnMeta}>
-                {dateLabel(item.date)}{item.description ? ` / ${item.description}` : ''}
+                {dateLabel(item.date)} / {item.payment_method || 'Cash'}{item.description ? ` / ${item.description}` : ''}
               </Text>
             </View>
             <Text style={[styles.txnAmount, { color: accent }]}>
@@ -438,6 +473,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                         onPress={() => {
                           setCategory('Supervisors');
                           setParty({ name: sup.name, userId: sup.id });
+                          setEntryName(sup.name);
                         }}
                       >
                         <MaterialIcons name="person" size={13} color={selected ? COLORS.white : COLORS.textLight} />
@@ -454,6 +490,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                     onPress={() => {
                       setCategory(option);
                       setParty(null);
+                      setEntryName('');
                     }}
                   >
                     <Text style={[styles.chipText, selected && styles.chipTextActive]}>{option}</Text>
@@ -461,6 +498,38 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                 );
               })}
             </View>
+
+            {/* Site Expenses: pick which created site the money was spent on */}
+            {!isInput && category === 'Site Expenses' && sites.length > 0 && (
+              <>
+                <Text style={styles.fieldLabel}>SELECT SITE</Text>
+                <View style={styles.chipRow}>
+                  {sites.map((site) => {
+                    const selected = entryName === site.name;
+                    return (
+                      <TouchableOpacity
+                        key={`site-${site.id}`}
+                        style={[styles.chip, selected && { backgroundColor: COLORS.headerBackground, borderColor: COLORS.headerBackground }]}
+                        onPress={() => setEntryName(site.name)}
+                      >
+                        <MaterialIcons name="location-city" size={13} color={selected ? COLORS.white : COLORS.textLight} />
+                        <Text style={[styles.chipText, selected && styles.chipTextActive]}>{site.name}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {/* Name on every entry — auto-filled by supervisor/site picks, always editable */}
+            <Text style={styles.fieldLabel}>NAME ({isInput ? 'WHO GAVE' : 'PERSON / SITE / SHOP'})</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={isInput ? 'e.g., Rajan (Client side)' : 'e.g., Kumar Hardware, Alpha Site'}
+              placeholderTextColor={COLORS.textLight}
+              value={entryName}
+              onChangeText={setEntryName}
+            />
 
             {!isInput && category && ROLE_TARGETS.includes(category) && (
               <View style={styles.infoCard}>
@@ -470,6 +539,20 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                 </Text>
               </View>
             )}
+
+            <Text style={styles.fieldLabel}>PAYMENT METHOD</Text>
+            <View style={styles.chipRow}>
+              {(['Cash', 'Bank'] as const).map((method) => (
+                <TouchableOpacity
+                  key={method}
+                  style={[styles.chip, paymentMethod === method && { backgroundColor: COLORS.headerBackground, borderColor: COLORS.headerBackground }]}
+                  onPress={() => setPaymentMethod(method)}
+                >
+                  <MaterialIcons name={method === 'Cash' ? 'payments' : 'account-balance'} size={13} color={paymentMethod === method ? COLORS.white : COLORS.textLight} />
+                  <Text style={[styles.chipText, paymentMethod === method && styles.chipTextActive]}>{method}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <Text style={styles.fieldLabel}>AMOUNT (₹)</Text>
             <TextInput

@@ -298,6 +298,8 @@ export const fieldService = {
       method: 'POST',
       body: JSON.stringify(attendance),
     }),
+  getAttendanceBySite: (siteId: string | number, date: string) =>
+    request<any[]>(`/attendance/site/${siteId}?date=${encodeURIComponent(date)}`),
   submitSupervisorAttendance: (attendance: Record<string, any>) =>
     request<ApiResponse>('/supervisor-attendance', {
       method: 'POST',

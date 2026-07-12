@@ -4,6 +4,7 @@ import {
   Alert,
   Image,
   Linking,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -20,7 +21,9 @@ import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
 import AppBackground from './components/AppBackground';
 import LogoutButton from '../components/LogoutButton';
+import DatePickerField from '../components/DatePickerField';
 import { accountsService, adminService, fieldService } from '../services/api';
+import { csvCell, exportCsv, printHtmlOnWeb } from '../services/printReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
 type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
@@ -86,6 +89,7 @@ export default function AdminPanelScreen() {
   const [ioFrom, setIoFrom] = useState('');
   const [ioTo, setIoTo] = useState('');
   const [ioReport, setIoReport] = useState<any>(null);
+  const [attendanceDetail, setAttendanceDetail] = useState<any>(null);
 
   const [staffName, setStaffName] = useState('');
   const [staffUsername, setStaffUsername] = useState('');
@@ -99,9 +103,12 @@ export default function AdminPanelScreen() {
   const [selectedSupervisorForAllocation, setSelectedSupervisorForAllocation] = useState<string | null>(null);
 
   const [leadName, setLeadName] = useState('');
+  const [leadPhone, setLeadPhone] = useState('');
   const [leadProject, setLeadProject] = useState('');
   const [leadSource, setLeadSource] = useState('');
   const [leadStatus, setLeadStatus] = useState<Lead['status']>('Hot Lead');
+  const [leadReportMode, setLeadReportMode] = useState<'DAY' | 'MONTH'>('DAY');
+  const [leadReportDate, setLeadReportDate] = useState(todayIso());
 
   const supervisors = useMemo(() => staffList.filter((staff) => staff.role === 'Supervisor'), [staffList]);
   const dashboardStats = useMemo(() => {
@@ -280,14 +287,15 @@ export default function AdminPanelScreen() {
   };
 
   const handleAddLead = async () => {
-    if (!leadName || !leadProject || !leadSource) {
-      Alert.alert('Missing Details', 'Fill lead name, requirement, and source.');
+    if (!leadName || !leadPhone || !leadProject || !leadSource) {
+      Alert.alert('Missing Details', 'Fill lead name, phone number, requirement, and source.');
       return;
     }
     setLoading(true);
     try {
-      await adminService.createLead({ name: leadName, projectNeeded: leadProject, source: leadSource, status: leadStatus });
+      await adminService.createLead({ name: leadName.trim(), phone: leadPhone.trim(), projectNeeded: leadProject, source: leadSource, status: leadStatus });
       setLeadName('');
+      setLeadPhone('');
       setLeadProject('');
       setLeadSource('');
       setLeadStatus('Hot Lead');
@@ -296,6 +304,128 @@ export default function AdminPanelScreen() {
       Alert.alert('Lead Error', 'Unable to create lead.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ---------- Leads report (by day or month, PDF + Excel) ----------
+  const leadReportPeriodLabel = leadReportMode === 'DAY' ? leadReportDate : leadReportDate.slice(0, 7);
+
+  const filteredLeadsForReport = () =>
+    leadsList.filter((lead: any) => {
+      if (!lead.created_at) return false;
+      const d = new Date(lead.created_at);
+      const localYmd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      return leadReportMode === 'DAY' ? localYmd === leadReportDate : localYmd.slice(0, 7) === leadReportDate.slice(0, 7);
+    });
+
+  const buildLeadsReportHtml = (leads: any[]) => {
+    const count = (status: string) => leads.filter((l: any) => l.status === status).length;
+    const rows = leads
+      .map(
+        (l: any, i: number) => `
+        <tr style="background:${i % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+          <td>${i + 1}</td>
+          <td>${new Date(l.created_at).toLocaleDateString('en-IN')}</td>
+          <td><b>${l.name}</b></td>
+          <td>${l.phone || '-'}</td>
+          <td>${l.project_needed || '-'}</td>
+          <td>${l.source || '-'}</td>
+          <td>${l.status}</td>
+        </tr>`
+      )
+      .join('');
+
+    return `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
+            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
+            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
+            .boxes { display: flex; gap: 10px; margin-bottom: 18px; }
+            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
+            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
+            .box .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
+            table { width: 100%; border-collapse: collapse; font-size: 11px; }
+            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
+            td { padding: 7px 6px; border-bottom: 1px solid #E2E8F0; }
+          </style>
+        </head>
+        <body>
+          <h1>Ayyanar Construction — Leads Report</h1>
+          <div class="sub">${leadReportMode === 'DAY' ? 'Date' : 'Month'}: <b>${leadReportPeriodLabel}</b> &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+
+          <div class="boxes">
+            <div class="box"><div class="label">Total Leads</div><div class="value">${leads.length}</div></div>
+            <div class="box"><div class="label">Hot Leads</div><div class="value" style="color:#E21A12;">${count('Hot Lead')}</div></div>
+            <div class="box"><div class="label">In Discussion</div><div class="value" style="color:#B45309;">${count('In Discussion')}</div></div>
+            <div class="box"><div class="label">Converted</div><div class="value" style="color:#15803D;">${count('Converted Client')}</div></div>
+          </div>
+
+          <table>
+            <thead>
+              <tr><th>#</th><th>Date</th><th>Lead Name</th><th>Phone</th><th>Requirement</th><th>Source</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="7" style="text-align:center; color:#64748B;">No leads in this period</td></tr>'}
+            </tbody>
+          </table>
+        </body>
+      </html>`;
+  };
+
+  const handleLeadsPdf = async () => {
+    const leads = filteredLeadsForReport();
+    if (leads.length === 0) {
+      Alert.alert('No Data', `No leads registered in ${leadReportPeriodLabel}.`);
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      if (Platform.OS === 'web') {
+        await printHtmlOnWeb(buildLeadsReportHtml(leads));
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: buildLeadsReportHtml(leads) });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: `Leads Report ${leadReportPeriodLabel}` });
+      }
+    } catch (error: any) {
+      Alert.alert('PDF Error', error?.message || 'Unable to generate the leads report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleLeadsExcel = async () => {
+    const leads = filteredLeadsForReport();
+    if (leads.length === 0) {
+      Alert.alert('No Data', `No leads registered in ${leadReportPeriodLabel}.`);
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      const header = ['#', 'Date', 'Lead Name', 'Phone', 'Requirement', 'Source', 'Status'];
+      const lines = [
+        header.join(','),
+        ...leads.map((l: any, i: number) =>
+          [
+            i + 1,
+            new Date(l.created_at).toLocaleDateString('en-IN'),
+            csvCell(l.name),
+            csvCell(l.phone || ''),
+            csvCell(l.project_needed || ''),
+            csvCell(l.source || ''),
+            csvCell(l.status),
+          ].join(',')
+        ),
+      ];
+      await exportCsv(`leads-report-${leadReportPeriodLabel}.csv`, lines.join('\n'));
+    } catch (error: any) {
+      Alert.alert('Excel Error', error?.message || 'Unable to generate the Excel file.');
+    } finally {
+      setGeneratingPdf(false);
     }
   };
 
@@ -398,7 +528,7 @@ export default function AdminPanelScreen() {
             `Closing Balance: Rs ${Number(ioReport.totals.closing).toLocaleString('en-IN')}`;
           await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
         } else {
-          await Print.printAsync({ html: buildIoReportHtml() });
+          await printHtmlOnWeb(buildIoReportHtml());
         }
         return;
       }
@@ -419,66 +549,231 @@ export default function AdminPanelScreen() {
     }
   };
 
-  const buildDriverReportHtml = () => {
-    const rows = driverRecords
-      .map(
-        (rec: any, index: number) => `
-        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td>${index + 1}</td>
-          <td>${new Date(rec.date).toLocaleDateString('en-IN')}</td>
-          <td>${rec.vehicle_name || '-'}</td>
-          <td>${rec.driver_name || '-'}</td>
-          <td>${Number(rec.starting_km || 0)}</td>
-          <td>${Number(rec.ending_km || 0)}</td>
-          <td><b>${Number(rec.total_km || 0)}</b></td>
-          <td>${rec.distance || '-'}</td>
-          <td>Rs ${Number(rec.diesel_fare || 0).toLocaleString('en-IN')}</td>
-          <td>${rec.load_name || '-'}</td>
-          <td>${rec.load_type || '-'}</td>
-          <td>${rec.customer_name || '-'}</td>
-          <td>${rec.place || '-'}</td>
-          <td>${rec.load_weight || '-'}</td>
-          <td>${rec.starting_time || '-'}</td>
-          <td>${rec.ending_time || '-'}</td>
-        </tr>`
-      )
-      .join('');
+  // ---------- Site Expenses report (bills entered by supervisors) ----------
+  const buildSiteReportHtml = () => {
+    const site = sitesList.find((s) => s.id === reportSiteId);
+    const direct = reportData.filter((item) => item.payment_mode === 'Direct');
+    const credit = reportData.filter((item) => item.payment_mode !== 'Direct');
+    const sum = (rows: any[]) => rows.reduce((s, r) => s + Number(r.amount || 0), 0);
 
-    const totalKmSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.total_km || 0), 0);
-    const dieselSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.diesel_fare || 0), 0);
+    const billTable = (title: string, color: string, rows: any[]) => `
+      <h3 style="color:${color};">${title} (${rows.length} bills)</h3>
+      <table>
+        <thead><tr><th>#</th><th>Date</th><th>Category</th><th>Description</th><th class="r">Amount (Rs)</th></tr></thead>
+        <tbody>
+          ${rows.length
+            ? rows
+                .map(
+                  (r: any, i: number) => `
+              <tr style="background:${i % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+                <td>${i + 1}</td>
+                <td>${new Date(r.date).toLocaleDateString('en-IN')}</td>
+                <td>${r.category || '-'}</td>
+                <td>${r.description || '-'}</td>
+                <td style="text-align:right;">${Number(r.amount || 0).toLocaleString('en-IN')}</td>
+              </tr>`
+                )
+                .join('')
+            : '<tr><td colspan="5" style="text-align:center; color:#64748B;">No bills recorded</td></tr>'}
+          <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
+            <td colspan="4">TOTAL</td>
+            <td style="text-align:right;">${sum(rows).toLocaleString('en-IN')}</td>
+          </tr>
+        </tbody>
+      </table>`;
 
     return `
       <html>
         <head>
           <meta charset="utf-8" />
           <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #0F172A; }
+            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
             h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 16px; }
-            table { width: 100%; border-collapse: collapse; font-size: 9px; }
-            th { background: #0F172A; color: #FFFFFF; padding: 6px 4px; text-align: left; }
-            td { padding: 5px 4px; border-bottom: 1px solid #E2E8F0; }
-            .summary { margin-top: 14px; font-size: 12px; font-weight: bold; }
+            h3 { font-size: 13px; margin: 20px 0 8px; }
+            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
+            .boxes { display: flex; gap: 10px; margin-bottom: 6px; }
+            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
+            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
+            .box .value { font-size: 17px; font-weight: bold; margin-top: 4px; }
+            table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
+            th.r { text-align: right; }
+            td { padding: 6px; border-bottom: 1px solid #E2E8F0; }
           </style>
         </head>
         <body>
-          <h1>Ayyanar Construction - Driver Trip Report</h1>
-          <div class="sub">Generated on ${new Date().toLocaleString('en-IN')} &bull; ${driverRecords.length} record(s)</div>
+          <h1>Ayyanar Construction — Site Expenses Report</h1>
+          <div class="sub">Site: <b>${site?.name || '-'}</b> (${site?.location || ''}) &bull; Bills entered by supervisors &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+
+          <div class="boxes">
+            <div class="box"><div class="label">Direct Bills</div><div class="value">${`Rs ${sum(direct).toLocaleString('en-IN')}`}</div></div>
+            <div class="box"><div class="label">Indirect / Credit Bills</div><div class="value">${`Rs ${sum(credit).toLocaleString('en-IN')}`}</div></div>
+            <div class="box"><div class="label">Total Site Expense</div><div class="value" style="color:#E21A12;">${`Rs ${(sum(direct) + sum(credit)).toLocaleString('en-IN')}`}</div></div>
+          </div>
+
+          ${billTable('DIRECT BILLS (Cash)', '#15803D', direct)}
+          ${billTable('INDIRECT / CREDIT BILLS (Vendor)', '#B45309', credit)}
+        </body>
+      </html>`;
+  };
+
+  const handleSitePdf = async (viaWhatsApp: boolean) => {
+    if (reportData.length === 0) {
+      Alert.alert('No Data', 'There are no expense bills for this site yet.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      if (Platform.OS === 'web') {
+        if (viaWhatsApp) {
+          const site = sitesList.find((s) => s.id === reportSiteId);
+          const total = reportData.reduce((s, r) => s + Number(r.amount || 0), 0);
+          const text =
+            `*Ayyanar Construction - Site Expenses Report*\n` +
+            `Site: ${site?.name || '-'}\n` +
+            `Bills: ${reportData.length}\n` +
+            `Total Expense: Rs ${total.toLocaleString('en-IN')}`;
+          await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        } else {
+          await printHtmlOnWeb(buildSiteReportHtml());
+        }
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: buildSiteReportHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: viaWhatsApp ? 'Share Site Expenses Report on WhatsApp' : 'Site Expenses Report',
+        });
+      } else {
+        Alert.alert('Saved', `PDF generated at:\n${uri}`);
+      }
+    } catch (error: any) {
+      Alert.alert('PDF Error', error?.message || 'Unable to generate the site report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  // Vehicle-wise / driver-wise rollups for the driver trip records
+  const summarizeDriverRecords = (key: 'vehicle_name' | 'driver_name') => {
+    const map: Record<string, { trips: number; km: number; diesel: number }> = {};
+    driverRecords.forEach((r: any) => {
+      const k = (r[key] || 'Unknown').toString();
+      if (!map[k]) map[k] = { trips: 0, km: 0, diesel: 0 };
+      map[k].trips += 1;
+      map[k].km += Number(r.total_km || 0);
+      map[k].diesel += Number(r.diesel_fare || 0);
+    });
+    return Object.entries(map).sort((a, b) => b[1].km - a[1].km);
+  };
+
+  const buildDriverReportHtml = () => {
+    const totalKmSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.total_km || 0), 0);
+    const dieselSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.diesel_fare || 0), 0);
+
+    const summaryTable = (title: string, entries: [string, { trips: number; km: number; diesel: number }][]) => `
+      <h3>${title}</h3>
+      <table style="max-width:460px;">
+        <thead><tr><th>Name</th><th class="r">Trips</th><th class="r">Total KM</th><th class="r">Diesel (Rs)</th></tr></thead>
+        <tbody>
+          ${entries
+            .map(
+              ([name, s]) => `
+            <tr>
+              <td>${name}</td>
+              <td class="r">${s.trips}</td>
+              <td class="r">${s.km.toLocaleString('en-IN')}</td>
+              <td class="r">${s.diesel.toLocaleString('en-IN')}</td>
+            </tr>`
+            )
+            .join('')}
+        </tbody>
+      </table>`;
+
+    // Trips grouped by driver — every field the driver registered, in a readable table
+    const drivers = summarizeDriverRecords('driver_name');
+    const driverSections = drivers
+      .map(([driverName, s]) => {
+        const trips = driverRecords.filter((r: any) => (r.driver_name || 'Unknown') === driverName);
+        const tripRows = trips
+          .map(
+            (rec: any, i: number) => `
+            <tr style="background:${i % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+              <td>${i + 1}</td>
+              <td>${new Date(rec.date).toLocaleDateString('en-IN')}</td>
+              <td>${rec.vehicle_name || '-'}</td>
+              <td class="r">${Number(rec.starting_km || 0)} &rarr; ${Number(rec.ending_km || 0)}</td>
+              <td class="r"><b>${Number(rec.total_km || 0)}</b></td>
+              <td>${rec.distance || '-'}</td>
+              <td class="r">${Number(rec.diesel_fare || 0).toLocaleString('en-IN')}</td>
+              <td>${rec.load_name || '-'}${rec.load_weight ? ` (${rec.load_weight})` : ''}</td>
+              <td>${rec.load_type || '-'}${rec.customer_name ? ` — ${rec.customer_name}` : ''}</td>
+              <td>${rec.place || '-'}</td>
+              <td>${rec.starting_time || '-'} &rarr; ${rec.ending_time || '-'}</td>
+            </tr>`
+          )
+          .join('');
+
+        return `
+        <div class="driver-block">
+          <div class="driver-head">
+            <span class="driver-name">👤 ${driverName}</span>
+            <span class="driver-stats">${s.trips} trip(s) &bull; ${s.km.toLocaleString('en-IN')} km &bull; Diesel Rs ${s.diesel.toLocaleString('en-IN')}</span>
+          </div>
           <table>
             <thead>
               <tr>
-                <th>#</th><th>Date</th><th>Vehicle</th><th>Driver</th>
-                <th>Start KM</th><th>End KM</th><th>Total KM</th><th>Distance</th>
-                <th>Diesel Fare</th><th>Load</th><th>Type</th><th>Customer</th>
-                <th>Place</th><th>Weight</th><th>Start Time</th><th>End Time</th>
+                <th>#</th><th>Date</th><th>Vehicle</th><th class="r">KM (Start &rarr; End)</th><th class="r">Total KM</th>
+                <th>Distance</th><th class="r">Diesel (Rs)</th><th>Load (Weight)</th><th>Type / Customer</th><th>Place</th><th>Time</th>
               </tr>
             </thead>
-            <tbody>${rows}</tbody>
+            <tbody>${tripRows}</tbody>
           </table>
-          <div class="summary">
-            Total KM Travelled: ${totalKmSum.toLocaleString('en-IN')} km &nbsp;&bull;&nbsp;
-            Total Diesel Fare: Rs ${dieselSum.toLocaleString('en-IN')}
+        </div>`;
+      })
+      .join('');
+
+    return `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            @page { size: A4 landscape; margin: 14mm; }
+            body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #0F172A; }
+            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
+            h3 { font-size: 13px; margin: 20px 0 8px; }
+            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
+            .boxes { display: flex; gap: 10px; margin-bottom: 18px; }
+            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
+            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
+            .box .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
+            table { width: 100%; border-collapse: collapse; font-size: 10px; }
+            th { background: #0F172A; color: #FFFFFF; padding: 7px 5px; text-align: left; }
+            th.r, td.r { text-align: right; }
+            td { padding: 6px 5px; border-bottom: 1px solid #E2E8F0; }
+            .driver-block { margin-top: 18px; page-break-inside: avoid; }
+            .driver-head { display: flex; justify-content: space-between; align-items: center; background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 8px 8px 0 0; padding: 8px 10px; }
+            .driver-name { font-size: 13px; font-weight: bold; }
+            .driver-stats { font-size: 11px; color: #64748B; font-weight: bold; }
+          </style>
+        </head>
+        <body>
+          <h1>Ayyanar Construction — Driver Trip Report</h1>
+          <div class="sub">Generated on ${new Date().toLocaleString('en-IN')} &bull; ${driverRecords.length} trip record(s)</div>
+
+          <div class="boxes">
+            <div class="box"><div class="label">Total Trips</div><div class="value">${driverRecords.length}</div></div>
+            <div class="box"><div class="label">Total KM Travelled</div><div class="value">${totalKmSum.toLocaleString('en-IN')} km</div></div>
+            <div class="box"><div class="label">Total Diesel Fare</div><div class="value" style="color:#E21A12;">Rs ${dieselSum.toLocaleString('en-IN')}</div></div>
           </div>
+
+          ${summaryTable('Vehicle-wise Summary', summarizeDriverRecords('vehicle_name'))}
+          ${summaryTable('Driver-wise Summary', drivers)}
+
+          <h3>Trip Details — Driver-wise (all fields registered by the driver)</h3>
+          ${driverSections}
         </body>
       </html>`;
   };
@@ -498,7 +793,7 @@ export default function AdminPanelScreen() {
     try {
       if (Platform.OS === 'web') {
         // On web expo-print opens the browser print dialog; user picks "Save as PDF"
-        await Print.printAsync({ html: buildDriverReportHtml() });
+        await printHtmlOnWeb(buildDriverReportHtml());
         return;
       }
       const uri = await generateDriverPdf();
@@ -606,7 +901,7 @@ export default function AdminPanelScreen() {
             <MaterialIcons name="today" size={18} color={COLORS.primary} />
             <Text style={styles.dateButtonText}>Today</Text>
           </TouchableOpacity>
-          <TextInput style={styles.dateInput} value={attendanceDate} onChangeText={setAttendanceDate} placeholder="YYYY-MM-DD" />
+          <DatePickerField style={{ flex: 1 }} value={attendanceDate} onChange={setAttendanceDate} placeholder="Pick a date" />
         </View>
 
         <View style={styles.metricsGrid}>
@@ -626,6 +921,7 @@ export default function AdminPanelScreen() {
               imageUrl={item.selfie_url}
               latitude={item.latitude}
               longitude={item.longitude}
+              onPress={() => setAttendanceDetail(item)}
             />
           ))}
           {supervisorCount === 0 && <EmptyState text="No supervisor attendance for this date." />}
@@ -727,6 +1023,7 @@ export default function AdminPanelScreen() {
       <View style={styles.card}>
         <Text style={styles.formTitle}>Register Lead</Text>
         <TextInput style={styles.input} placeholder="Client / lead name" value={leadName} onChangeText={setLeadName} placeholderTextColor={COLORS.textLight} />
+        <TextInput style={styles.input} placeholder="Phone number" value={leadPhone} onChangeText={setLeadPhone} placeholderTextColor={COLORS.textLight} keyboardType="phone-pad" />
         <Text style={styles.fieldCaption}>PROJECT REQUIREMENT</Text>
         <ChipSelect
           items={['Construction', 'Aggregate'].map((option) => ({ id: option, label: option }))}
@@ -742,24 +1039,77 @@ export default function AdminPanelScreen() {
         <PrimaryButton label="Register Lead" icon="add" onPress={handleAddLead} />
       </View>
 
-      <SectionTitle title="Lead Pipeline" />
-      {leadsList.map((lead) => (
-        <View key={lead.id} style={styles.card}>
-          <View style={styles.pipelineHeader}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>{lead.name}</Text>
-              <Text style={styles.rowMeta}>{lead.project_needed}</Text>
-              <Text style={styles.assignmentText}>Source: {lead.source}</Text>
-            </View>
-            <StatusPill status={lead.status} />
-          </View>
-          <ChipSelect
-            items={(['Hot Lead', 'In Discussion', 'Converted Client'] as Lead['status'][]).map((status) => ({ id: status, label: status }))}
-            value={lead.status}
-            onChange={(status) => handleUpdateLeadStatus(lead.id, status as Lead['status'])}
-          />
+      {/* Leads report: pick a day or a month, download as PDF or Excel */}
+      <View style={styles.card}>
+        <Text style={styles.formTitle}>Leads Report</Text>
+        <ChipSelect
+          items={[
+            { id: 'DAY', label: 'By Date' },
+            { id: 'MONTH', label: 'By Month' },
+          ]}
+          value={leadReportMode}
+          onChange={(mode) => setLeadReportMode(mode as 'DAY' | 'MONTH')}
+        />
+        <Text style={styles.fieldCaption}>{leadReportMode === 'DAY' ? 'PICK THE DATE' : 'PICK ANY DATE IN THE MONTH'}</Text>
+        <DatePickerField value={leadReportDate} onChange={setLeadReportDate} placeholder="Pick a date" />
+        <View style={[styles.pdfActionsRow, { marginTop: SPACING.sm }]}>
+          <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={handleLeadsPdf} disabled={generatingPdf}>
+            {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
+            <Text style={styles.pdfButtonText}>Download PDF</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.pdfButton, { backgroundColor: '#15803D' }, generatingPdf && { opacity: 0.6 }]} onPress={handleLeadsExcel} disabled={generatingPdf}>
+            <MaterialIcons name="grid-on" size={18} color={COLORS.white} />
+            <Text style={styles.pdfButtonText}>Download Excel</Text>
+          </TouchableOpacity>
         </View>
-      ))}
+      </View>
+
+      {/* Pipeline split into separate stages */}
+      {(
+        [
+          { status: 'Hot Lead', title: 'Leads', icon: 'local-fire-department' as const, color: COLORS.primary },
+          { status: 'In Discussion', title: 'In Discussion', icon: 'forum' as const, color: COLORS.warning },
+          { status: 'Converted Client', title: 'Converted Clients', icon: 'verified' as const, color: COLORS.success },
+        ] as { status: Lead['status']; title: string; icon: keyof typeof MaterialIcons.glyphMap; color: string }[]
+      ).map((stage) => {
+        const stageLeads = (leadsList as any[]).filter((lead) => lead.status === stage.status);
+        return (
+          <View key={stage.status}>
+            <View style={styles.stageHeader}>
+              <MaterialIcons name={stage.icon} size={18} color={stage.color} />
+              <Text style={styles.sectionTitle}>{stage.title} ({stageLeads.length})</Text>
+            </View>
+            {stageLeads.map((lead: any) => (
+              <View key={lead.id} style={styles.card}>
+                <View style={styles.pipelineHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowTitle}>{lead.name}</Text>
+                    <Text style={styles.rowMeta}>{lead.project_needed}</Text>
+                    <Text style={styles.assignmentText}>
+                      {lead.phone ? `📞 ${lead.phone} • ` : ''}Source: {lead.source}{lead.created_at ? ` • ${new Date(lead.created_at).toLocaleDateString('en-IN')}` : ''}
+                    </Text>
+                  </View>
+                  {lead.phone ? (
+                    <TouchableOpacity style={styles.callButton} onPress={() => Linking.openURL(`tel:${lead.phone}`)}>
+                      <MaterialIcons name="call" size={20} color={COLORS.white} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+                <ChipSelect
+                  items={(['Hot Lead', 'In Discussion', 'Converted Client'] as Lead['status'][]).map((status) => ({ id: status, label: status }))}
+                  value={lead.status}
+                  onChange={(status) => handleUpdateLeadStatus(lead.id, status as Lead['status'])}
+                />
+              </View>
+            ))}
+            {stageLeads.length === 0 && (
+              <View style={styles.card}>
+                <EmptyState text={`No ${stage.title.toLowerCase()} yet.`} />
+              </View>
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 
@@ -769,6 +1119,17 @@ export default function AdminPanelScreen() {
     return (
       <View>
         <ChipSelect items={sitesList.map((site) => ({ id: site.id, label: site.name }))} value={reportSiteId} onChange={selectReportSite} />
+
+        <View style={styles.pdfActionsRow}>
+          <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={() => handleSitePdf(false)} disabled={generatingPdf}>
+            {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
+            <Text style={styles.pdfButtonText}>Download PDF</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={() => handleSitePdf(true)} disabled={generatingPdf}>
+            <MaterialIcons name="share" size={18} color={COLORS.white} />
+            <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+          </TouchableOpacity>
+        </View>
 
         <SectionTitle title="Direct Cash" />
         <LedgerList data={direct} empty="No direct cash records." />
@@ -790,6 +1151,44 @@ export default function AdminPanelScreen() {
           <MaterialIcons name="share" size={18} color={COLORS.white} />
           <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
         </TouchableOpacity>
+      </View>
+
+      <SectionTitle title="Vehicle-wise Summary" />
+      <View style={styles.card}>
+        <View style={styles.ioHeaderRow}>
+          <Text style={[styles.ioHeaderText, { flex: 1.4, textAlign: 'left' }]}>Vehicle</Text>
+          <Text style={styles.ioHeaderText}>Trips</Text>
+          <Text style={styles.ioHeaderText}>Total KM</Text>
+          <Text style={styles.ioHeaderText}>Diesel (Rs)</Text>
+        </View>
+        {summarizeDriverRecords('vehicle_name').map(([name, s]) => (
+          <View key={`veh-${name}`} style={styles.ioRow}>
+            <Text style={[styles.ioDateCell, { flex: 1.4 }]}>{name}</Text>
+            <Text style={styles.ioCell}>{s.trips}</Text>
+            <Text style={styles.ioCell}>{s.km.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.ioCell, { color: COLORS.primary }]}>{s.diesel.toLocaleString('en-IN')}</Text>
+          </View>
+        ))}
+        {driverRecords.length === 0 && <EmptyState text="No trips yet." />}
+      </View>
+
+      <SectionTitle title="Driver-wise Summary" />
+      <View style={styles.card}>
+        <View style={styles.ioHeaderRow}>
+          <Text style={[styles.ioHeaderText, { flex: 1.4, textAlign: 'left' }]}>Driver</Text>
+          <Text style={styles.ioHeaderText}>Trips</Text>
+          <Text style={styles.ioHeaderText}>Total KM</Text>
+          <Text style={styles.ioHeaderText}>Diesel (Rs)</Text>
+        </View>
+        {summarizeDriverRecords('driver_name').map(([name, s]) => (
+          <View key={`drv-${name}`} style={styles.ioRow}>
+            <Text style={[styles.ioDateCell, { flex: 1.4 }]}>{name}</Text>
+            <Text style={styles.ioCell}>{s.trips}</Text>
+            <Text style={styles.ioCell}>{s.km.toLocaleString('en-IN')}</Text>
+            <Text style={[styles.ioCell, { color: COLORS.primary }]}>{s.diesel.toLocaleString('en-IN')}</Text>
+          </View>
+        ))}
+        {driverRecords.length === 0 && <EmptyState text="No trips yet." />}
       </View>
 
       <SectionTitle title={`Driver Trip Records (${driverRecords.length})`} />
@@ -834,10 +1233,10 @@ export default function AdminPanelScreen() {
       />
 
       <View style={styles.card}>
-        <Text style={styles.formTitle}>Pick Date Range (YYYY-MM-DD)</Text>
+        <Text style={styles.formTitle}>Pick Date Range</Text>
         <View style={styles.dateRow}>
-          <TextInput style={styles.dateInput} placeholder="From: 2026-07-01" placeholderTextColor={COLORS.textLight} value={ioFrom} onChangeText={setIoFrom} />
-          <TextInput style={styles.dateInput} placeholder="To: 2026-07-31" placeholderTextColor={COLORS.textLight} value={ioTo} onChangeText={setIoTo} />
+          <DatePickerField style={{ flex: 1 }} placeholder="From date" value={ioFrom} onChange={setIoFrom} />
+          <DatePickerField style={{ flex: 1 }} placeholder="To date" value={ioTo} onChange={setIoTo} />
         </View>
         <PrimaryButton label="Apply Date Range" icon="filter-alt" onPress={() => fetchIoReport()} />
       </View>
@@ -954,6 +1353,64 @@ export default function AdminPanelScreen() {
         {loading && !refreshing ? <ActivityIndicator color={COLORS.primary} style={styles.loader} /> : null}
         {renderActiveTab()}
       </ScrollView>
+
+      {/* Supervisor attendance detail: full selfie photo + location + map */}
+      <Modal visible={!!attendanceDetail} transparent animationType="slide" onRequestClose={() => setAttendanceDetail(null)}>
+        <View style={styles.detailBackdrop}>
+          <View style={styles.detailSheet}>
+            <View style={styles.detailHandle} />
+            {attendanceDetail && (
+              <>
+                <View style={styles.detailHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailName}>{attendanceDetail.supervisor_name || 'Supervisor'}</Text>
+                    <Text style={styles.detailMeta}>
+                      {attendanceDetail.site_name || 'Site'} • {new Date(attendanceDetail.date).toLocaleDateString('en-IN')}
+                    </Text>
+                  </View>
+                  <StatusPill status={attendanceDetail.status || 'Present'} />
+                </View>
+
+                {attendanceDetail.selfie_url ? (
+                  <Image source={{ uri: attendanceDetail.selfie_url }} style={styles.detailPhoto} resizeMode="cover" />
+                ) : (
+                  <View style={styles.detailNoPhoto}>
+                    <MaterialIcons name="no-photography" size={40} color={COLORS.textLight} />
+                    <Text style={styles.detailNoPhotoText}>
+                      {attendanceDetail.status === 'Absent' ? 'Marked absent — no selfie taken.' : 'No selfie uploaded.'}
+                    </Text>
+                  </View>
+                )}
+
+                {attendanceDetail.location_name ? (
+                  <View style={styles.detailLocationRow}>
+                    <MaterialIcons name="place" size={18} color={COLORS.success} />
+                    <Text style={styles.detailLocationText}>{attendanceDetail.location_name}</Text>
+                  </View>
+                ) : null}
+
+                {attendanceDetail.latitude && attendanceDetail.longitude ? (
+                  <TouchableOpacity
+                    style={styles.detailMapButton}
+                    onPress={() => Linking.openURL(`https://www.google.com/maps?q=${attendanceDetail.latitude},${attendanceDetail.longitude}`)}
+                  >
+                    <MaterialIcons name="map" size={18} color={COLORS.white} />
+                    <Text style={styles.detailMapButtonText}>
+                      Open Location in Maps ({Number(attendanceDetail.latitude).toFixed(5)}, {Number(attendanceDetail.longitude).toFixed(5)})
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text style={styles.detailMeta}>No GPS recorded for this check-in.</Text>
+                )}
+
+                <TouchableOpacity style={styles.detailCloseButton} onPress={() => setAttendanceDetail(null)}>
+                  <Text style={styles.detailCloseButtonText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1006,13 +1463,13 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function AttendanceRow({ icon, title, subtitle, status, imageUrl, latitude, longitude }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; subtitle: string; status: string; imageUrl?: string; latitude?: number | string | null; longitude?: number | string | null }) {
+function AttendanceRow({ icon, title, subtitle, status, imageUrl, latitude, longitude, onPress }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; subtitle: string; status: string; imageUrl?: string; latitude?: number | string | null; longitude?: number | string | null; onPress?: () => void }) {
   const hasGps = latitude !== undefined && latitude !== null && longitude !== undefined && longitude !== null;
   const openInMaps = () => {
     if (hasGps) Linking.openURL(`https://www.google.com/maps?q=${latitude},${longitude}`);
   };
   return (
-    <View style={styles.attendanceRow}>
+    <TouchableOpacity style={styles.attendanceRow} onPress={onPress} disabled={!onPress} activeOpacity={0.7}>
       {imageUrl ? <Image source={{ uri: imageUrl }} style={styles.attendanceImage} /> : <View style={styles.listIcon}><MaterialIcons name={icon} size={22} color={COLORS.primary} /></View>}
       <View style={styles.listContent}>
         <Text style={styles.rowTitle}>{title}</Text>
@@ -1027,7 +1484,8 @@ function AttendanceRow({ icon, title, subtitle, status, imageUrl, latitude, long
         )}
       </View>
       <StatusPill status={status || 'Present'} />
-    </View>
+      {onPress && <MaterialIcons name="chevron-right" size={20} color={COLORS.textLight} />}
+    </TouchableOpacity>
   );
 }
 
@@ -1513,5 +1971,120 @@ const styles = StyleSheet.create({
     color: COLORS.success,
     fontSize: 11,
     fontWeight: '800',
+  },
+  stageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  callButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.success,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(11, 13, 16, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  detailSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    maxWidth: 560,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  detailHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: SPACING.md,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+  },
+  detailName: {
+    color: COLORS.text,
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  detailMeta: {
+    color: COLORS.textLight,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  detailPhoto: {
+    width: '100%',
+    height: 300,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.steel,
+    marginBottom: SPACING.md,
+  },
+  detailNoPhoto: {
+    height: 140,
+    borderRadius: BORDER_RADIUS.lg,
+    backgroundColor: COLORS.steel,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: SPACING.md,
+  },
+  detailNoPhotoText: {
+    color: COLORS.textLight,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  detailLocationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: SPACING.sm,
+  },
+  detailLocationText: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  detailMapButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.success,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 13,
+    marginTop: SPACING.xs,
+  },
+  detailMapButtonText: {
+    color: COLORS.white,
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  detailCloseButton: {
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.steel,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginTop: SPACING.sm,
+  },
+  detailCloseButtonText: {
+    color: COLORS.text,
+    fontWeight: '900',
+    fontSize: 14,
   },
 });

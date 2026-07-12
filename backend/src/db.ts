@@ -98,6 +98,7 @@ export const initDb = async () => {
           flow ENUM('IN', 'OUT') NOT NULL,
           category VARCHAR(100) NOT NULL,
           party_name VARCHAR(150) NULL,
+          payment_method ENUM('Cash', 'Bank') DEFAULT 'Cash',
           description TEXT NULL,
           amount DECIMAL(15, 2) NOT NULL,
           date DATE NOT NULL,
@@ -111,6 +112,20 @@ export const initDb = async () => {
     if ((partyColResult as any[]).length === 0) {
       await db.query('ALTER TABLE account_transactions ADD COLUMN party_name VARCHAR(150) NULL AFTER category;');
       console.log('Added party_name column to account_transactions.');
+    }
+
+    // Add payment_method (Cash / Bank) to account_transactions if it doesn't exist yet
+    const [pmColResult] = await pool.execute("SHOW COLUMNS FROM account_transactions LIKE 'payment_method'");
+    if ((pmColResult as any[]).length === 0) {
+      await db.query("ALTER TABLE account_transactions ADD COLUMN payment_method ENUM('Cash', 'Bank') DEFAULT 'Cash' AFTER party_name;");
+      console.log('Added payment_method column to account_transactions.');
+    }
+
+    // Add phone to leads if it doesn't exist yet
+    const [leadPhoneResult] = await pool.execute("SHOW COLUMNS FROM leads LIKE 'phone'");
+    if ((leadPhoneResult as any[]).length === 0) {
+      await db.query('ALTER TABLE leads ADD COLUMN phone VARCHAR(20) NULL AFTER name;');
+      console.log('Added phone column to leads.');
     }
 
     // Extend users.role enum with Owner and TotalAccounts, then seed their logins

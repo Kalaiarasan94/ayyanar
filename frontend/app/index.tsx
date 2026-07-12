@@ -212,6 +212,7 @@ export default function LoginScreen() {
             ))}
           </View>
         </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
     </ScreenWrapper>
@@ -227,6 +228,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: SPACING.md,
+  },
+  // Centered login card on desktop web; identical full-width on phones
+  loginColumn: {
+    width: '100%',
+    maxWidth: 460,
+    alignSelf: 'center',
   },
   header: {
     alignItems: 'center',

@@ -22,6 +22,7 @@ export default function SupervisorAttendanceScreen() {
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
   const [location, setLocation] = useState<any>(null);
   const [locationName, setLocationName] = useState<string>('');
+  const [status, setStatus] = useState<'Present' | 'Absent'>('Present');
   const [modalVisible, setModalVisible] = useState(false);
   const [fetchingSites, setFetchingSites] = useState(true);
 
@@ -124,28 +125,29 @@ export default function SupervisorAttendanceScreen() {
       Alert.alert('Error', 'Please select a site.');
       return;
     }
-    if (!selfieUri) {
+    // A selfie is only required when marking PRESENT — Absent needs no photo
+    if (status === 'Present' && !selfieUri) {
       Alert.alert('Error', 'Please take a clock-in selfie.');
       return;
     }
 
     setLoading(true);
     try {
-      const dateStr = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
-      // 1. Upload the selfie to the server so the admin can actually see it
-      const hostedSelfieUrl = await uploadPhoto(selfieUri);
+      // Upload the selfie only for Present check-ins
+      const hostedSelfieUrl = status === 'Present' && selfieUri ? await uploadPhoto(selfieUri) : null;
 
-      // 2. Save attendance with the hosted photo URL and GPS location
       await fieldService.submitSupervisorAttendance({
         userId,
         siteId: selectedSiteId,
         date: dateStr,
-        status: 'Present',
+        status,
         selfieUrl: hostedSelfieUrl,
-        latitude: location?.latitude,
-        longitude: location?.longitude,
-        locationName: locationName || null,
+        latitude: status === 'Present' ? location?.latitude : null,
+        longitude: status === 'Present' ? location?.longitude : null,
+        locationName: status === 'Present' ? locationName || null : null,
       });
 
       setLoading(false);
@@ -193,36 +195,64 @@ export default function SupervisorAttendanceScreen() {
           </View>
         )}
 
-        <Text style={styles.label}>CLOCK-IN SELFIE</Text>
-        {selfieUri ? (
-          <View style={styles.selfiePreviewContainer}>
-            <Image source={{ uri: selfieUri }} style={styles.selfieImage} resizeMode="cover" />
-            <TouchableOpacity style={styles.retakeButton} onPress={takeSelfie}>
-              <MaterialIcons name="refresh" size={16} color={COLORS.white} />
-              <Text style={styles.retakeButtonText}>Retake Photo</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.cameraPlaceholder} onPress={takeSelfie}>
-            <MaterialIcons name="add-a-photo" size={48} color={COLORS.textLight} />
-            <Text style={styles.placeholderText}>Tap to Capture Clock-in Selfie</Text>
+        <Text style={styles.label}>TODAY'S STATUS</Text>
+        <View style={styles.statusRow}>
+          <TouchableOpacity
+            style={[styles.statusOption, status === 'Present' && styles.statusOptionPresent]}
+            onPress={() => setStatus('Present')}
+          >
+            <MaterialIcons name="check-circle" size={18} color={status === 'Present' ? COLORS.white : COLORS.textLight} />
+            <Text style={[styles.statusOptionText, status === 'Present' && { color: COLORS.white }]}>Present</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.statusOption, status === 'Absent' && styles.statusOptionAbsent]}
+            onPress={() => setStatus('Absent')}
+          >
+            <MaterialIcons name="cancel" size={18} color={status === 'Absent' ? COLORS.white : COLORS.textLight} />
+            <Text style={[styles.statusOptionText, status === 'Absent' && { color: COLORS.white }]}>Absent</Text>
+          </TouchableOpacity>
+        </View>
+
+        {status === 'Present' ? (
+          <>
+            <Text style={styles.label}>CLOCK-IN SELFIE</Text>
+            {selfieUri ? (
+              <View style={styles.selfiePreviewContainer}>
+                <Image source={{ uri: selfieUri }} style={styles.selfieImage} resizeMode="cover" />
+                <TouchableOpacity style={styles.retakeButton} onPress={takeSelfie}>
+                  <MaterialIcons name="refresh" size={16} color={COLORS.white} />
+                  <Text style={styles.retakeButtonText}>Retake Photo</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.cameraPlaceholder} onPress={takeSelfie}>
+                <MaterialIcons name="add-a-photo" size={48} color={COLORS.textLight} />
+                <Text style={styles.placeholderText}>Tap to Capture Clock-in Selfie</Text>
+              </TouchableOpacity>
+            )}
+          </>
+        ) : (
+          <View style={styles.absentNote}>
+            <MaterialIcons name="info-outline" size={18} color={COLORS.textLight} />
+            <Text style={styles.absentNoteText}>Marking ABSENT — no selfie or GPS needed. Just press the button below.</Text>
+          </View>
         )}
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
-            styles.submitButton, 
-            (!selectedSiteId || !selfieUri) && styles.submitButtonDisabled
-          ]} 
+            styles.submitButton,
+            status === 'Absent' && { backgroundColor: COLORS.accent },
+            (!selectedSiteId || (status === 'Present' && !selfieUri)) && styles.submitButtonDisabled
+          ]}
           onPress={handleSubmit}
-          disabled={loading || !selectedSiteId || !selfieUri}
+          disabled={loading || !selectedSiteId || (status === 'Present' && !selfieUri)}
         >
           {loading ? (
             <ActivityIndicator color={COLORS.white} />
           ) : (
             <>
-              <MaterialIcons name="check-circle" size={20} color={COLORS.white} />
-              <Text style={styles.submitButtonText}>REGISTER ATTENDANCE</Text>
+              <MaterialIcons name={status === 'Present' ? 'check-circle' : 'event-busy'} size={20} color={COLORS.white} />
+              <Text style={styles.submitButtonText}>{status === 'Present' ? 'REGISTER ATTENDANCE' : 'MARK ABSENT'}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -235,8 +265,8 @@ export default function SupervisorAttendanceScreen() {
     >
       <View style={styles.modalCenteredView}>
         <View style={styles.modalView}>
-            <Text style={styles.modalText}>Attendance Registered Successfully!</Text>
-            {selfieUri && (
+            <Text style={styles.modalText}>{status === 'Present' ? 'Attendance Registered Successfully!' : 'Marked ABSENT for today.'}</Text>
+            {status === 'Present' && selfieUri && (
               <Image source={{ uri: selfieUri }} style={styles.modalImage} resizeMode="cover" />
             )}
             {location && (
@@ -404,6 +434,54 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.error,
     fontWeight: '600',
+  },
+  statusRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: SPACING.lg,
+  },
+  statusOption: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 13,
+  },
+  statusOptionPresent: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  statusOptionAbsent: {
+    backgroundColor: '#E21A12',
+    borderColor: '#E21A12',
+  },
+  statusOptionText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.textLight,
+  },
+  absentNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.xl,
+  },
+  absentNoteText: {
+    flex: 1,
+    fontSize: 12,
+    color: COLORS.textLight,
+    fontWeight: '600',
+    lineHeight: 17,
   },
   cameraPlaceholder: {
     height: 200,

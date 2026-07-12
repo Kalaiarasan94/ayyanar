@@ -44,7 +44,8 @@
         {
           "locationWhenInUsePermission": "This app uses your location to tag attendance check-ins and site photos."
         }
-      ]
+      ],
+      "@react-native-community/datetimepicker"
     ]
   }
 }

@@ -109,19 +109,69 @@ export const fieldController = {
     }
   },
 
-  // Saves daily worker attendance lists from the field
+  // Saves daily worker attendance lists from the field.
+  // Accepts { siteId, date, workers: [{ name, role, status }] } — each worker is
+  // found or created in the workers table so real names reach the admin report.
   submitAttendance: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { siteId, records } = req.body; // records is an array of { workerId, status, date }
-      
-      for (const item of records) {
+      const { siteId, date, workers, records } = req.body;
+
+      const cleanSiteId = siteId ? parseInt(siteId.toString()) : null;
+      if (!cleanSiteId) {
+        res.status(400).json({ success: false, error: 'A valid siteId is required.' });
+        return;
+      }
+      const cleanDate = date || new Date().toISOString().split('T')[0];
+
+      if (Array.isArray(workers) && workers.length > 0) {
+        for (const w of workers) {
+          if (!w?.name) continue;
+          // Find or create the worker by name + role
+          const found = await db.query('SELECT id FROM workers WHERE name = ? AND role = ? LIMIT 1', [w.name, w.role || 'Worker']);
+          let workerId = found.rows[0]?.id;
+          if (!workerId) {
+            const inserted = await db.query('INSERT INTO workers (name, role) VALUES (?, ?)', [w.name, w.role || 'Worker']);
+            workerId = (inserted.rows as any).insertId;
+          }
+          await db.query(
+            'INSERT INTO attendance (site_id, worker_id, date, status) VALUES (?, ?, ?, ?)',
+            [cleanSiteId, workerId, cleanDate, w.status === 'Absent' ? 'Absent' : 'Present']
+          );
+        }
+        res.status(201).json({ success: true, message: `Attendance saved for ${workers.length} worker(s).` });
+        return;
+      }
+
+      // Legacy payload: records of { workerId, status, date }
+      for (const item of records || []) {
         await db.query(
           'INSERT INTO attendance (site_id, worker_id, date, status) VALUES (?, ?, ?, ?)',
-          [siteId, item.workerId, item.date, item.status]
+          [cleanSiteId, item.workerId, item.date || cleanDate, item.status]
         );
       }
       res.status(201).json({ success: true, message: 'Attendance logs synchronized.' });
     } catch (error: any) {
+      console.error('submitAttendance Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  // Lists the worker attendance already submitted for one site on one date
+  getAttendanceBySite: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { siteId } = req.params;
+      const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+      const result = await db.query(
+        `SELECT a.id, a.status, a.date, w.name AS worker_name, w.role AS worker_role
+         FROM attendance a
+         JOIN workers w ON a.worker_id = w.id
+         WHERE a.site_id = ? AND a.date = ?
+         ORDER BY a.id DESC`,
+        [siteId, date]
+      );
+      res.status(200).json(result.rows || []);
+    } catch (error: any) {
+      console.error('getAttendanceBySite Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   },

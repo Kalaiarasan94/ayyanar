@@ -24,7 +24,7 @@ export const accountsController = {
   // Records a money-in or money-out entry for a role ledger (Admin / Supervisor / Owner)
   addTransaction: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { role, userId, flow, category, description, amount, date, partyName, recipientUserId } = req.body;
+      const { role, userId, flow, category, description, amount, date, partyName, recipientUserId, paymentMethod } = req.body;
 
       if (!role || !flow || !category || amount === undefined || amount === null || amount === '') {
         res.status(400).json({ success: false, error: 'role, flow, category and amount are required.' });
@@ -51,16 +51,18 @@ export const accountsController = {
 
       const cleanDate = date || new Date().toISOString().split('T')[0];
       const cleanPartyName = partyName || null;
+      const cleanMethod = paymentMethod === 'Bank' ? 'Bank' : 'Cash';
 
       await db.query(
-        `INSERT INTO account_transactions (role, user_id, flow, category, party_name, description, amount, date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           role,
           userId ? parseInt(userId.toString()) : null,
           flow,
           category,
           cleanPartyName,
+          cleanMethod,
           description || null,
           cleanAmount,
           cleanDate,
@@ -73,13 +75,14 @@ export const accountsController = {
       const recipientRole = flow === 'OUT' ? TRANSFER_TARGETS[category] : undefined;
       if (recipientRole && recipientRole !== role) {
         await db.query(
-          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, description, amount, date)
-           VALUES (?, ?, 'IN', ?, ?, ?, ?, ?)`,
+          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
+           VALUES (?, ?, 'IN', ?, ?, ?, ?, ?, ?)`,
           [
             recipientRole,
             recipientUserId ? parseInt(recipientUserId.toString()) : null,
             role,
             cleanPartyName,
+            cleanMethod,
             description || `Transfer from ${role}`,
             cleanAmount,
             cleanDate,

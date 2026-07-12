@@ -80,10 +80,10 @@ export const adminController = {
   // Create a new sales or corporate business lead
   createLead: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { name, projectNeeded, source, status } = req.body;
+      const { name, phone, projectNeeded, source, status } = req.body;
       await db.query(
-        'INSERT INTO leads (name, project_needed, source, status) VALUES (?, ?, ?, ?)',
-        [name, projectNeeded, source, status || 'Hot Lead']
+        'INSERT INTO leads (name, phone, project_needed, source, status) VALUES (?, ?, ?, ?, ?)',
+        [name, phone || null, projectNeeded, source, status || 'Hot Lead']
       );
       res.status(201).json({ success: true, message: 'CRM Lead record created.' });
     } catch (error: any) {

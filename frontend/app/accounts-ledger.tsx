@@ -18,7 +18,9 @@ import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { accountsService } from '../services/api';
+import { printHtmlOnWeb } from '../services/printReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
+import DatePickerField from '../components/DatePickerField';
 
 type BookTab = 'DAYBOOK' | 'LEDGER' | 'REPORTS';
 
@@ -293,7 +295,7 @@ export default function AccountsBookScreen() {
     setGeneratingPdf(true);
     try {
       if (Platform.OS === 'web') {
-        await Print.printAsync({ html: buildReportHtml() });
+        await printHtmlOnWeb(buildReportHtml());
         return;
       }
       const { uri } = await Print.printToFileAsync({ html: buildReportHtml() });
@@ -356,10 +358,10 @@ export default function AccountsBookScreen() {
 
       {/* Date range picker */}
       <View style={styles.card}>
-        <Text style={styles.filterLabel}>PICK DATE RANGE (YYYY-MM-DD)</Text>
+        <Text style={styles.filterLabel}>PICK DATE RANGE</Text>
         <View style={styles.dateRow}>
-          <TextInput style={styles.dateInput} placeholder="From: 2026-07-01" placeholderTextColor={COLORS.textLight} value={dbFrom} onChangeText={setDbFrom} />
-          <TextInput style={styles.dateInput} placeholder="To: 2026-07-31" placeholderTextColor={COLORS.textLight} value={dbTo} onChangeText={setDbTo} />
+          <DatePickerField style={{ flex: 1 }} placeholder="From date" value={dbFrom} onChange={setDbFrom} />
+          <DatePickerField style={{ flex: 1 }} placeholder="To date" value={dbTo} onChange={setDbTo} />
         </View>
         <View style={styles.dateActions}>
           <TouchableOpacity style={styles.applyButton} onPress={applyDayBookRange}>
@@ -624,7 +626,7 @@ function BookRow({ txn, showDate = false }: { txn: any; showDate?: boolean }) {
           {showDate && <Text style={styles.bookMeta}>{dateLabel(txn.date)}</Text>}
         </View>
         <Text style={styles.bookTitle}>{info.from}  →  {info.to}</Text>
-        {txn.description ? <Text style={styles.bookMeta}>{txn.description}</Text> : null}
+        <Text style={styles.bookMeta}>{txn.payment_method || 'Cash'}{txn.description ? ` / ${txn.description}` : ''}</Text>
       </View>
       <Text style={[styles.amountCol, { color: isCredit ? COLORS.textLight : COLORS.primary }]}>
         {!isCredit ? Number(txn.amount).toLocaleString('en-IN') : ''}

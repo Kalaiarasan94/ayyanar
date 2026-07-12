@@ -15,6 +15,7 @@ router.get('/expenses/site/:siteId', fieldController.getLedgerBySite);
 router.get('/wallet/:userId', fieldController.getSupervisorWallet);
 router.get('/supervisor-sites/:userId', fieldController.getSupervisorSites);
 router.post('/attendance', fieldController.submitAttendance);
+router.get('/attendance/site/:siteId', fieldController.getAttendanceBySite);
 router.post('/supervisor-attendance', fieldController.submitSupervisorAttendance);
 router.post('/site-photos', fieldController.uploadSitePhoto);
 router.get('/site-photos/recent', fieldController.getRecentSitePhotos);

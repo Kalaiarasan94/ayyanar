@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS ledger (
 CREATE TABLE IF NOT EXISTS leads (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
+    phone VARCHAR(20) NULL,
     project_needed TEXT,
     source VARCHAR(255),
     status ENUM('Hot Lead', 'In Discussion', 'Converted Client') DEFAULT 'Hot Lead',
@@ -100,6 +101,7 @@ CREATE TABLE IF NOT EXISTS account_transactions (
     flow ENUM('IN', 'OUT') NOT NULL,
     category VARCHAR(100) NOT NULL,
     party_name VARCHAR(150) NULL,
+    payment_method ENUM('Cash', 'Bank') DEFAULT 'Cash',
     description TEXT NULL,
     amount DECIMAL(15, 2) NOT NULL,
     date DATE NOT NULL,
