@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   Modal,
   Platform,
   StyleSheet,
@@ -61,6 +62,8 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
   // Entry modal
   const [entryVisible, setEntryVisible] = useState(false);
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [activeTransaction, setActiveTransaction] = useState<any>(null);
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -78,16 +81,47 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const flow = isInput ? 'IN' : 'OUT';
   const accent = isInput ? COLORS.success : COLORS.primary;
 
+  const getTransactionsWithBalance = async (range = appliedRange) => {
+    // Fetch all transactions (both IN and OUT) up to `to` date
+    const allTxns = await accountsService.getTransactions(role, undefined, undefined, range.to);
+    
+    // Sort chronologically (ascending) to compute running balance correctly
+    const sorted = [...allTxns].sort((a, b) => {
+      const dateDiff = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (dateDiff !== 0) return dateDiff;
+      return a.id - b.id;
+    });
+
+    let balance = 0;
+    const txnsWithBalance = sorted.map((t) => {
+      if (t.flow === 'IN') {
+        balance += Number(t.amount);
+      } else {
+        balance -= Number(t.amount);
+      }
+      return { ...t, runningBalance: balance };
+    });
+
+    // Return reversed (descending) so latest shows first in lists
+    return txnsWithBalance.reverse();
+  };
+
   const loadData = async (tab: FlowTab = flowTab, range = appliedRange) => {
     setLoading(true);
     try {
-      const [summaryData, txnData] = await Promise.all([
+      const [summaryData, allTxnsWithBalance] = await Promise.all([
         accountsService.getSummary(role),
-        accountsService.getTransactions(role, tab === 'INPUT' ? 'IN' : 'OUT', range.from, range.to),
+        getTransactionsWithBalance(range),
       ]);
       setSummary(summaryData);
-      setTransactions(txnData);
-    } catch {
+      
+      const filteredTxns = allTxnsWithBalance.filter(t => 
+        t.flow === (tab === 'INPUT' ? 'IN' : 'OUT') && 
+        (!range.from || t.date >= range.from)
+      );
+      setTransactions(filteredTxns);
+    } catch (err) {
+      console.error(err);
       Alert.alert('Data Error', 'Unable to load account data.');
     } finally {
       setLoading(false);
@@ -191,32 +225,71 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     const totalOut = outTxns.reduce((s, t) => s + Number(t.amount), 0);
     const balance = totalIn - totalOut;
 
-    const detailRows = (txns: any[], forInput: boolean) =>
-      txns
-        .map(
-          (t: any, index: number) => `
-          <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-            <td>${index + 1}</td>
-            <td>${dateLabel(t.date)}</td>
-            <td>${forInput ? `${t.category}${t.party_name ? ` • ${t.party_name}` : ''}` : (t.party_name || t.category)}</td>
-            <td>${t.payment_method || 'Cash'}</td>
-            <td>${t.description || '-'}</td>
-            <td style="text-align:right; color:${forInput ? '#15803D' : '#E21A12'};">${Number(t.amount).toLocaleString('en-IN')}</td>
-          </tr>`
-        )
-        .join('');
-
-    const detailTable = (title: string, txns: any[], forInput: boolean, total: number) => `
-      <h3 style="color:${forInput ? '#15803D' : '#E21A12'};">${title} (${txns.length} entries)</h3>
+    const detailTableIn = (title: string, txns: any[], total: number) => `
+      <h3 style="color:#15803D;">${title} (${txns.length} entries)</h3>
       <table>
         <thead>
-          <tr><th>#</th><th>Date</th><th>${forInput ? 'Who Gave (From)' : 'Paid To'}</th><th>Method</th><th>Reason / Note</th><th class="r">Amount (Rs)</th></tr>
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>From Whom</th>
+            <th>Name</th>
+            <th>Mode of Transfer</th>
+            <th>Note / Description</th>
+            <th class="r">Amount (Rs)</th>
+          </tr>
         </thead>
         <tbody>
-          ${txns.length ? detailRows(txns, forInput) : '<tr><td colspan="6" style="text-align:center; color:#64748B;">No entries in this period</td></tr>'}
+          ${txns.length ? txns.map((t: any, index: number) => `
+            <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+              <td>${index + 1}</td>
+              <td>${dateLabel(t.date)}</td>
+              <td>${t.category}</td>
+              <td><b>${t.party_name || '-'}</b></td>
+              <td>${t.payment_method || 'Cash'}</td>
+              <td>${t.description || '-'}</td>
+              <td style="text-align:right; color:#15803D; font-weight:bold;">${Number(t.amount).toLocaleString('en-IN')}</td>
+            </tr>
+          `).join('') : '<tr><td colspan="7" style="text-align:center; color:#64748B;">No entries in this period</td></tr>'}
           <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-            <td colspan="5">TOTAL ${forInput ? 'INPUT' : 'OUTPUT'}</td>
+            <td colspan="6">TOTAL INPUT</td>
             <td style="text-align:right;">${total.toLocaleString('en-IN')}</td>
+          </tr>
+        </tbody>
+      </table>`;
+
+    const detailTableOut = (title: string, txns: any[], total: number) => `
+      <h3 style="color:#E21A12;">${title} (${txns.length} entries)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>To Whom</th>
+            <th>Name</th>
+            <th>Mode of Payment</th>
+            <th>Notes</th>
+            <th class="r">Amount (Rs)</th>
+            <th class="r">Balance (Rs)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${txns.length ? txns.map((t: any, index: number) => `
+            <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+              <td>${index + 1}</td>
+              <td>${dateLabel(t.date)}</td>
+              <td>${t.category}</td>
+              <td><b>${t.party_name || '-'}</b></td>
+              <td>${t.payment_method || 'Cash'}</td>
+              <td>${t.description || '-'}</td>
+              <td style="text-align:right; color:#E21A12; font-weight:bold;">${Number(t.amount).toLocaleString('en-IN')}</td>
+              <td style="text-align:right; font-weight:bold;">${Number(t.runningBalance).toLocaleString('en-IN')}</td>
+            </tr>
+          `).join('') : '<tr><td colspan="8" style="text-align:center; color:#64748B;">No entries in this period</td></tr>'}
+          <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
+            <td colspan="6">TOTAL OUTPUT</td>
+            <td style="text-align:right;">${total.toLocaleString('en-IN')}</td>
+            <td></td>
           </tr>
         </tbody>
       </table>`;
@@ -250,8 +323,8 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
             <div class="box"><div class="label">Balance</div><div class="value">${rupees(balance)}</div></div>
           </div>
 
-          ${detailTable('INPUT — Money Received', inTxns, true, totalIn)}
-          ${detailTable('OUTPUT — Money Paid', outTxns, false, totalOut)}
+          ${detailTableIn('INPUT — Money Received', inTxns, totalIn)}
+          ${detailTableOut('OUTPUT — Money Paid', outTxns, totalOut)}
         </body>
       </html>`;
   };
@@ -259,17 +332,18 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const handleDownloadReport = async () => {
     setGeneratingPdf(true);
     try {
-      // Report always covers BOTH input and output for the selected range
-      const [inTxns, outTxns] = await Promise.all([
-        accountsService.getTransactions(role, 'IN', appliedRange.from, appliedRange.to),
-        accountsService.getTransactions(role, 'OUT', appliedRange.from, appliedRange.to),
-      ]);
+      const allTxnsWithBalance = await getTransactionsWithBalance(appliedRange);
+      
+      const inTxns = allTxnsWithBalance.filter(t => t.flow === 'IN' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
+      const outTxns = allTxnsWithBalance.filter(t => t.flow === 'OUT' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
+      
       if (inTxns.length === 0 && outTxns.length === 0) {
         Alert.alert('No Data', 'There are no transactions in the selected date range.');
         return;
       }
+      
       if (Platform.OS === 'web') {
-        await printHtmlOnWeb(buildAccountReportHtml(inTxns, outTxns));
+        await printHtmlOnWeb(buildAccountReportHtml(inTxns, outTxns), `${heading.replace(/\s+/g, '_')}_Report.pdf`);
         return;
       }
       const { uri } = await Print.printToFileAsync({ html: buildAccountReportHtml(inTxns, outTxns) });
@@ -277,13 +351,59 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         await Sharing.shareAsync(uri, {
           mimeType: 'application/pdf',
           UTI: 'com.adobe.pdf',
-          dialogTitle: `${heading} — ${isInput ? 'Input' : 'Output'} Report`,
+          dialogTitle: `${heading} — Report`,
         });
       } else {
         Alert.alert('Saved', `PDF generated at:\n${uri}`);
       }
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate the report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    setGeneratingPdf(true);
+    try {
+      const allTxnsWithBalance = await getTransactionsWithBalance(appliedRange);
+      
+      const inTxns = allTxnsWithBalance.filter(t => t.flow === 'IN' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
+      const outTxns = allTxnsWithBalance.filter(t => t.flow === 'OUT' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
+      
+      if (inTxns.length === 0 && outTxns.length === 0) {
+        Alert.alert('No Data', 'There are no transactions in the selected date range.');
+        return;
+      }
+      
+      const htmlContent = buildAccountReportHtml(inTxns, outTxns);
+      
+      if (Platform.OS === 'web') {
+        const totalIn = inTxns.reduce((s, t) => s + Number(t.amount), 0);
+        const totalOut = outTxns.reduce((s, t) => s + Number(t.amount), 0);
+        const balance = totalIn - totalOut;
+        const text =
+          `*Ayyanar Construction - ${heading}*\n` +
+          `Period: ${rangeTitle}\n` +
+          `Total Input: ${rupees(totalIn)}\n` +
+          `Total Output: ${rupees(totalOut)}\n` +
+          `Balance: ${rupees(balance)}`;
+        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        return;
+      }
+      
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: `Share ${heading} PDF`,
+        });
+      } else {
+        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
+      }
+    } catch (error: any) {
+      Alert.alert('Share Error', error?.message || 'Unable to share the report.');
     } finally {
       setGeneratingPdf(false);
     }
@@ -355,17 +475,31 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         </View>
       </View>
 
-      <TouchableOpacity style={[styles.reportButton, generatingPdf && { opacity: 0.6 }]} onPress={handleDownloadReport} disabled={generatingPdf}>
-        {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
-        <Text style={styles.reportButtonText}>Take Report (PDF) — {rangeTitle}</Text>
-      </TouchableOpacity>
+      <View style={styles.pdfActionsRow}>
+        <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={handleDownloadReport} disabled={generatingPdf}>
+          {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
+          <Text style={styles.pdfButtonText}>Download PDF</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={handleShareWhatsApp} disabled={generatingPdf}>
+          <MaterialIcons name="share" size={18} color={COLORS.white} />
+          <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.sectionTitle}>
         Transactions ({transactions.length}) — {rupees(transactions.reduce((s, t) => s + Number(t.amount), 0))}
       </Text>
       <View style={styles.card}>
         {transactions.map((item: any) => (
-          <View key={item.id} style={styles.txnRow}>
+          <TouchableOpacity 
+            key={item.id} 
+            style={styles.txnRow}
+            onPress={() => {
+              setActiveTransaction(item);
+              setDetailsVisible(true);
+            }}
+            activeOpacity={0.7}
+          >
             <View style={[styles.txnIcon, { backgroundColor: isInput ? 'rgba(21, 128, 61, 0.1)' : 'rgba(226, 26, 18, 0.08)' }]}>
               <MaterialIcons name={isInput ? 'south-west' : 'north-east'} size={18} color={accent} />
             </View>
@@ -378,11 +512,14 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
               <Text style={styles.txnMeta}>
                 {dateLabel(item.date)} / {item.payment_method || 'Cash'}{item.description ? ` / ${item.description}` : ''}
               </Text>
+              {!isInput && item.runningBalance !== undefined && (
+                <Text style={styles.runningBalanceMeta}>Balance: {rupees(item.runningBalance)}</Text>
+              )}
             </View>
             <Text style={[styles.txnAmount, { color: accent }]}>
               {isInput ? '+' : '-'} {rupees(item.amount)}
             </Text>
-          </View>
+          </TouchableOpacity>
         ))}
         {transactions.length === 0 && !loading && (
           <Text style={styles.emptyText}>{isInput ? 'No money received in this range.' : 'No payments in this range.'}</Text>
@@ -585,6 +722,75 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                 {submitting ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.saveButtonText}>Save Entry</Text>}
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Transaction Details Modal */}
+      <Modal visible={detailsVisible} transparent animationType="fade" onRequestClose={() => setDetailsVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalSheet, { maxHeight: '85%' }]}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Transaction Details</Text>
+            
+            {activeTransaction && (
+              <View style={styles.detailsContainer}>
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>DATE</Text>
+                  <Text style={styles.detailValue}>{dateLabel(activeTransaction.date)}</Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>TYPE</Text>
+                  <View style={[styles.voucherBadge, { backgroundColor: activeTransaction.flow === 'IN' ? 'rgba(21, 128, 61, 0.1)' : 'rgba(226, 26, 18, 0.08)', alignSelf: 'flex-start' }]}>
+                    <Text style={[styles.voucherBadgeText, { color: activeTransaction.flow === 'IN' ? COLORS.success : COLORS.primary }]}>
+                      {activeTransaction.flow === 'IN' ? 'RECEIPT (IN)' : 'PAYMENT (OUT)'}
+                    </Text>
+                  </View>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{activeTransaction.flow === 'IN' ? 'FROM CATEGORY' : 'TO CATEGORY'}</Text>
+                  <Text style={styles.detailValue}>{activeTransaction.category}</Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>{activeTransaction.flow === 'IN' ? 'FROM PERSON / SENDER' : 'RECIPIENT / NAME'}</Text>
+                  <Text style={styles.detailValue}>{activeTransaction.party_name || '-'}</Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>MODE OF PAYMENT</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <MaterialIcons name={activeTransaction.payment_method === 'Bank' ? 'account-balance' : 'payments'} size={16} color={COLORS.text} />
+                    <Text style={styles.detailValue}>{activeTransaction.payment_method || 'Cash'}</Text>
+                  </View>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>AMOUNT</Text>
+                  <Text style={[styles.detailValue, { fontSize: 18, fontWeight: '900', color: activeTransaction.flow === 'IN' ? COLORS.success : COLORS.primary }]}>
+                    {rupees(activeTransaction.amount)}
+                  </Text>
+                </View>
+                
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>NOTES / REASON</Text>
+                  <Text style={styles.detailValue}>{activeTransaction.description || '-'}</Text>
+                </View>
+                
+                {activeTransaction.runningBalance !== undefined && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>RUNNING BALANCE</Text>
+                    <Text style={styles.detailValue}>{rupees(activeTransaction.runningBalance)}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            <TouchableOpacity style={[styles.cancelButton, { marginTop: 20, width: '100%' }]} onPress={() => setDetailsVisible(false)}>
+              <Text style={styles.cancelButtonText}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -968,5 +1174,69 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '900',
     fontSize: 14,
+  },
+  runningBalanceMeta: {
+    color: COLORS.textLight,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  detailsContainer: {
+    width: '100%',
+    marginTop: SPACING.md,
+    gap: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.steel,
+  },
+  detailLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  detailValue: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  voucherBadge: {
+    borderRadius: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  voucherBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  pdfActionsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  pdfButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 13,
+  },
+  whatsappButton: {
+    backgroundColor: '#25D366',
+  },
+  pdfButtonText: {
+    color: COLORS.white,
+    fontWeight: '900',
+    fontSize: 13,
   },
 });

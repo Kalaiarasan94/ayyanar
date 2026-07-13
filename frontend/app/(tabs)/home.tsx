@@ -491,100 +491,11 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Desktop: summary and upload side by side; mobile: stacked */}
-        <View style={isWide && styles.twoColRow}>
-        <View style={[styles.section, isWide && styles.twoColItem]}>
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Financial Summary</Text>
           <View style={styles.card}>
             <SimplePieChart data={walletChartData} />
           </View>
-        </View>
-
-        {/* Quick Site Progress Photo Upload Widget */}
-        <View style={[styles.section, isWide && styles.twoColItem]}>
-          <Text style={styles.sectionTitle}>Site Progress Upload</Text>
-          <View style={styles.card}>
-            <Text style={styles.formLabel}>SELECT ACTIVE PROJECT SITE</Text>
-            {activeSites.length > 0 ? (
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={selectedUploadSiteId || ''}
-                  onValueChange={(val) => setSelectedUploadSiteId(val)}
-                  style={styles.picker}
-                >
-                  {activeSites.map((site: any) => (
-                    <Picker.Item key={site.id} label={site.name} value={site.id.toString()} />
-                  ))}
-                </Picker>
-              </View>
-            ) : (
-              <View style={styles.warningContainer}>
-                <MaterialIcons name="warning" size={20} color={COLORS.error} />
-                <Text style={styles.warningText}>No active sites assigned to you.</Text>
-              </View>
-            )}
-
-            <Text style={styles.formLabel}>SITE PICTURE WITH GPS</Text>
-            <View style={styles.photoUploadRow}>
-              <TouchableOpacity style={styles.photoUploadButton} onPress={() => capturePhoto(true)}>
-                <MaterialIcons name="photo-camera" size={22} color={COLORS.primary} />
-                <Text style={styles.photoUploadButtonText}>Use Camera</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.photoUploadButton} onPress={() => capturePhoto(false)}>
-                <MaterialIcons name="photo-library" size={22} color={COLORS.primary} />
-                <Text style={styles.photoUploadButtonText}>From Gallery</Text>
-              </TouchableOpacity>
-            </View>
-
-            {capturedImageUri && (
-              <View style={styles.previewBox}>
-                <Image source={{ uri: capturedImageUri }} style={styles.previewImage} resizeMode="cover" />
-                
-                {locating ? (
-                  <View style={styles.locationBanner}>
-                    <ActivityIndicator size="small" color={COLORS.primary} />
-                    <Text style={styles.locationBannerText}>Acquiring GPS location...</Text>
-                  </View>
-                ) : locationData ? (
-                  <View style={[styles.locationBanner, { backgroundColor: '#F0FDF4', borderColor: '#DCFCE7' }]}>
-                    <MaterialIcons name="location-on" size={16} color={COLORS.success} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.locationNameText} numberOfLines={2}>{locationData.locationName}</Text>
-                      <Text style={styles.coordsText}>Lat: {locationData.latitude.toFixed(6)}, Lng: {locationData.longitude.toFixed(6)}</Text>
-                    </View>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={[styles.locationBanner, { backgroundColor: '#FFFBEB', borderColor: '#FEF3C7' }]} onPress={fetchLocation}>
-                    <MaterialIcons name="gps-fixed" size={16} color={COLORS.accent} />
-                    <Text style={[styles.locationBannerText, { color: '#B45309' }]}>No GPS data. Tap to retry location.</Text>
-                  </TouchableOpacity>
-                )}
-
-                <TouchableOpacity style={styles.removeImageBtn} onPress={() => { setCapturedImageUri(null); setLocationData(null); }}>
-                  <MaterialIcons name="close" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <TouchableOpacity 
-              style={[
-                styles.submitProgressBtn,
-                (!capturedImageUri || uploadingPhoto || locating) && styles.submitProgressBtnDisabled
-              ]} 
-              onPress={handleUploadPhoto}
-              disabled={!capturedImageUri || uploadingPhoto || locating}
-            >
-              {uploadingPhoto ? (
-                <ActivityIndicator color={COLORS.white} />
-              ) : (
-                <>
-                  <MaterialIcons name="cloud-upload" size={20} color={COLORS.white} />
-                  <Text style={styles.submitProgressBtnText}>UPLOAD SITE PROGRESS</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
         </View>
 
         <View style={styles.section}>

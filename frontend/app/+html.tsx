@@ -49,9 +49,6 @@ const responsiveShellCss = `
      rendered at 125% so text and controls are comfortably sized on laptops.
      (zoom on body also covers modals, which render outside #root) */
   @media (min-width: 1024px) {
-    body {
-      zoom: 1.25;
-    }
     #root {
       max-width: 1180px;
       margin: 0 auto;

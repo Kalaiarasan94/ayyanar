@@ -264,22 +264,29 @@ export const accountsController = {
     }
   },
 
-  // Party-wise ledger: for every party, how much we received from them and paid to them
   getLedger: async (req: Request, res: Response): Promise<void> => {
     try {
-      // Real people (party_name, e.g. a specific supervisor) get their own ledger account
-      const result = await db.query(
-        `SELECT category, party_name,
+      const { from, to } = req.query;
+      let sql = `SELECT category, party_name,
            COALESCE(SUM(IF(flow = 'IN', amount, 0)), 0) AS receivedFrom,
            COALESCE(SUM(IF(flow = 'OUT', amount, 0)), 0) AS paidTo,
            COUNT(*) AS entries,
            MAX(date) AS lastDate
          FROM account_transactions
-         WHERE ${singleEntryFilter}
-         GROUP BY category, party_name
-         ORDER BY SUM(amount) DESC`,
-        [...INTERNAL_PARTIES]
-      );
+         WHERE ${singleEntryFilter}`;
+      
+      const params: any[] = [...INTERNAL_PARTIES];
+      if (from) {
+        sql += ' AND date >= ?';
+        params.push(from);
+      }
+      if (to) {
+        sql += ' AND date <= ?';
+        params.push(to);
+      }
+      sql += ' GROUP BY category, party_name ORDER BY SUM(amount) DESC';
+
+      const result = await db.query(sql, params);
 
       res.status(200).json(
         (result.rows || []).map((r: any) => ({

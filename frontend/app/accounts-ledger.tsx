@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
   Platform,
   RefreshControl,
   ScrollView,
@@ -83,19 +84,29 @@ export default function AccountsBookScreen() {
   const [dbFrom, setDbFrom] = useState('');
   const [dbTo, setDbTo] = useState('');
   const [dbRange, setDbRange] = useState<{ from?: string; to?: string }>({});
+  
+  // Ledger date filter range states
+  const [ldFrom, setLdFrom] = useState('');
+  const [ldTo, setLdTo] = useState('');
+  const [ldRange, setLdRange] = useState<{ from?: string; to?: string }>({});
+
   const [ledger, setLedger] = useState<any[]>([]);
   const [periods, setPeriods] = useState<{ months: string[]; years: string[] }>({ months: [], years: [] });
   const [reportType, setReportType] = useState<'monthly' | 'yearly'>('monthly');
   const [reportPeriod, setReportPeriod] = useState<string | null>(null);
   const [report, setReport] = useState<any>(null);
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [activeTransaction, setActiveTransaction] = useState<any>(null);
 
-  const loadTab = async (target: BookTab = tab, range = dbRange) => {
+  const loadTab = async (target: BookTab = tab, range?: { from?: string; to?: string }) => {
     setLoading(true);
     try {
       if (target === 'DAYBOOK') {
-        setDayBook(await accountsService.getDayBook(range.from, range.to));
+        const activeRange = range !== undefined ? range : dbRange;
+        setDayBook(await accountsService.getDayBook(activeRange.from, activeRange.to));
       } else if (target === 'LEDGER') {
-        setLedger(await accountsService.getLedger());
+        const activeRange = range !== undefined ? range : ldRange;
+        setLedger(await accountsService.getLedger(activeRange.from, activeRange.to));
       } else {
         const p = await accountsService.getPeriods();
         setPeriods(p);
@@ -295,7 +306,7 @@ export default function AccountsBookScreen() {
     setGeneratingPdf(true);
     try {
       if (Platform.OS === 'web') {
-        await printHtmlOnWeb(buildReportHtml());
+        await printHtmlOnWeb(buildReportHtml(), `Accounts_Report_${periodTitle.replace(/\s+/g, '_')}.pdf`);
         return;
       }
       const { uri } = await Print.printToFileAsync({ html: buildReportHtml() });
@@ -350,6 +361,266 @@ export default function AccountsBookScreen() {
     }
   };
 
+  // ---------- Day Book PDF report ----------
+  const buildDayBookHtml = () => {
+    const txns = filteredDayBook;
+    const totalDebit = txns.filter((t: any) => t.flow === 'OUT').reduce((s: number, t: any) => s + Number(t.amount), 0);
+    const totalCredit = txns.filter((t: any) => t.flow === 'IN').reduce((s: number, t: any) => s + Number(t.amount), 0);
+    const rows = txns
+      .map((t: any, index: number) => {
+        const info = describeTxn(t);
+        const kind = KIND_STYLES[info.kind];
+        return `
+        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+          <td>${index + 1}</td>
+          <td>${dateLabel(t.date)}</td>
+          <td>${kind.voucher}</td>
+          <td><b>${info.from}</b> &rarr; <b>${info.to}</b></td>
+          <td>${t.description || '-'}</td>
+          <td style="text-align:right; color:#E21A12;">${t.flow === 'OUT' ? Number(t.amount).toLocaleString('en-IN') : ''}</td>
+          <td style="text-align:right; color:#15803D;">${t.flow === 'IN' ? Number(t.amount).toLocaleString('en-IN') : ''}</td>
+        </tr>`;
+      })
+      .join('');
+
+    const rangeLabel = dbRange.from || dbRange.to
+      ? `Period: ${dbRange.from ? dateLabel(dbRange.from) : 'Beginning'} to ${dbRange.to ? dateLabel(dbRange.to) : 'Today'}`
+      : 'All Time';
+
+    return `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
+            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
+            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
+            table { width: 100%; border-collapse: collapse; font-size: 10px; }
+            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
+            th.r { text-align: right; }
+            td { padding: 6px; border-bottom: 1px solid #E2E8F0; }
+          </style>
+        </head>
+        <body>
+          <h1>Ayyanar Construction — Accounts Day Book</h1>
+          <div class="sub">${rangeLabel} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th><th>Date</th><th>Voucher</th><th>Particulars</th><th>Reason / Note</th>
+                <th class="r">Debit (Rs)</th><th class="r">Credit (Rs)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+              <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
+                <td colspan="5">TOTAL</td>
+                <td style="text-align:right;">${totalDebit.toLocaleString('en-IN')}</td>
+                <td style="text-align:right;">${totalCredit.toLocaleString('en-IN')}</td>
+              </tr>
+            </tbody>
+          </table>
+        </body>
+      </html>`;
+  };
+
+  const handleDownloadDayBook = async () => {
+    if (filteredDayBook.length === 0) {
+      Alert.alert('No Data', 'There are no transactions in the selected range.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      const rangeLabel = dbRange.from || dbRange.to
+        ? `${dbRange.from ? dbRange.from : 'start'}_to_${dbRange.to ? dbRange.to : 'end'}`
+        : 'all_time';
+      const filename = `DayBook_Report_${rangeLabel}.pdf`;
+      
+      if (Platform.OS === 'web') {
+        await printHtmlOnWeb(buildDayBookHtml(), filename);
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: buildDayBookHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Day Book Report',
+        });
+      } else {
+        Alert.alert('Saved', `PDF generated at:\n${uri}`);
+      }
+    } catch (error: any) {
+      Alert.alert('PDF Error', error?.message || 'Unable to generate day book PDF.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleShareDayBookWhatsApp = async () => {
+    if (filteredDayBook.length === 0) {
+      Alert.alert('No Data', 'There are no transactions in the selected range.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      if (Platform.OS === 'web') {
+        const rangeLabel = dbRange.from || dbRange.to
+          ? `${dbRange.from ? dateLabel(dbRange.from) : 'Beginning'} to ${dbRange.to ? dateLabel(dbRange.to) : 'Today'}`
+          : 'All Time';
+        const text =
+          `*Ayyanar Construction - Day Book Report*\n` +
+          `Period: ${rangeLabel}\n` +
+          `Total Debit: ${rupees(dayBookTotals.debit)}\n` +
+          `Total Credit: ${rupees(dayBookTotals.credit)}\n` +
+          `Vouchers: ${filteredDayBook.length}`;
+        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: buildDayBookHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Share Day Book Report on WhatsApp',
+        });
+      } else {
+        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
+      }
+    } catch (error: any) {
+      Alert.alert('Share Error', error?.message || 'Unable to share day book report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  // ---------- Ledger PDF report ----------
+  const buildLedgerHtml = () => {
+    const rows = ledger
+      .map((item: any, index: number) => `
+        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
+          <td>${index + 1}</td>
+          <td><b>${item.party}</b>${item.category && item.party !== item.category ? ` (${item.category})` : ''}</td>
+          <td style="text-align:right; color:#E21A12;">${Number(item.paidTo).toLocaleString('en-IN')}</td>
+          <td style="text-align:right; color:#15803D;">${Number(item.receivedFrom).toLocaleString('en-IN')}</td>
+          <td style="text-align:right; font-weight:bold; color:${item.net >= 0 ? '#15803D' : '#E21A12'};">${drCr(item.net)}</td>
+          <td style="text-align:center;">${item.entries}</td>
+          <td style="text-align:center;">${item.lastDate ? dateLabel(item.lastDate) : '-'}</td>
+        </tr>`)
+      .join('');
+
+    const rangeLabel = ldRange.from || ldRange.to
+      ? `Period: ${ldRange.from ? dateLabel(ldRange.from) : 'Beginning'} to ${ldRange.to ? dateLabel(ldRange.to) : 'Today'}`
+      : 'All Time';
+
+    return `
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
+            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
+            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
+            table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
+            th.r { text-align: right; }
+            th.c { text-align: center; }
+            td { padding: 6px; border-bottom: 1px solid #E2E8F0; }
+          </style>
+        </head>
+        <body>
+          <h1>Ayyanar Construction — Accounts Ledger Summary</h1>
+          <div class="sub">${rangeLabel} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Party / Account Name</th>
+                <th class="r">Debit (Paid, Rs)</th>
+                <th class="r">Credit (Received, Rs)</th>
+                <th class="r">Net Balance</th>
+                <th class="c">Vouchers</th>
+                <th class="c">Last Transaction</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows}
+            </tbody>
+          </table>
+        </body>
+      </html>`;
+  };
+
+  const handleDownloadLedger = async () => {
+    if (ledger.length === 0) {
+      Alert.alert('No Data', 'There are no ledger entries to export.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      const rangeLabel = ldRange.from || ldRange.to
+        ? `${ldRange.from ? ldRange.from : 'start'}_to_${ldRange.to ? ldRange.to : 'end'}`
+        : 'all_time';
+      const filename = `Ledger_Summary_${rangeLabel}.pdf`;
+      
+      if (Platform.OS === 'web') {
+        await printHtmlOnWeb(buildLedgerHtml(), filename);
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: buildLedgerHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Ledger Report',
+        });
+      } else {
+        Alert.alert('Saved', `PDF generated at:\n${uri}`);
+      }
+    } catch (error: any) {
+      Alert.alert('PDF Error', error?.message || 'Unable to generate ledger PDF.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleShareLedgerWhatsApp = async () => {
+    if (ledger.length === 0) {
+      Alert.alert('No Data', 'There are no ledger entries to share.');
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      if (Platform.OS === 'web') {
+        const rangeLabel = ldRange.from || ldRange.to
+          ? `${ldRange.from ? dateLabel(ldRange.from) : 'Beginning'} to ${ldRange.to ? dateLabel(ldRange.to) : 'Today'}`
+          : 'All Time';
+        const text =
+          `*Ayyanar Construction - Ledger Summary Report*\n` +
+          `Period: ${rangeLabel}\n` +
+          `Ledger Accounts: ${ledger.length}`;
+        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
+        return;
+      }
+      const { uri } = await Print.printToFileAsync({ html: buildLedgerHtml() });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: 'com.adobe.pdf',
+          dialogTitle: 'Share Ledger Summary Report on WhatsApp',
+        });
+      } else {
+        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
+      }
+    } catch (error: any) {
+      Alert.alert('Share Error', error?.message || 'Unable to share ledger report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   // ---------- Renderers ----------
   const renderDayBook = () => (
     <View>
@@ -388,6 +659,17 @@ export default function AccountsBookScreen() {
         </View>
       </View>
 
+      <View style={styles.pdfActionsRow}>
+        <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={handleDownloadDayBook} disabled={generatingPdf}>
+          {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
+          <Text style={styles.pdfButtonText}>Download Day Book</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={handleShareDayBookWhatsApp} disabled={generatingPdf}>
+          <MaterialIcons name="share" size={18} color={COLORS.white} />
+          <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Credit / Debit separation */}
       <View style={styles.flowFilterRow}>
         {(['ALL', 'DEBIT', 'CREDIT'] as const).map((f) => (
@@ -424,7 +706,7 @@ export default function AccountsBookScreen() {
             </View>
             <View style={styles.card}>
               <BookColumnsHeader />
-              {items.map((t: any) => <BookRow key={t.id} txn={t} />)}
+              {items.map((t: any) => <BookRow key={t.id} txn={t} onPress={() => { setActiveTransaction(t); setDetailsVisible(true); }} />)}
             </View>
           </View>
         );
@@ -439,6 +721,46 @@ export default function AccountsBookScreen() {
     <View>
       <Text style={styles.screenTitle}>Ledger</Text>
       <Text style={styles.screenSubtitle}>Party-wise ledger accounts with Debit, Credit and closing balance.</Text>
+
+      {/* Date range picker for Ledger */}
+      <View style={styles.card}>
+        <Text style={styles.filterLabel}>FILTER LEDGER BY DATE RANGE</Text>
+        <View style={styles.dateRow}>
+          <DatePickerField style={{ flex: 1 }} placeholder="From date" value={ldFrom} onChange={setLdFrom} />
+          <DatePickerField style={{ flex: 1 }} placeholder="To date" value={ldTo} onChange={setLdTo} />
+        </View>
+        <View style={styles.dateActions}>
+          <TouchableOpacity style={styles.applyButton} onPress={() => {
+            const range = { from: ldFrom || undefined, to: ldTo || undefined };
+            setLdRange(range);
+            loadTab('LEDGER', range);
+          }}>
+            <MaterialIcons name="filter-alt" size={16} color={COLORS.white} />
+            <Text style={styles.applyButtonText}>Apply</Text>
+          </TouchableOpacity>
+          {(ldRange.from || ldRange.to) && (
+            <TouchableOpacity style={styles.clearButton} onPress={() => {
+              setLdFrom('');
+              setLdTo('');
+              setLdRange({});
+              loadTab('LEDGER', {});
+            }}>
+              <Text style={styles.clearButtonText}>Clear</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.pdfActionsRow}>
+        <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={handleDownloadLedger} disabled={generatingPdf}>
+          {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
+          <Text style={styles.pdfButtonText}>Download Ledger</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={handleShareLedgerWhatsApp} disabled={generatingPdf}>
+          <MaterialIcons name="share" size={18} color={COLORS.white} />
+          <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+        </TouchableOpacity>
+      </View>
 
       {ledger.map((item: any) => (
         <View key={`${item.category}-${item.party}`} style={styles.ledgerCard}>
@@ -571,7 +893,7 @@ export default function AccountsBookScreen() {
             <Text style={styles.sectionTitle}>Vouchers ({report.transactions.length})</Text>
             <View style={styles.card}>
               <BookColumnsHeader />
-              {report.transactions.map((t: any) => <BookRow key={t.id} txn={t} showDate />)}
+              {report.transactions.map((t: any) => <BookRow key={t.id} txn={t} showDate onPress={() => { setActiveTransaction(t); setDetailsVisible(true); }} />)}
               {report.transactions.length === 0 && <Text style={styles.emptyText}>No transactions in this period.</Text>}
             </View>
           </>
@@ -607,17 +929,87 @@ export default function AccountsBookScreen() {
           );
         })}
       </View>
+
+      {/* Transaction Details Modal */}
+      <Modal visible={detailsVisible} transparent animationType="fade" onRequestClose={() => setDetailsVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalSheet, { maxHeight: '85%' }]}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Transaction Details</Text>
+            
+            {activeTransaction && (() => {
+              const info = describeTxn(activeTransaction);
+              return (
+                <View style={styles.detailsContainer}>
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>DATE</Text>
+                    <Text style={styles.detailValue}>{dateLabel(activeTransaction.date)}</Text>
+                  </View>
+                  
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>TYPE</Text>
+                    <View style={[styles.voucherBadge, { backgroundColor: KIND_STYLES[info.kind].bg, alignSelf: 'flex-start' }]}>
+                      <Text style={[styles.voucherBadgeText, { color: KIND_STYLES[info.kind].color }]}>
+                        {KIND_STYLES[info.kind].voucher}
+                      </Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>ROLE ACCOUNT</Text>
+                    <Text style={styles.detailValue}>{activeTransaction.role}</Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>FROM</Text>
+                    <Text style={styles.detailValue}>{info.from}</Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>TO</Text>
+                    <Text style={styles.detailValue}>{info.to}</Text>
+                  </View>
+                  
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>MODE OF PAYMENT</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <MaterialIcons name={activeTransaction.payment_method === 'Bank' ? 'account-balance' : 'payments'} size={16} color={COLORS.text} />
+                      <Text style={styles.detailValue}>{activeTransaction.payment_method || 'Cash'}</Text>
+                    </View>
+                  </View>
+                  
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>AMOUNT</Text>
+                    <Text style={[styles.detailValue, { fontSize: 18, fontWeight: '900', color: activeTransaction.flow === 'IN' ? COLORS.success : COLORS.primary }]}>
+                      {rupees(activeTransaction.amount)}
+                    </Text>
+                  </View>
+                  
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>NOTES / REASON</Text>
+                    <Text style={styles.detailValue}>{activeTransaction.description || '-'}</Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            <TouchableOpacity style={[styles.cancelButton, { marginTop: 20, width: '100%' }]} onPress={() => setDetailsVisible(false)}>
+              <Text style={styles.cancelButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 // Tally-style voucher row: particulars on the left, Debit and Credit columns on the right
-function BookRow({ txn, showDate = false }: { txn: any; showDate?: boolean }) {
+function BookRow({ txn, showDate = false, onPress }: { txn: any; showDate?: boolean; onPress?: () => void }) {
   const info = describeTxn(txn);
   const kind = KIND_STYLES[info.kind];
   const isCredit = txn.flow === 'IN';
   return (
-    <View style={styles.bookRow}>
+    <TouchableOpacity style={styles.bookRow} onPress={onPress} activeOpacity={0.7} disabled={!onPress}>
       <View style={{ flex: 1 }}>
         <View style={styles.voucherLine}>
           <View style={[styles.voucherBadge, { backgroundColor: kind.bg }]}>
@@ -634,7 +1026,7 @@ function BookRow({ txn, showDate = false }: { txn: any; showDate?: boolean }) {
       <Text style={[styles.amountCol, { color: isCredit ? COLORS.success : COLORS.textLight }]}>
         {isCredit ? Number(txn.amount).toLocaleString('en-IN') : ''}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -1090,5 +1482,68 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: 11,
     fontWeight: '800',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(11, 13, 16, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
+  },
+  modalHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: SPACING.md,
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 19,
+    fontWeight: '900',
+  },
+  detailsContainer: {
+    width: '100%',
+    marginTop: SPACING.md,
+    gap: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.steel,
+  },
+  detailLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  detailValue: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  cancelButton: {
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: COLORS.steel,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  cancelButtonText: {
+    color: COLORS.text,
+    fontWeight: '900',
+    fontSize: 14,
   },
 });

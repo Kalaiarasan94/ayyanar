@@ -55,6 +55,16 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="attendance"
+        options={{
+          title: 'Attendance',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="assignment-ind" size={size} color={color} />
+          ),
+          href: (role === 'Supervisor' || role === 'Site Engineer') ? '/attendance' : null,
+        }}
+      />
+      <Tabs.Screen
         name="sites"
         options={{
           title: 'Sites',
@@ -95,23 +105,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="attendance"
-        options={{
-          title: 'Attendance',
-          tabBarIcon: ({ color, size }) => (
-            <MaterialIcons name="assignment-ind" size={size} color={color} />
-          ),
-          href: (role === 'Supervisor' || role === 'Site Engineer') ? '/attendance' : null,
-        }}
-      />
-      <Tabs.Screen
         name="actions"
         options={{
           title: 'Actions',
           tabBarIcon: ({ color, size }) => (
             <MaterialIcons name="apps" size={size} color={color} />
           ),
-          href: role === 'Admin' ? null : '/actions',
+          href: (role === 'Admin' || role === 'Supervisor') ? null : '/actions',
         }}
       />
       <Tabs.Screen

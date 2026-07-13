@@ -252,7 +252,13 @@ export const accountsService = {
     const qs = params.toString();
     return request<any[]>(`/accounts/daybook${qs ? `?${qs}` : ''}`);
   },
-  getLedger: () => request<any[]>('/accounts/ledger'),
+  getLedger: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const qs = params.toString();
+    return request<any[]>(`/accounts/ledger${qs ? `?${qs}` : ''}`);
+  },
   getPeriods: () => request<{ months: string[]; years: string[] }>('/accounts/periods'),
   getReport: (type: 'monthly' | 'yearly', period: string) =>
     request<any>(`/accounts/report?type=${type}&period=${encodeURIComponent(period)}`),
