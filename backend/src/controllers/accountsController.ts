@@ -246,12 +246,14 @@ export const accountsController = {
       let sql = `SELECT * FROM account_transactions WHERE ${singleEntryFilter}`;
       const params: any[] = [...INTERNAL_PARTIES];
 
-      if (from) {
-        sql += ' AND date >= ?';
+      if (from && to) {
+        sql += ' AND date >= ? AND date <= ?';
+        params.push(from, to);
+      } else if (from) {
+        sql += ' AND date = ?';
         params.push(from);
-      }
-      if (to) {
-        sql += ' AND date <= ?';
+      } else if (to) {
+        sql += ' AND date = ?';
         params.push(to);
       }
       sql += ' ORDER BY date DESC, id DESC';
@@ -276,12 +278,14 @@ export const accountsController = {
          WHERE ${singleEntryFilter}`;
       
       const params: any[] = [...INTERNAL_PARTIES];
-      if (from) {
-        sql += ' AND date >= ?';
+      if (from && to) {
+        sql += ' AND date >= ? AND date <= ?';
+        params.push(from, to);
+      } else if (from) {
+        sql += ' AND date = ?';
         params.push(from);
-      }
-      if (to) {
-        sql += ' AND date <= ?';
+      } else if (to) {
+        sql += ' AND date = ?';
         params.push(to);
       }
       sql += ' GROUP BY category, party_name ORDER BY SUM(amount) DESC';

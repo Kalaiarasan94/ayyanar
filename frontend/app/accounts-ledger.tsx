@@ -383,8 +383,12 @@ export default function AccountsBookScreen() {
       })
       .join('');
 
-    const rangeLabel = dbRange.from || dbRange.to
-      ? `Period: ${dbRange.from ? dateLabel(dbRange.from) : 'Beginning'} to ${dbRange.to ? dateLabel(dbRange.to) : 'Today'}`
+    const rangeLabel = dbRange.from && dbRange.to
+      ? `Period: ${dateLabel(dbRange.from)} to ${dateLabel(dbRange.to)}`
+      : dbRange.from
+      ? `Date: ${dateLabel(dbRange.from)}`
+      : dbRange.to
+      ? `Date: ${dateLabel(dbRange.to)}`
       : 'All Time';
 
     return `
@@ -432,8 +436,12 @@ export default function AccountsBookScreen() {
     }
     setGeneratingPdf(true);
     try {
-      const rangeLabel = dbRange.from || dbRange.to
-        ? `${dbRange.from ? dbRange.from : 'start'}_to_${dbRange.to ? dbRange.to : 'end'}`
+      const rangeLabel = dbRange.from && dbRange.to
+        ? `${dbRange.from}_to_${dbRange.to}`
+        : dbRange.from
+        ? `${dbRange.from}`
+        : dbRange.to
+        ? `${dbRange.to}`
         : 'all_time';
       const filename = `DayBook_Report_${rangeLabel}.pdf`;
       
@@ -466,8 +474,12 @@ export default function AccountsBookScreen() {
     setGeneratingPdf(true);
     try {
       if (Platform.OS === 'web') {
-        const rangeLabel = dbRange.from || dbRange.to
-          ? `${dbRange.from ? dateLabel(dbRange.from) : 'Beginning'} to ${dbRange.to ? dateLabel(dbRange.to) : 'Today'}`
+        const rangeLabel = dbRange.from && dbRange.to
+          ? `${dateLabel(dbRange.from)} to ${dateLabel(dbRange.to)}`
+          : dbRange.from
+          ? `Date: ${dateLabel(dbRange.from)}`
+          : dbRange.to
+          ? `Date: ${dateLabel(dbRange.to)}`
           : 'All Time';
         const text =
           `*Ayyanar Construction - Day Book Report*\n` +
@@ -510,8 +522,12 @@ export default function AccountsBookScreen() {
         </tr>`)
       .join('');
 
-    const rangeLabel = ldRange.from || ldRange.to
-      ? `Period: ${ldRange.from ? dateLabel(ldRange.from) : 'Beginning'} to ${ldRange.to ? dateLabel(ldRange.to) : 'Today'}`
+    const rangeLabel = ldRange.from && ldRange.to
+      ? `Period: ${dateLabel(ldRange.from)} to ${dateLabel(ldRange.to)}`
+      : ldRange.from
+      ? `Date: ${dateLabel(ldRange.from)}`
+      : ldRange.to
+      ? `Date: ${dateLabel(ldRange.to)}`
       : 'All Time';
 
     return `
@@ -560,8 +576,12 @@ export default function AccountsBookScreen() {
     }
     setGeneratingPdf(true);
     try {
-      const rangeLabel = ldRange.from || ldRange.to
-        ? `${ldRange.from ? ldRange.from : 'start'}_to_${ldRange.to ? ldRange.to : 'end'}`
+      const rangeLabel = ldRange.from && ldRange.to
+        ? `${ldRange.from}_to_${ldRange.to}`
+        : ldRange.from
+        ? `${ldRange.from}`
+        : ldRange.to
+        ? `${ldRange.to}`
         : 'all_time';
       const filename = `Ledger_Summary_${rangeLabel}.pdf`;
       
@@ -594,8 +614,12 @@ export default function AccountsBookScreen() {
     setGeneratingPdf(true);
     try {
       if (Platform.OS === 'web') {
-        const rangeLabel = ldRange.from || ldRange.to
-          ? `${ldRange.from ? dateLabel(ldRange.from) : 'Beginning'} to ${ldRange.to ? dateLabel(ldRange.to) : 'Today'}`
+        const rangeLabel = ldRange.from && ldRange.to
+          ? `${dateLabel(ldRange.from)} to ${dateLabel(ldRange.to)}`
+          : ldRange.from
+          ? `Date: ${dateLabel(ldRange.from)}`
+          : ldRange.to
+          ? `Date: ${dateLabel(ldRange.to)}`
           : 'All Time';
         const text =
           `*Ayyanar Construction - Ledger Summary Report*\n` +

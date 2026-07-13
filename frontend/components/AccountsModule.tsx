@@ -115,10 +115,17 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
       ]);
       setSummary(summaryData);
       
-      const filteredTxns = allTxnsWithBalance.filter(t => 
-        t.flow === (tab === 'INPUT' ? 'IN' : 'OUT') && 
-        (!range.from || t.date >= range.from)
-      );
+      const filteredTxns = allTxnsWithBalance.filter(t => {
+        if (t.flow !== (tab === 'INPUT' ? 'IN' : 'OUT')) return false;
+        if (range.from && range.to) {
+          return t.date >= range.from && t.date <= range.to;
+        } else if (range.from) {
+          return t.date === range.from;
+        } else if (range.to) {
+          return t.date === range.to;
+        }
+        return true;
+      });
       setTransactions(filteredTxns);
     } catch (err) {
       console.error(err);
@@ -214,8 +221,12 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   };
 
   // ---------- Transactions PDF report ----------
-  const rangeTitle = appliedRange.from || appliedRange.to
-    ? `${appliedRange.from ? dateLabel(appliedRange.from) : 'Beginning'} to ${appliedRange.to ? dateLabel(appliedRange.to) : 'Today'}`
+  const rangeTitle = appliedRange.from && appliedRange.to
+    ? `${dateLabel(appliedRange.from)} to ${dateLabel(appliedRange.to)}`
+    : appliedRange.from
+    ? `Date: ${dateLabel(appliedRange.from)}`
+    : appliedRange.to
+    ? `Date: ${dateLabel(appliedRange.to)}`
     : 'All Time';
 
   // Full account report: Input | Output | Balance summary, then detailed
