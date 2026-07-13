@@ -133,7 +133,7 @@ export default function AttendanceScreen() {
   const loadSupervisorSubmitted = async (date = supAttendanceDate) => {
     if (!userName) return;
     try {
-      const overview = await adminService.getAttendanceOverview(date);
+      const overview = await adminService.getAttendanceOverview(date, userId);
       if (overview && overview.supervisors) {
         // Filter by the logged-in supervisor name
         const filtered = overview.supervisors.filter((item: any) => item.supervisor_name === userName);

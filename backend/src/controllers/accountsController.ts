@@ -69,6 +69,22 @@ export const accountsController = {
         ]
       );
 
+      // Synchronize Site Expenses into the main general site ledger
+      if (flow === 'OUT' && category === 'Site Expenses' && req.body.siteId) {
+        await db.query(
+          `INSERT INTO ledger (site_id, user_id, type, category, description, amount, payment_mode, date)
+           VALUES (?, ?, 'DEBIT', ?, ?, ?, 'Indirect', ?)`,
+          [
+            parseInt(req.body.siteId.toString()),
+            userId ? parseInt(userId.toString()) : null,
+            'Site Expenses',
+            description || 'Supervisor Cash Expense',
+            cleanAmount,
+            cleanDate
+          ]
+        );
+      }
+
       // Mirror internal transfers into the receiving role's ledger as an IN entry.
       // When a specific supervisor was chosen, the mirrored entry carries their
       // user_id and name so the receipt is attributed to that real person.

@@ -183,8 +183,13 @@ export const api = {
 
 export const adminService = {
   getAnalytics: () => request<any>('/analytics/dashboard'),
-  getAttendanceOverview: (date?: string) =>
-    request<any>(`/attendance/overview${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  getAttendanceOverview: (date?: string, supervisorId?: string | number | null) => {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (supervisorId) params.append('supervisorId', supervisorId.toString());
+    const qs = params.toString();
+    return request<any>(`/attendance/overview${qs ? `?${qs}` : ''}`);
+  },
   getStaff: () => request<any[]>('/staff'),
   addStaff: (staff: Record<string, any>) =>
     request<ApiResponse>('/staff', {

@@ -30,6 +30,31 @@ export const fieldController = {
         isGst ? 1 : 0,
         imageUrl || null
       ]);
+
+      // If the bill is Direct (Cash) and uploaded by a supervisor/user,
+      // automatically record it in account_transactions to reduce their cash balance.
+      if (paymentMode === 'Direct' && cleanUserId) {
+        const userRes = await db.query('SELECT role FROM users WHERE id = ?', [cleanUserId]);
+        const siteRes = await db.query('SELECT name FROM sites WHERE id = ?', [cleanSiteId]);
+        
+        if (userRes.rows.length > 0 && siteRes.rows.length > 0) {
+          const userRole = userRes.rows[0].role;
+          const siteName = siteRes.rows[0].name;
+          
+          await db.query(
+            `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
+             VALUES (?, ?, 'OUT', 'Site Expenses', ?, 'Cash', ?, ?, ?)`,
+            [
+              userRole,
+              cleanUserId,
+              siteName,
+              description || 'Direct Bill Payment',
+              parseFloat(amount.toString()),
+              date || new Date().toISOString().split('T')[0]
+            ]
+          );
+        }
+      }
       
       res.status(201).json({ success: true, message: 'Expense saved to MySQL.' });
     } catch (error: any) {
@@ -44,7 +69,14 @@ export const fieldController = {
       const { siteId } = req.params;
       console.log(`--- FETCHING LEDGER FOR SITE ${siteId} ---`);
       
-      const result = await db.query('SELECT * FROM ledger WHERE site_id = ? ORDER BY date DESC, id DESC', [siteId]);
+      const result = await db.query(
+        `SELECT l.*, u.name AS supervisor_name 
+         FROM ledger l 
+         LEFT JOIN users u ON l.user_id = u.id 
+         WHERE l.site_id = ? 
+         ORDER BY l.date DESC, l.id DESC`,
+        [siteId]
+      );
       console.log(`Found ${result.rows.length} rows for site ${siteId}`);
       
       res.status(200).json(result.rows);

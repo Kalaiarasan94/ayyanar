@@ -129,8 +129,9 @@ export const adminController = {
   getAttendanceOverview: async (req: Request, res: Response): Promise<void> => {
     try {
       const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+      const supervisorId = req.query.supervisorId;
 
-      const workerAttendance = await db.query(`
+      let workerQuery = `
         SELECT 
           a.id,
           a.date,
@@ -143,10 +144,17 @@ export const adminController = {
         LEFT JOIN workers w ON a.worker_id = w.id
         LEFT JOIN sites s ON a.site_id = s.id
         WHERE a.date = ?
-        ORDER BY s.name ASC, w.name ASC
-      `, [date]);
+      `;
+      const workerParams: any[] = [date];
+      if (supervisorId) {
+        workerQuery += ' AND s.supervisor_id = ?';
+        workerParams.push(parseInt(supervisorId.toString()));
+      }
+      workerQuery += ' ORDER BY s.name ASC, w.name ASC';
 
-      const supervisorAttendance = await db.query(`
+      const workerAttendance = await db.query(workerQuery, workerParams);
+
+      let supervisorQuery = `
         SELECT 
           sa.id,
           sa.date,
@@ -163,13 +171,20 @@ export const adminController = {
         LEFT JOIN users u ON sa.user_id = u.id
         LEFT JOIN sites s ON sa.site_id = s.id
         WHERE sa.date = ?
-        ORDER BY s.name ASC, u.name ASC
-      `, [date]);
+      `;
+      const supervisorParams: any[] = [date];
+      if (supervisorId) {
+        supervisorQuery += ' AND sa.user_id = ?';
+        supervisorParams.push(parseInt(supervisorId.toString()));
+      }
+      supervisorQuery += ' ORDER BY u.name ASC';
+
+      const supervisorAttendance = await db.query(supervisorQuery, supervisorParams);
 
       res.status(200).json({
         date,
-        workers: workerAttendance.rows,
-        supervisors: supervisorAttendance.rows,
+        workers: workerAttendance.rows || [],
+        supervisors: supervisorAttendance.rows || [],
       });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });

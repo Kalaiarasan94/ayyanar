@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
-import { accountsService, adminService } from '../services/api';
+import { accountsService, adminService, fieldService } from '../services/api';
 import { printHtmlOnWeb } from '../services/printReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 import DatePickerField from './DatePickerField';
@@ -92,6 +92,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   // Free-text name on every entry (who gave / person / site / shop) — editable
   const [entryName, setEntryName] = useState('');
   const [sites, setSites] = useState<{ id: any; name: string }[]>([]);
+  const [selectedSite, setSelectedSite] = useState<{ id: any; name: string } | null>(null);
 
   const isInput = flowTab === 'INPUT';
   // Only the Owner records money-in by hand; other inputs arrive automatically
@@ -171,11 +172,19 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   // Load the created sites so Site Expenses can be tagged to a real site
   useEffect(() => {
     if (!outputTargets.includes('Site Expenses')) return;
-    adminService
-      .getSites()
-      .then((data) => setSites((data || []).map((s: any) => ({ id: s.id, name: s.name }))))
-      .catch(() => setSites([]));
-  }, []);
+    if (role === 'Supervisor') {
+      if (!userLoaded || !loggedInUserId) return;
+      fieldService
+        .getSupervisorSites(loggedInUserId)
+        .then((data) => setSites((data || []).map((s: any) => ({ id: s.id, name: s.name }))))
+        .catch(() => setSites([]));
+    } else {
+      adminService
+        .getSites()
+        .then((data) => setSites((data || []).map((s: any) => ({ id: s.id, name: s.name }))))
+        .catch(() => setSites([]));
+    }
+  }, [role, userLoaded, loggedInUserId]);
 
   const applyDateRange = () => {
     if (fromDate && !isValidDate(fromDate)) {
@@ -198,6 +207,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     setCategory(null);
     setParty(null);
     setEntryName('');
+    setSelectedSite(null);
     setPaymentMethod('Cash');
     setDescription('');
     setEntryVisible(true);
@@ -228,6 +238,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         description,
         amount: cleanAmount,
         date: new Date().toISOString().split('T')[0],
+        siteId: category === 'Site Expenses' ? selectedSite?.id || null : null,
       });
       setEntryVisible(false);
       Alert.alert('Success', response?.message || 'Entry saved.');
@@ -655,6 +666,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                       setCategory(option);
                       setParty(null);
                       setEntryName('');
+                      setSelectedSite(null);
                     }}
                   >
                     <Text style={[styles.chipText, selected && styles.chipTextActive]}>{option}</Text>
@@ -674,7 +686,10 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                       <TouchableOpacity
                         key={`site-${site.id}`}
                         style={[styles.chip, selected && { backgroundColor: COLORS.headerBackground, borderColor: COLORS.headerBackground }]}
-                        onPress={() => setEntryName(site.name)}
+                        onPress={() => {
+                          setEntryName(site.name);
+                          setSelectedSite(site);
+                        }}
                       >
                         <MaterialIcons name="location-city" size={13} color={selected ? COLORS.white : COLORS.textLight} />
                         <Text style={[styles.chipText, selected && styles.chipTextActive]}>{site.name}</Text>
