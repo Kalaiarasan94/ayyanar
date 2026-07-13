@@ -321,7 +321,8 @@ export const fieldService = {
       method: 'POST',
       body: JSON.stringify(expense),
     }),
-  getLedgerBySite: (siteId: string | number) => request<any[]>(`/expenses/site/${siteId}`),
+  getLedgerBySite: (siteId: string | number, date?: string) =>
+    request<any[]>(`/expenses/site/${siteId}${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   getSupervisorWallet: (userId: string | number) => request<any>(`/wallet/${userId}`),
   getSupervisorSites: (userId: string | number) => request<any[]>(`/supervisor-sites/${userId}`),
   submitAttendance: (attendance: Record<string, any>) =>

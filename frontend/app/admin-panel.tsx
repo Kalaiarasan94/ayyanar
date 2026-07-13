@@ -607,7 +607,7 @@ export default function AdminPanelScreen() {
     const billTable = (title: string, color: string, rows: any[]) => `
       <h3 style="color:${color};">${title} (${rows.length} bills)</h3>
       <table>
-        <thead><tr><th>#</th><th>Date</th><th>Category</th><th>Description</th><th class="r">Amount (Rs)</th></tr></thead>
+        <thead><tr><th>#</th><th>Date</th><th>Supervisor</th><th>Category</th><th>Description</th><th class="r">Amount (Rs)</th></tr></thead>
         <tbody>
           ${rows.length
             ? rows
@@ -616,15 +616,16 @@ export default function AdminPanelScreen() {
               <tr style="background:${i % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
                 <td>${i + 1}</td>
                 <td>${new Date(r.date).toLocaleDateString('en-IN')}</td>
+                <td>${r.supervisor_name || 'System'}</td>
                 <td>${r.category || '-'}</td>
                 <td>${r.description || '-'}</td>
                 <td style="text-align:right;">${Number(r.amount || 0).toLocaleString('en-IN')}</td>
               </tr>`
                 )
                 .join('')
-            : '<tr><td colspan="5" style="text-align:center; color:#64748B;">No bills recorded</td></tr>'}
+            : '<tr><td colspan="6" style="text-align:center; color:#64748B;">No bills recorded</td></tr>'}
           <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-            <td colspan="4">TOTAL</td>
+            <td colspan="5">TOTAL</td>
             <td style="text-align:right;">${sum(rows).toLocaleString('en-IN')}</td>
           </tr>
         </tbody>
@@ -675,12 +676,18 @@ export default function AdminPanelScreen() {
       if (Platform.OS === 'web') {
         if (viaWhatsApp) {
           const site = sitesList.find((s) => s.id === reportSiteId);
-          const total = reportData.reduce((s, r) => s + Number(r.amount || 0), 0);
+          const total = reportData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+          const directBills = reportData.filter((r: any) => r.payment_mode === 'Direct');
+          const creditBills = reportData.filter((r: any) => r.payment_mode !== 'Direct');
+          const directSum = directBills.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+          const creditSum = creditBills.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
           const text =
             `*Ayyanar Construction - Site Expenses Report*\n` +
             `Site: ${site?.name || '-'}\n` +
-            `Bills: ${reportData.length}\n` +
-            `Total Expense: Rs ${total.toLocaleString('en-IN')}`;
+            `Total Bills: ${reportData.length}\n` +
+            `💵 Direct (Cash): Rs ${directSum.toLocaleString('en-IN')} (${directBills.length} bills)\n` +
+            `💳 Indirect (Credit): Rs ${creditSum.toLocaleString('en-IN')} (${creditBills.length} bills)\n` +
+            `💰 Grand Total: Rs ${total.toLocaleString('en-IN')}`;
           await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
         } else {
           await printHtmlOnWeb(buildSiteReportHtml());
@@ -1231,9 +1238,39 @@ export default function AdminPanelScreen() {
   const renderSiteReports = () => {
     const direct = reportData.filter((item) => item.payment_mode === 'Direct');
     const credit = reportData.filter((item) => item.payment_mode !== 'Direct');
+    const directTotal = direct.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const creditTotal = credit.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const grandTotal = directTotal + creditTotal;
     return (
       <View>
         <ChipSelect items={sitesList.map((site) => ({ id: site.id, label: site.name }))} value={reportSiteId} onChange={selectReportSite} />
+
+        {/* Summary totals */}
+        {reportData.length > 0 && (
+          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+            <View style={{ flex: 1, backgroundColor: '#EBF8EE', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#A3D9B1' }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#1A7A35', letterSpacing: 0.5 }}>DIRECT (CASH)</Text>
+              <Text style={{ fontSize: 17, fontWeight: '800', color: '#1A7A35', marginTop: 4 }}>
+                ₹{directTotal.toLocaleString()}
+              </Text>
+              <Text style={{ fontSize: 10, color: '#1A7A35', marginTop: 2 }}>{direct.length} bill(s)</Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: '#FFF3E0', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#FFCC80' }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#D56B00', letterSpacing: 0.5 }}>INDIRECT (CREDIT)</Text>
+              <Text style={{ fontSize: 17, fontWeight: '800', color: '#D56B00', marginTop: 4 }}>
+                ₹{creditTotal.toLocaleString()}
+              </Text>
+              <Text style={{ fontSize: 10, color: '#D56B00', marginTop: 2 }}>{credit.length} bill(s)</Text>
+            </View>
+            <View style={{ flex: 1, backgroundColor: '#EDE9FE', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#C4B5FD' }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#5B21B6', letterSpacing: 0.5 }}>GRAND TOTAL</Text>
+              <Text style={{ fontSize: 17, fontWeight: '800', color: '#5B21B6', marginTop: 4 }}>
+                ₹{grandTotal.toLocaleString()}
+              </Text>
+              <Text style={{ fontSize: 10, color: '#5B21B6', marginTop: 2 }}>{reportData.length} bill(s)</Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.pdfActionsRow}>
           <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={() => handleSitePdf(false)} disabled={generatingPdf}>
@@ -1246,11 +1283,11 @@ export default function AdminPanelScreen() {
           </TouchableOpacity>
         </View>
 
-        <SectionTitle title="Direct Cash" />
-        <LedgerList data={direct} empty="No direct cash records." />
+        <SectionTitle title={`💵 Direct Cash Bills (${direct.length})`} />
+        <LedgerList data={direct} empty="No direct cash bills recorded for this site." />
 
-        <SectionTitle title="Credit / Vendor Bills" />
-        <LedgerList data={credit} empty="No credit bill records." />
+        <SectionTitle title={`💳 Indirect / Credit Bills (${credit.length})`} />
+        <LedgerList data={credit} empty="No indirect credit bills recorded for this site." />
       </View>
     );
   };
@@ -1619,7 +1656,10 @@ function LedgerList({ data, empty }: { data: any[]; empty: string }) {
               <View style={{ flex: 1 }}>
                 <Text style={styles.rowTitle}>{item.category || 'Ledger Entry'}</Text>
                 <Text style={styles.rowMeta}>{item.description || 'No description'}</Text>
-                <Text style={styles.assignmentText}>{new Date(item.date).toLocaleDateString()}</Text>
+                <Text style={styles.assignmentText}>
+                  {new Date(item.date).toLocaleDateString()}
+                  {item.supervisor_name ? ` • Recorded by: ${item.supervisor_name}` : ''}
+                </Text>
               </View>
               <Text style={styles.rowAmount}>Rs {Number(item.amount || 0).toLocaleString()}</Text>
             </View>

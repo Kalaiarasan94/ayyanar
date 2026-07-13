@@ -39,8 +39,13 @@ const rupees = (value: any) => `Rs ${Number(value || 0).toLocaleString('en-IN')}
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 const dateLabel = (isoDate: string) => {
-  const d = new Date(isoDate);
-  return `${d.getDate().toString().padStart(2, '0')} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+  // Parse as local date (split on T to avoid UTC offset shifting the day)
+  const parts = (isoDate || '').toString().split('T')[0].split('-');
+  if (parts.length < 3) return isoDate || '-';
+  const year = parseInt(parts[0]);
+  const month = parseInt(parts[1]) - 1;
+  const day = parseInt(parts[2]);
+  return `${day.toString().padStart(2, '0')} ${MONTH_NAMES[month] || ''} ${year}`;
 };
 
 const isValidDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
@@ -75,8 +80,8 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     return `${year}-${month}-${day}`;
   })();
 
-  const [fromDate, setFromDate] = useState(todayStr);
-  const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({ from: todayStr });
+  const [fromDate, setFromDate] = useState('');
+  const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({});
 
   // Entry modal
   const [entryVisible, setEntryVisible] = useState(false);
@@ -136,12 +141,14 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
       
       const filteredTxns = allTxnsWithBalance.filter(t => {
         if (t.flow !== (tab === 'INPUT' ? 'IN' : 'OUT')) return false;
+        // Normalize DB date (may be ISO timestamp like 2026-07-13T00:00:00.000Z) to YYYY-MM-DD
+        const txnDate = t.date ? t.date.toString().split('T')[0] : '';
         if (range.from && range.to) {
-          return t.date >= range.from && t.date <= range.to;
+          return txnDate >= range.from && txnDate <= range.to;
         } else if (range.from) {
-          return t.date === range.from;
+          return txnDate >= range.from;
         } else if (range.to) {
-          return t.date === range.to;
+          return txnDate <= range.to;
         }
         return true;
       });
@@ -498,16 +505,16 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     <View>
       {/* Date picker */}
       <View style={styles.card}>
-        <Text style={styles.fieldLabel}>SELECT DATE</Text>
-        <DatePickerField placeholder="Select date" value={fromDate} onChange={setFromDate} />
+        <Text style={styles.fieldLabel}>FILTER BY DATE (FROM)</Text>
+        <DatePickerField placeholder="All transactions (tap to filter)" value={fromDate} onChange={setFromDate} />
         <View style={styles.dateActions}>
           <TouchableOpacity style={styles.applyButton} onPress={applyDateRange}>
             <MaterialIcons name="filter-alt" size={16} color={COLORS.white} />
-            <Text style={styles.applyButtonText}>Apply</Text>
+            <Text style={styles.applyButtonText}>Apply Filter</Text>
           </TouchableOpacity>
           {appliedRange.from && (
             <TouchableOpacity style={styles.clearButton} onPress={clearDateRange}>
-              <Text style={styles.clearButtonText}>Clear</Text>
+              <Text style={styles.clearButtonText}>Show All</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -544,8 +551,8 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
             <View style={{ flex: 1 }}>
               <Text style={styles.txnTitle}>
                 {isInput
-                  ? `From ${item.category}${item.party_name ? ` • ${item.party_name}` : ''}`
-                  : `To ${item.party_name || item.category}`}
+                  ? `Received from ${item.category}${item.party_name ? ` (${item.party_name})` : ''}`
+                  : `Paid to ${item.party_name || item.category}`}
               </Text>
               <Text style={styles.txnMeta}>
                 {dateLabel(item.date)} / {item.payment_method || 'Cash'}{item.description ? ` / ${item.description}` : ''}

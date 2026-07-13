@@ -63,20 +63,26 @@ export const fieldController = {
     }
   },
 
-  // Fetches transaction logs for a specific site
+  // Fetches transaction logs for a specific site, optionally filtered by date
   getLedgerBySite: async (req: Request, res: Response): Promise<void> => {
     try {
       const { siteId } = req.params;
-      console.log(`--- FETCHING LEDGER FOR SITE ${siteId} ---`);
-      
-      const result = await db.query(
-        `SELECT l.*, u.name AS supervisor_name 
+      const dateFilter = req.query.date as string | undefined;
+      console.log(`--- FETCHING LEDGER FOR SITE ${siteId} ${dateFilter ? `on ${dateFilter}` : '(all dates)'} ---`);
+
+      let query = `SELECT l.*, u.name AS supervisor_name 
          FROM ledger l 
          LEFT JOIN users u ON l.user_id = u.id 
-         WHERE l.site_id = ? 
-         ORDER BY l.date DESC, l.id DESC`,
-        [siteId]
-      );
+         WHERE l.site_id = ?`;
+      const params: any[] = [siteId];
+
+      if (dateFilter) {
+        query += ' AND l.date = ?';
+        params.push(dateFilter);
+      }
+      query += ' ORDER BY l.date DESC, l.id DESC';
+
+      const result = await db.query(query, params);
       console.log(`Found ${result.rows.length} rows for site ${siteId}`);
       
       res.status(200).json(result.rows);
