@@ -54,6 +54,17 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
   const [summary, setSummary] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [loggedInUserId, setLoggedInUserId] = useState<string | null>(null);
+  const [userLoaded, setUserLoaded] = useState(false);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const uid = await AsyncStorage.getItem('userId');
+      setLoggedInUserId(uid);
+      setUserLoaded(true);
+    };
+    fetchUser();
+  }, []);
 
   // Date filter (applies to the Transactions sub-menu and the PDF report)
   const todayStr = (() => {
@@ -90,7 +101,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
   const getTransactionsWithBalance = async (range = appliedRange) => {
     // Fetch all transactions (both IN and OUT) up to `to` date
-    const allTxns = await accountsService.getTransactions(role, undefined, undefined, range.to);
+    const allTxns = await accountsService.getTransactions(role, undefined, undefined, range.to, role === 'Supervisor' ? loggedInUserId : null);
     
     // Sort chronologically (ascending) to compute running balance correctly
     const sorted = [...allTxns].sort((a, b) => {
@@ -117,7 +128,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     setLoading(true);
     try {
       const [summaryData, allTxnsWithBalance] = await Promise.all([
-        accountsService.getSummary(role),
+        accountsService.getSummary(role, role === 'Supervisor' ? loggedInUserId : null),
         getTransactionsWithBalance(range),
       ]);
       setSummary(summaryData);
@@ -143,8 +154,10 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   };
 
   useEffect(() => {
-    loadData(flowTab);
-  }, [flowTab]);
+    if (userLoaded) {
+      loadData(flowTab);
+    }
+  }, [flowTab, userLoaded]);
 
   // Load the real supervisors created by the admin so payments go to actual people
   useEffect(() => {

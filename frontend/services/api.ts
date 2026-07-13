@@ -234,21 +234,26 @@ export const accountsService = {
       method: 'POST',
       body: JSON.stringify(txn),
     }),
-  getTransactions: (role: string, flow?: 'IN' | 'OUT', from?: string, to?: string) => {
+  getTransactions: (role: string, flow?: 'IN' | 'OUT', from?: string, to?: string, userId?: string | number | null) => {
     const params = new URLSearchParams();
     if (flow) params.append('flow', flow);
     if (from) params.append('from', from);
     if (to) params.append('to', to);
+    if (userId) params.append('userId', userId.toString());
     const qs = params.toString();
     return request<any[]>(`/accounts/transactions/${role}${qs ? `?${qs}` : ''}`);
   },
-  getIOReport: (role: string, from?: string, to?: string) => {
+  getIOReport: (role: string, from?: string, to?: string, userId?: string | number | null) => {
     const params = new URLSearchParams({ role });
     if (from) params.append('from', from);
     if (to) params.append('to', to);
+    if (userId) params.append('userId', userId.toString());
     return request<any>(`/accounts/io-report?${params.toString()}`);
   },
-  getSummary: (role: string) => request<any>(`/accounts/summary/${role}`),
+  getSummary: (role: string, userId?: string | number | null) => {
+    const qs = userId ? `?userId=${userId}` : '';
+    return request<any>(`/accounts/summary/${role}${qs}`);
+  },
   getTotalSummary: () => request<any>('/accounts/total-summary'),
   getDayBook: (from?: string, to?: string) => {
     const params = new URLSearchParams();

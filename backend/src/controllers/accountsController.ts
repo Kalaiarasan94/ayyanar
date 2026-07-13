@@ -110,6 +110,10 @@ export const accountsController = {
 
       let sql = 'SELECT * FROM account_transactions WHERE role = ?';
       const params: any[] = [role];
+      if (req.query.userId) {
+        sql += ' AND user_id = ?';
+        params.push(parseInt(req.query.userId.toString()));
+      }
       if (flow === 'IN' || flow === 'OUT') {
         sql += ' AND flow = ?';
         params.push(flow);
@@ -144,11 +148,17 @@ export const accountsController = {
 
       let opening = 0;
       if (from) {
-        const openingResult = await db.query(
-          `SELECT COALESCE(SUM(IF(flow = 'IN', amount, -amount)), 0) AS opening
-           FROM account_transactions WHERE role = ? AND date < ?`,
-          [role, from]
-        );
+        let openingSql = `SELECT COALESCE(SUM(IF(flow = 'IN', amount, -amount)), 0) AS opening
+           FROM account_transactions WHERE role = ?`;
+        const openingParams: any[] = [role];
+        if (req.query.userId) {
+          openingSql += ' AND user_id = ?';
+          openingParams.push(parseInt(req.query.userId.toString()));
+        }
+        openingSql += ' AND date < ?';
+        openingParams.push(from);
+
+        const openingResult = await db.query(openingSql, openingParams);
         opening = Number(openingResult.rows[0].opening);
       }
 
@@ -158,6 +168,10 @@ export const accountsController = {
           COALESCE(SUM(IF(flow = 'OUT', amount, 0)), 0) AS output
         FROM account_transactions WHERE role = ?`;
       const params: any[] = [role];
+      if (req.query.userId) {
+        sql += ' AND user_id = ?';
+        params.push(parseInt(req.query.userId.toString()));
+      }
       if (from) {
         sql += ' AND date >= ?';
         params.push(from);
@@ -202,26 +216,35 @@ export const accountsController = {
     try {
       const { role } = req.params;
 
-      const totalsResult = await db.query(
-        `SELECT
+      let totalsSql = `SELECT
            COALESCE(SUM(IF(flow = 'IN', amount, 0)), 0) AS totalIn,
            COALESCE(SUM(IF(flow = 'OUT', amount, 0)), 0) AS totalOut
-         FROM account_transactions WHERE role = ?`,
-        [role]
-      );
+         FROM account_transactions WHERE role = ?`;
+      const totalsParams: any[] = [role];
 
-      const breakdownResult = await db.query(
-        `SELECT flow, category, party_name, COALESCE(SUM(amount), 0) AS total
-         FROM account_transactions WHERE role = ?
-         GROUP BY flow, category, party_name
-         ORDER BY flow, total DESC`,
-        [role]
-      );
+      let breakdownSql = `SELECT flow, category, party_name, COALESCE(SUM(amount), 0) AS total
+         FROM account_transactions WHERE role = ?`;
+      const breakdownParams: any[] = [role];
 
-      const recentResult = await db.query(
-        'SELECT * FROM account_transactions WHERE role = ? ORDER BY date DESC, id DESC LIMIT 10',
-        [role]
-      );
+      let recentSql = 'SELECT * FROM account_transactions WHERE role = ?';
+      const recentParams: any[] = [role];
+
+      if (req.query.userId) {
+        const uId = parseInt(req.query.userId.toString());
+        totalsSql += ' AND user_id = ?';
+        totalsParams.push(uId);
+        breakdownSql += ' AND user_id = ?';
+        breakdownParams.push(uId);
+        recentSql += ' AND user_id = ?';
+        recentParams.push(uId);
+      }
+
+      breakdownSql += ' GROUP BY flow, category, party_name ORDER BY flow, total DESC';
+      recentSql += ' ORDER BY date DESC, id DESC LIMIT 10';
+
+      const totalsResult = await db.query(totalsSql, totalsParams);
+      const breakdownResult = await db.query(breakdownSql, breakdownParams);
+      const recentResult = await db.query(recentSql, recentParams);
 
       const { totalIn, totalOut } = totalsResult.rows[0];
       res.status(200).json({

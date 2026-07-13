@@ -138,7 +138,7 @@ export default function DashboardScreen() {
         if (storedUserId) {
           // Financial summary comes from the Supervisor accounts book (account_transactions)
           const [accountsSummary, sitesData] = await Promise.all([
-            accountsService.getSummary('Supervisor'),
+            accountsService.getSummary('Supervisor', storedUserId),
             fieldService.getSupervisorSites(storedUserId)
           ]);
           setWallet({
