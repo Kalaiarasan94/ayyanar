@@ -13,6 +13,20 @@ export const adminController = {
     }
   },
 
+  updateStaff: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { name, role, phone, password, username } = req.body;
+      await db.query(
+        'UPDATE users SET name = ?, role = ?, phone = ?, password = ?, username = ? WHERE id = ?',
+        [name, role, phone, password, username, id]
+      );
+      res.status(200).json({ success: true, message: 'Staff successfully updated.' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   getStaff: async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await db.query('SELECT * FROM users WHERE role != "Admin" ORDER BY id DESC');

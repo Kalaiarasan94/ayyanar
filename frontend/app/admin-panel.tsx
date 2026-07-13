@@ -27,14 +27,15 @@ import { csvCell, exportCsv, printHtmlOnWeb } from '../services/printReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
 type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
-type StaffRole = 'Supervisor' | 'Driver' | 'Site Engineer';
+type StaffRole = 'Owner' | 'Supervisor' | 'Driver' | 'Accounts' | 'TotalAccounts';
 
 interface Staff {
   id: string;
   name: string;
-  role: StaffRole | 'Admin' | 'Accounts';
+  role: StaffRole | 'Admin';
   phone: string;
   username?: string;
+  password?: string;
 }
 
 interface Site {
@@ -95,8 +96,11 @@ export default function AdminPanelScreen() {
   const [staffName, setStaffName] = useState('');
   const [staffUsername, setStaffUsername] = useState('');
   const [staffPassword, setStaffPassword] = useState('');
+  const [showStaffPassword, setShowStaffPassword] = useState(false);
   const [staffRole, setStaffRole] = useState<StaffRole>('Supervisor');
   const [staffPhone, setStaffPhone] = useState('');
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string | number, boolean>>({});
+  const [editingStaffId, setEditingStaffId] = useState<string | number | null>(null);
 
   const [newSiteName, setNewSiteName] = useState('');
   const [newSiteLocation, setNewSiteLocation] = useState('');
@@ -218,6 +222,49 @@ export default function AdminPanelScreen() {
       await loadTab('TEAM');
     } catch {
       Alert.alert('Staff Error', 'Unable to create staff account.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartEdit = (staff: Staff) => {
+    setEditingStaffId(staff.id);
+    setStaffName(staff.name);
+    setStaffPhone(staff.phone);
+    setStaffUsername(staff.username || '');
+    setStaffPassword(staff.password || '');
+    setStaffRole(staff.role as StaffRole);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingStaffId(null);
+    setStaffName('');
+    setStaffPhone('');
+    setStaffUsername('');
+    setStaffPassword('');
+    setStaffRole('Supervisor');
+  };
+
+  const handleSaveStaffChanges = async () => {
+    if (!editingStaffId) return;
+    if (!staffName || !staffPhone || !staffUsername || !staffPassword) {
+      Alert.alert('Missing Details', 'Fill staff name, phone, username, and password.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await adminService.updateStaff(editingStaffId, {
+        name: staffName.trim(),
+        username: staffUsername.trim().toLowerCase(),
+        role: staffRole,
+        phone: staffPhone.trim(),
+        password: staffPassword.trim(),
+      });
+      handleCancelEdit();
+      await loadTab('TEAM');
+      Alert.alert('Success', 'Staff account updated successfully.');
+    } catch {
+      Alert.alert('Staff Error', 'Unable to update staff account.');
     } finally {
       setLoading(false);
     }
@@ -987,17 +1034,56 @@ export default function AdminPanelScreen() {
       <Text style={styles.screenSubtitle}>Manage supervisors, site engineers, and drivers.</Text>
 
       <View style={styles.card}>
-        <Text style={styles.formTitle}>Create Staff Login</Text>
+        <Text style={styles.formTitle}>{editingStaffId ? 'Edit Staff Account' : 'Create Staff Login'}</Text>
         <TextInput style={styles.input} placeholder="Full name" value={staffName} onChangeText={setStaffName} placeholderTextColor={COLORS.textLight} />
         <TextInput style={styles.input} placeholder="Phone number" value={staffPhone} onChangeText={setStaffPhone} placeholderTextColor={COLORS.textLight} keyboardType="phone-pad" />
         <TextInput style={styles.input} placeholder="Username" value={staffUsername} onChangeText={setStaffUsername} placeholderTextColor={COLORS.textLight} autoCapitalize="none" />
-        <TextInput style={styles.input} placeholder="Password" value={staffPassword} onChangeText={setStaffPassword} placeholderTextColor={COLORS.textLight} secureTextEntry />
+        <View style={styles.passwordInputContainer}>
+          <TextInput 
+            style={styles.passwordTextInput} 
+            placeholder="Password" 
+            value={staffPassword} 
+            onChangeText={setStaffPassword} 
+            placeholderTextColor={COLORS.textLight} 
+            secureTextEntry={!showStaffPassword} 
+          />
+          <TouchableOpacity onPress={() => setShowStaffPassword(prev => !prev)} style={{ padding: 4 }}>
+            <MaterialIcons name={showStaffPassword ? "visibility" : "visibility-off"} size={20} color={COLORS.textLight} />
+          </TouchableOpacity>
+        </View>
         <ChipSelect
-          items={(['Supervisor', 'Site Engineer', 'Driver'] as StaffRole[]).map((role) => ({ id: role, label: role }))}
+          items={([
+            'Owner',
+            'Supervisor',
+            'Driver',
+            'Accounts',
+            'TotalAccounts',
+          ] as StaffRole[]).map((role) => ({ id: role, label: role }))}
           value={staffRole}
           onChange={(role) => setStaffRole(role as StaffRole)}
         />
-        <PrimaryButton label="Create Staff Account" icon="person-add" onPress={handleAddStaff} />
+        {editingStaffId ? (
+          <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.xs }}>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton label="Save Changes" icon="check" onPress={handleSaveStaffChanges} />
+            </View>
+            <TouchableOpacity 
+              style={{
+                backgroundColor: COLORS.textLight,
+                borderRadius: BORDER_RADIUS.md,
+                paddingVertical: 14,
+                alignItems: 'center',
+                justifyContent: 'center',
+                flex: 1
+              }} 
+              onPress={handleCancelEdit}
+            >
+              <Text style={{ color: COLORS.white, fontWeight: '800' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <PrimaryButton label="Create Staff Account" icon="person-add" onPress={handleAddStaff} />
+        )}
       </View>
 
       <SectionTitle title="Staff Directory" />
@@ -1006,11 +1092,39 @@ export default function AdminPanelScreen() {
           <View style={styles.avatar}><Text style={styles.avatarText}>{staff.name?.charAt(0)?.toUpperCase() || 'S'}</Text></View>
           <View style={styles.listContent}>
             <Text style={styles.rowTitle}>{staff.name}</Text>
-            <Text style={styles.rowMeta}>{staff.role} / {staff.phone}</Text>
+            <Text style={styles.rowMeta}>{staff.role} • {staff.phone}</Text>
+            {staff.username && (
+              <Text style={[styles.rowMeta, { marginTop: 4, color: COLORS.text }]}>
+                User: <Text style={{ fontWeight: 'bold' }}>{staff.username}</Text>
+              </Text>
+            )}
+            {staff.password && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                <Text style={[styles.rowMeta, { color: COLORS.text }]}>Pass: </Text>
+                <Text style={[styles.rowMeta, { fontWeight: 'bold', color: COLORS.text }]}>
+                  {visiblePasswords[staff.id] ? staff.password : '••••••••'}
+                </Text>
+                <TouchableOpacity 
+                  onPress={() => setVisiblePasswords(prev => ({ ...prev, [staff.id]: !prev[staff.id] }))}
+                  style={{ marginLeft: 8, padding: 2 }}
+                >
+                  <MaterialIcons 
+                    name={visiblePasswords[staff.id] ? "visibility" : "visibility-off"} 
+                    size={16} 
+                    color={COLORS.textLight} 
+                  />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
-          <TouchableOpacity style={styles.iconButton} onPress={() => handleDeleteStaff(staff.id)}>
-            <MaterialIcons name="delete-outline" size={22} color={COLORS.primary} />
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <TouchableOpacity style={[styles.iconButton, { marginRight: 8 }]} onPress={() => handleStartEdit(staff)}>
+              <MaterialIcons name="edit" size={22} color={COLORS.success} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={() => handleDeleteStaff(staff.id)}>
+              <MaterialIcons name="delete-outline" size={22} color={COLORS.primary} />
+            </TouchableOpacity>
+          </View>
         </View>
       ))}
     </View>
@@ -1799,6 +1913,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     padding: 13,
     marginBottom: SPACING.sm,
+  },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.steel,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
+    paddingRight: 13,
+  },
+  passwordTextInput: {
+    flex: 1,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '700',
+    padding: 13,
   },
   primaryButton: {
     backgroundColor: COLORS.primary,

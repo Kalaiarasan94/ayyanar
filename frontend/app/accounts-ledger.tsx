@@ -72,6 +72,14 @@ const KIND_STYLES = {
 
 const drCr = (net: number) => `${rupees(Math.abs(net))} ${net >= 0 ? 'Cr' : 'Dr'}`;
 
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function AccountsBookScreen() {
   const insets = useSafeAreaInsets();
   const [tab, setTab] = useState<BookTab>('DAYBOOK');
@@ -81,14 +89,14 @@ export default function AccountsBookScreen() {
 
   const [dayBook, setDayBook] = useState<any[]>([]);
   const [dayFlowFilter, setDayFlowFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
-  const [dbFrom, setDbFrom] = useState('');
-  const [dbTo, setDbTo] = useState('');
-  const [dbRange, setDbRange] = useState<{ from?: string; to?: string }>({});
+  
+  const todayStr = getTodayStr();
+  const [dbFrom, setDbFrom] = useState(todayStr);
+  const [dbRange, setDbRange] = useState<{ from?: string; to?: string }>({ from: todayStr });
   
   // Ledger date filter range states
-  const [ldFrom, setLdFrom] = useState('');
-  const [ldTo, setLdTo] = useState('');
-  const [ldRange, setLdRange] = useState<{ from?: string; to?: string }>({});
+  const [ldFrom, setLdFrom] = useState(todayStr);
+  const [ldRange, setLdRange] = useState<{ from?: string; to?: string }>({ from: todayStr });
 
   const [ledger, setLedger] = useState<any[]>([]);
   const [periods, setPeriods] = useState<{ months: string[]; years: string[] }>({ months: [], years: [] });
@@ -103,10 +111,12 @@ export default function AccountsBookScreen() {
     try {
       if (target === 'DAYBOOK') {
         const activeRange = range !== undefined ? range : dbRange;
-        setDayBook(await accountsService.getDayBook(activeRange.from, activeRange.to));
+        const data = await accountsService.getDayBook(activeRange.from, activeRange.to);
+        setDayBook(data);
       } else if (target === 'LEDGER') {
         const activeRange = range !== undefined ? range : ldRange;
-        setLedger(await accountsService.getLedger(activeRange.from, activeRange.to));
+        const data = await accountsService.getLedger(activeRange.from, activeRange.to);
+        setLedger(data);
       } else {
         const p = await accountsService.getPeriods();
         setPeriods(p);
@@ -160,18 +170,17 @@ export default function AccountsBookScreen() {
 
   const applyDayBookRange = () => {
     const dateOk = (v: string) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
-    if (!dateOk(dbFrom) || !dateOk(dbTo)) {
+    if (!dateOk(dbFrom)) {
       Alert.alert('Invalid Date', 'Use the YYYY-MM-DD format, e.g., 2026-07-01.');
       return;
     }
-    const range = { from: dbFrom || undefined, to: dbTo || undefined };
+    const range = { from: dbFrom || undefined };
     setDbRange(range);
     loadTab('DAYBOOK', range);
   };
 
   const clearDayBookRange = () => {
     setDbFrom('');
-    setDbTo('');
     setDbRange({});
     loadTab('DAYBOOK', {});
   };
@@ -651,19 +660,16 @@ export default function AccountsBookScreen() {
       <Text style={styles.screenTitle}>Day Book</Text>
       <Text style={styles.screenSubtitle}>All vouchers across Owner, Admin and Supervisor books — recorded automatically as Debit and Credit, day by day.</Text>
 
-      {/* Date range picker */}
+      {/* Date picker */}
       <View style={styles.card}>
-        <Text style={styles.filterLabel}>PICK DATE RANGE</Text>
-        <View style={styles.dateRow}>
-          <DatePickerField style={{ flex: 1 }} placeholder="From date" value={dbFrom} onChange={setDbFrom} />
-          <DatePickerField style={{ flex: 1 }} placeholder="To date" value={dbTo} onChange={setDbTo} />
-        </View>
+        <Text style={styles.filterLabel}>SELECT DATE</Text>
+        <DatePickerField placeholder="Select date" value={dbFrom} onChange={setDbFrom} />
         <View style={styles.dateActions}>
           <TouchableOpacity style={styles.applyButton} onPress={applyDayBookRange}>
             <MaterialIcons name="filter-alt" size={16} color={COLORS.white} />
             <Text style={styles.applyButtonText}>Apply</Text>
           </TouchableOpacity>
-          {(dbRange.from || dbRange.to) && (
+          {dbRange.from && (
             <TouchableOpacity style={styles.clearButton} onPress={clearDayBookRange}>
               <Text style={styles.clearButtonText}>Clear</Text>
             </TouchableOpacity>
@@ -746,26 +752,22 @@ export default function AccountsBookScreen() {
       <Text style={styles.screenTitle}>Ledger</Text>
       <Text style={styles.screenSubtitle}>Party-wise ledger accounts with Debit, Credit and closing balance.</Text>
 
-      {/* Date range picker for Ledger */}
+      {/* Date picker for Ledger */}
       <View style={styles.card}>
-        <Text style={styles.filterLabel}>FILTER LEDGER BY DATE RANGE</Text>
-        <View style={styles.dateRow}>
-          <DatePickerField style={{ flex: 1 }} placeholder="From date" value={ldFrom} onChange={setLdFrom} />
-          <DatePickerField style={{ flex: 1 }} placeholder="To date" value={ldTo} onChange={setLdTo} />
-        </View>
+        <Text style={styles.filterLabel}>SELECT DATE</Text>
+        <DatePickerField placeholder="Select date" value={ldFrom} onChange={setLdFrom} />
         <View style={styles.dateActions}>
           <TouchableOpacity style={styles.applyButton} onPress={() => {
-            const range = { from: ldFrom || undefined, to: ldTo || undefined };
+            const range = { from: ldFrom || undefined };
             setLdRange(range);
             loadTab('LEDGER', range);
           }}>
             <MaterialIcons name="filter-alt" size={16} color={COLORS.white} />
             <Text style={styles.applyButtonText}>Apply</Text>
           </TouchableOpacity>
-          {(ldRange.from || ldRange.to) && (
+          {ldRange.from && (
             <TouchableOpacity style={styles.clearButton} onPress={() => {
               setLdFrom('');
-              setLdTo('');
               setLdRange({});
               loadTab('LEDGER', {});
             }}>

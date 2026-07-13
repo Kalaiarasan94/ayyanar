@@ -338,7 +338,7 @@ export const accountsController = {
         return;
       }
       // Whitelisted expression — never built from user input
-      const periodExpr = type === 'yearly' ? 'YEAR(date)' : "DATE_FORMAT(date, '%Y-%m')";
+      const periodExpr = type === 'yearly' ? 'YEAR(date)' : "DATE_FORMAT(date, '%Y-%m') COLLATE utf8mb4_general_ci";
       const p = period.toString();
 
       const totalsResult = await db.query(

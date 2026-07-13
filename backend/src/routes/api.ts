@@ -37,6 +37,7 @@ router.get('/accounts/transactions/:role', accountsController.getTransactions);
 router.post('/staff', adminController.addStaff);
 router.get('/staff', adminController.getStaff);
 router.delete('/staff/:id', adminController.deleteStaff);
+router.put('/staff/:id', adminController.updateStaff);
 router.get('/attendance/overview', adminController.getAttendanceOverview);
 router.get('/sites', adminController.getSites);
 router.post('/sites', adminController.createSite);

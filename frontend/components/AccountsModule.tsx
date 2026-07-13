@@ -55,10 +55,17 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const [summary, setSummary] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // Date range filter (applies to the Transactions sub-menu and the PDF report)
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({});
+  // Date filter (applies to the Transactions sub-menu and the PDF report)
+  const todayStr = (() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  })();
+
+  const [fromDate, setFromDate] = useState(todayStr);
+  const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({ from: todayStr });
 
   // Entry modal
   const [entryVisible, setEntryVisible] = useState(false);
@@ -158,18 +165,17 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   }, []);
 
   const applyDateRange = () => {
-    if ((fromDate && !isValidDate(fromDate)) || (toDate && !isValidDate(toDate))) {
+    if (fromDate && !isValidDate(fromDate)) {
       Alert.alert('Invalid Date', 'Use the YYYY-MM-DD format, e.g., 2026-07-01.');
       return;
     }
-    const range = { from: fromDate || undefined, to: toDate || undefined };
+    const range = { from: fromDate || undefined };
     setAppliedRange(range);
     loadData(flowTab, range);
   };
 
   const clearDateRange = () => {
     setFromDate('');
-    setToDate('');
     setAppliedRange({});
     loadData(flowTab, {});
   };
@@ -466,19 +472,16 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
   const renderTransactions = () => (
     <View>
-      {/* Date range picker */}
+      {/* Date picker */}
       <View style={styles.card}>
-        <Text style={styles.fieldLabel}>PICK DATE RANGE</Text>
-        <View style={styles.dateRow}>
-          <DatePickerField style={{ flex: 1 }} placeholder="From date" value={fromDate} onChange={setFromDate} />
-          <DatePickerField style={{ flex: 1 }} placeholder="To date" value={toDate} onChange={setToDate} />
-        </View>
+        <Text style={styles.fieldLabel}>SELECT DATE</Text>
+        <DatePickerField placeholder="Select date" value={fromDate} onChange={setFromDate} />
         <View style={styles.dateActions}>
           <TouchableOpacity style={styles.applyButton} onPress={applyDateRange}>
             <MaterialIcons name="filter-alt" size={16} color={COLORS.white} />
             <Text style={styles.applyButtonText}>Apply</Text>
           </TouchableOpacity>
-          {(appliedRange.from || appliedRange.to) && (
+          {appliedRange.from && (
             <TouchableOpacity style={styles.clearButton} onPress={clearDateRange}>
               <Text style={styles.clearButtonText}>Clear</Text>
             </TouchableOpacity>

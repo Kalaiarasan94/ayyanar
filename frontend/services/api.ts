@@ -195,6 +195,11 @@ export const adminService = {
     request<ApiResponse>(`/staff/${id}`, {
       method: 'DELETE',
     }),
+  updateStaff: (id: string | number, staff: Record<string, any>) =>
+    request<ApiResponse>(`/staff/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(staff),
+    }),
   getLeads: () => request<any[]>('/leads'),
   createLead: (lead: Record<string, any>) =>
     request<ApiResponse>('/leads', {

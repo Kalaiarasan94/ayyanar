@@ -25,6 +25,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showWelcome, setShowWelcome] = useState(!shouldSkipWelcome());
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!showWelcome) return;
@@ -112,11 +113,14 @@ export default function LoginScreen() {
           router.replace('/(tabs)/home');
         }
       } else {
-        Alert.alert('Login Failed', response.message || 'Invalid credentials.');
+        Alert.alert('Login Failed', 'Incorrect username or password.');
       }
     } catch (error: any) {
       setLoading(false);
-      Alert.alert('Error', error.response?.data?.message || 'Failed to connect to server.');
+      const errMsg = error.response?.status === 401
+        ? 'Incorrect username or password.'
+        : (error.response?.data?.message || 'Failed to connect to server.');
+      Alert.alert('Login Failed', errMsg);
     }
   };
 
@@ -171,9 +175,12 @@ export default function LoginScreen() {
               placeholder="Enter your password"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
+              secureTextEntry={!showPassword}
               placeholderTextColor={COLORS.textLight}
             />
+            <TouchableOpacity onPress={() => setShowPassword(prev => !prev)} style={{ padding: 4 }}>
+              <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color={COLORS.textLight} />
+            </TouchableOpacity>
           </View>
 
           <TouchableOpacity 
@@ -186,32 +193,6 @@ export default function LoginScreen() {
               {loading ? 'Authenticating...' : 'LOGIN TO DASHBOARD'}
             </Text>
           </TouchableOpacity>
-        </View>
-
-        <View style={styles.credentialBox}>
-          <Text style={styles.credentialTitle}>Quick Access (Demo):</Text>
-          <View style={styles.chipRow}>
-            {['admin', 'accounts', 'super', 'driver', 'owner', 'totacc'].map((user) => (
-              <TouchableOpacity
-                key={user}
-                style={styles.chip}
-                onPress={() => {
-                  setUsername(user);
-                  const passwords: Record<string, string> = {
-                    admin: 'admin123',
-                    accounts: 'acc123',
-                    super: 'super123',
-                    driver: 'driver123',
-                    owner: 'owner123',
-                    totacc: 'totacc123',
-                  };
-                  setPassword(passwords[user]);
-                }}
-              >
-                <Text style={styles.chipText}>{user}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
         </View>
       </ScrollView>
