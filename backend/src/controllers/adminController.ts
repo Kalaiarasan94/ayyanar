@@ -60,6 +60,17 @@ export const adminController = {
     }
   },
 
+  updateSite: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { name, location } = req.body;
+      await db.query('UPDATE sites SET name = ?, location = ? WHERE id = ?', [name, location, id]);
+      res.status(200).json({ success: true, message: 'Site updated successfully.' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   deleteSite: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
@@ -117,6 +128,31 @@ export const adminController = {
     }
   },
 
+  // Full lead edit (name, phone, requirement, source) — status is edited separately above
+  updateLead: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { name, phone, projectNeeded, source } = req.body;
+      await db.query(
+        'UPDATE leads SET name = ?, phone = ?, project_needed = ?, source = ? WHERE id = ?',
+        [name, phone || null, projectNeeded, source, id]
+      );
+      res.status(200).json({ success: true, message: 'Lead updated.' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  deleteLead: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      await db.query('DELETE FROM leads WHERE id = ?', [id]);
+      res.status(200).json({ success: true, message: 'Lead deleted.' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   getLeads: async (req: Request, res: Response): Promise<void> => {
     try {
       const result = await db.query('SELECT * FROM leads ORDER BY created_at DESC');
@@ -154,8 +190,32 @@ export const adminController = {
 
       const workerAttendance = await db.query(workerQuery, workerParams);
 
+      // Category-wise worker headcount (e.g. "Kothanar" x 5 present) — the
+      // current worker attendance model, replacing the old per-name rows above
+      let categoryQuery = `
+        SELECT
+          ac.id,
+          ac.date,
+          ac.category,
+          ac.present_count,
+          ac.absent_count,
+          s.name as site_name,
+          s.location as site_location
+        FROM attendance_categories ac
+        LEFT JOIN sites s ON ac.site_id = s.id
+        WHERE ac.date = ?
+      `;
+      const categoryParams: any[] = [date];
+      if (supervisorId) {
+        categoryQuery += ' AND s.supervisor_id = ?';
+        categoryParams.push(parseInt(supervisorId.toString()));
+      }
+      categoryQuery += ' ORDER BY s.name ASC, ac.category ASC';
+
+      const categoryAttendance = await db.query(categoryQuery, categoryParams);
+
       let supervisorQuery = `
-        SELECT 
+        SELECT
           sa.id,
           sa.date,
           sa.status,
@@ -163,6 +223,7 @@ export const adminController = {
           sa.location_name,
           sa.latitude,
           sa.longitude,
+          sa.created_at,
           u.name as supervisor_name,
           u.role as supervisor_role,
           s.name as site_name,
@@ -184,6 +245,7 @@ export const adminController = {
       res.status(200).json({
         date,
         workers: workerAttendance.rows || [],
+        categories: categoryAttendance.rows || [],
         supervisors: supervisorAttendance.rows || [],
       });
     } catch (error: any) {

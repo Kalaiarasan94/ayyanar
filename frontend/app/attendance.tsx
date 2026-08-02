@@ -11,12 +11,15 @@ import DatePickerField from '../components/DatePickerField';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
 import { Picker } from '@react-native-picker/picker';
 
-interface Worker {
+interface WorkerCategory {
   id: string;
-  name: string;
-  role: string;
-  status: 'Present' | 'Absent';
+  category: string;
+  presentCount: string;
+  absentCount: string;
 }
+
+// Common daily-wage worker categories offered as quick-pick chips (free text also allowed)
+const QUICK_CATEGORIES = ['Kothanar', 'Mason', 'Helper', 'Kuli', 'Carpenter', 'Electrician'];
 
 // Local calendar date (Indian day, not UTC)
 const todayLocal = () => {
@@ -48,11 +51,13 @@ export default function AttendanceScreen() {
   const [selectedSiteName, setSelectedSiteName] = useState<string>((paramSiteName as string) || '');
   const [fetchingSites, setFetchingSites] = useState(true);
 
-  // Worker tab state
+  // Worker tab state — worker category + headcount (e.g. "Kothanar" x 5 present),
+  // not individual worker names
   const [attendanceDate, setAttendanceDate] = useState(todayLocal());
-  const [workerName, setWorkerName] = useState('');
-  const [workerRole, setWorkerRole] = useState('');
-  const [workersList, setWorkersList] = useState<Worker[]>([]);
+  const [categoryName, setCategoryName] = useState('');
+  const [presentCountInput, setPresentCountInput] = useState('');
+  const [absentCountInput, setAbsentCountInput] = useState('');
+  const [categoriesList, setCategoriesList] = useState<WorkerCategory[]>([]);
   const [submittedList, setSubmittedList] = useState<any[]>([]);
   const [workerLoading, setWorkerLoading] = useState(false);
 
@@ -115,11 +120,11 @@ export default function AttendanceScreen() {
     }
   }, [selectedSiteId, sites]);
 
-  // Worker: load submitted list
+  // Worker: load category-wise attendance already submitted for this site+date
   const loadSubmitted = async (siteId = selectedSiteId, date = attendanceDate) => {
     if (!siteId) return;
     try {
-      setSubmittedList(await fieldService.getAttendanceBySite(siteId, date));
+      setSubmittedList(await fieldService.getAttendanceCategoryBySite(siteId, date));
     } catch {
       setSubmittedList([]);
     }
@@ -158,26 +163,29 @@ export default function AttendanceScreen() {
     }
   };
 
-  // Worker roster actions
-  const addWorker = () => {
-    if (!workerName.trim() || !workerRole.trim()) {
-      notify('Error', 'Please enter both worker name and role.');
+  // Worker category roster actions
+  const addCategory = () => {
+    if (!categoryName.trim()) {
+      notify('Error', 'Please enter or pick a worker category (e.g., Kothanar, Mason).');
       return;
     }
-    setWorkersList([
-      ...workersList,
-      { id: Date.now().toString(), name: workerName.trim(), role: workerRole.trim(), status: 'Present' },
+    const present = parseInt(presentCountInput) || 0;
+    const absent = parseInt(absentCountInput) || 0;
+    if (present <= 0 && absent <= 0) {
+      notify('Error', 'Enter how many workers are present or absent for this category.');
+      return;
+    }
+    setCategoriesList([
+      ...categoriesList,
+      { id: Date.now().toString(), category: categoryName.trim(), presentCount: String(present), absentCount: String(absent) },
     ]);
-    setWorkerName('');
-    setWorkerRole('');
+    setCategoryName('');
+    setPresentCountInput('');
+    setAbsentCountInput('');
   };
 
-  const removeWorker = (id: string) => {
-    setWorkersList(workersList.filter((w) => w.id !== id));
-  };
-
-  const toggleStatus = (id: string, status: 'Present' | 'Absent') => {
-    setWorkersList(workersList.map((w) => (w.id === id ? { ...w, status } : w)));
+  const removeCategory = (id: string) => {
+    setCategoriesList(categoriesList.filter((c) => c.id !== id));
   };
 
   const sendToWhatsApp = (message: string) => {
@@ -201,34 +209,38 @@ export default function AttendanceScreen() {
       notify('Select Site', 'Please select a project site first.');
       return;
     }
-    if (workersList.length === 0) {
-      notify('Empty List', 'Please add at least one worker before submitting.');
+    if (categoriesList.length === 0) {
+      notify('Empty List', 'Please add at least one worker category before submitting.');
       return;
     }
 
     setWorkerLoading(true);
     try {
-      await fieldService.submitAttendance({
+      await fieldService.submitAttendanceCategory({
         siteId: selectedSiteId,
         date: attendanceDate,
-        workers: workersList.map((w) => ({ name: w.name, role: w.role, status: w.status })),
+        categories: categoriesList.map((c) => ({
+          category: c.category,
+          presentCount: parseInt(c.presentCount) || 0,
+          absentCount: parseInt(c.absentCount) || 0,
+        })),
       });
 
-      const presentCount = workersList.filter((w) => w.status === 'Present').length;
-      const absentCount = workersList.length - presentCount;
-      const workerLines = workersList
-        .map((w, i) => `${i + 1}. *${w.name}* (${w.role}) — ${w.status}`)
+      const totalPresent = categoriesList.reduce((s, c) => s + (parseInt(c.presentCount) || 0), 0);
+      const totalAbsent = categoriesList.reduce((s, c) => s + (parseInt(c.absentCount) || 0), 0);
+      const categoryLines = categoriesList
+        .map((c, i) => `${i + 1}. *${c.category}* — Present: ${c.presentCount || 0}, Absent: ${c.absentCount || 0}`)
         .join('\n');
       const message =
         `👷 *DAILY ATTENDANCE REPORT*\n\n` +
         `📍 *Site:* ${selectedSiteName}\n` +
         `📅 *Date:* ${attendanceDate}\n` +
-        `🟢 *Present:* ${presentCount}   🔴 *Absent:* ${absentCount}\n\n` +
-        `✅ *WORKERS LIST:*\n${workerLines}`;
+        `🟢 *Total Present:* ${totalPresent}   🔴 *Total Absent:* ${totalAbsent}\n\n` +
+        `✅ *WORKER CATEGORIES:*\n${categoryLines}`;
 
       setWorkerLoading(false);
-      const savedCount = workersList.length;
-      setWorkersList([]);
+      const savedCount = categoriesList.length;
+      setCategoriesList([]);
       await loadSubmitted();
 
       if (Platform.OS === 'web') {
@@ -386,7 +398,8 @@ export default function AttendanceScreen() {
   }
 
   const renderWorkerTab = () => {
-    const presentCount = workersList.filter((w) => w.status === 'Present').length;
+    const totalPresent = categoriesList.reduce((s, c) => s + (parseInt(c.presentCount) || 0), 0);
+    const totalAbsent = categoriesList.reduce((s, c) => s + (parseInt(c.absentCount) || 0), 0);
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
         {/* Site & date */}
@@ -419,63 +432,72 @@ export default function AttendanceScreen() {
           <DatePickerField value={attendanceDate} onChange={setAttendanceDate} placeholder="Attendance date" />
         </View>
 
-        {/* Add worker */}
+        {/* Add worker category + headcount (e.g. "Kothanar" x 5 present) */}
         <View style={styles.addCard}>
-          <Text style={styles.sectionTitle}>ADD WORKER TO THE LIST</Text>
+          <Text style={styles.sectionTitle}>ADD WORKER CATEGORY</Text>
+
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+            <View style={styles.chipRow}>
+              {QUICK_CATEGORIES.map((cat) => (
+                <TouchableOpacity
+                  key={cat}
+                  style={[styles.chip, categoryName === cat && styles.chipActive]}
+                  onPress={() => setCategoryName(cat)}
+                >
+                  <Text style={[styles.chipText, categoryName === cat && styles.chipTextActive]}>{cat}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </ScrollView>
 
           <TextInput
             style={styles.textInput}
-            placeholder="Worker Full Name"
-            value={workerName}
-            onChangeText={setWorkerName}
+            placeholder="Category name (e.g., Kothanar, Mason, Helper)"
+            value={categoryName}
+            onChangeText={setCategoryName}
             placeholderTextColor="#8B7B80"
           />
 
-          <TextInput
-            style={styles.textInput}
-            placeholder="Role (e.g. Mason, Helper)"
-            value={workerRole}
-            onChangeText={setWorkerRole}
-            placeholderTextColor="#8B7B80"
-          />
+          <View style={{ flexDirection: 'row', gap: 10 }}>
+            <TextInput
+              style={[styles.textInput, { flex: 1 }]}
+              placeholder="Present count"
+              keyboardType="numeric"
+              value={presentCountInput}
+              onChangeText={setPresentCountInput}
+              placeholderTextColor="#8B7B80"
+            />
+            <TextInput
+              style={[styles.textInput, { flex: 1 }]}
+              placeholder="Absent count"
+              keyboardType="numeric"
+              value={absentCountInput}
+              onChangeText={setAbsentCountInput}
+              placeholderTextColor="#8B7B80"
+            />
+          </View>
 
-          <TouchableOpacity style={styles.addBtn} onPress={addWorker}>
-            <Text style={styles.addBtnText}>+ ADD WORKER</Text>
+          <TouchableOpacity style={styles.addBtn} onPress={addCategory}>
+            <Text style={styles.addBtnText}>+ ADD CATEGORY</Text>
           </TouchableOpacity>
         </View>
 
-        {workersList.length > 0 && (
+        {categoriesList.length > 0 && (
           <View style={styles.rosterSection}>
             <Text style={styles.rosterTitle}>
-              ROSTER ({workersList.length}) — {presentCount} PRESENT / {workersList.length - presentCount} ABSENT
+              CATEGORIES ({categoriesList.length}) — {totalPresent} PRESENT / {totalAbsent} ABSENT
             </Text>
-            {workersList.map((worker) => (
-              <View key={worker.id} style={styles.rosterCard}>
+            {categoriesList.map((cat) => (
+              <View key={cat.id} style={styles.rosterCard}>
                 <View style={styles.avatarContainer}>
-                  <MaterialIcons name="person" size={20} color="#E21A12" />
+                  <MaterialIcons name="groups" size={20} color="#E21A12" />
                 </View>
                 <View style={styles.workerInfo}>
-                  <Text style={styles.workerName}>{worker.name}</Text>
-                  <Text style={styles.workerRole}>{worker.role}</Text>
+                  <Text style={styles.workerName}>{cat.category}</Text>
+                  <Text style={styles.workerRole}>Present: {cat.presentCount || 0} • Absent: {cat.absentCount || 0}</Text>
                 </View>
 
-                {/* Present / Absent toggle */}
-                <View style={styles.statusToggle}>
-                  <TouchableOpacity
-                    style={[styles.statusBtn, worker.status === 'Present' && styles.statusBtnPresent]}
-                    onPress={() => toggleStatus(worker.id, 'Present')}
-                  >
-                    <Text style={[styles.statusBtnText, worker.status === 'Present' && { color: '#FFF' }]}>P</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.statusBtn, worker.status === 'Absent' && styles.statusBtnAbsent]}
-                    onPress={() => toggleStatus(worker.id, 'Absent')}
-                  >
-                    <Text style={[styles.statusBtnText, worker.status === 'Absent' && { color: '#FFF' }]}>A</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity onPress={() => removeWorker(worker.id)} style={styles.removeBtn}>
+                <TouchableOpacity onPress={() => removeCategory(cat.id)} style={styles.removeBtn}>
                   <MaterialIcons name="remove-circle-outline" size={22} color="#E21A12" />
                 </TouchableOpacity>
               </View>
@@ -498,15 +520,12 @@ export default function AttendanceScreen() {
           </Text>
           {submittedList.map((item: any) => (
             <View key={item.id} style={styles.rosterCard}>
-              <View style={[styles.avatarContainer, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
-                <MaterialIcons name={item.status === 'Present' ? 'check' : 'close'} size={20} color={item.status === 'Present' ? '#10B981' : '#E21A12'} />
+              <View style={[styles.avatarContainer, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+                <MaterialIcons name="groups" size={20} color="#10B981" />
               </View>
               <View style={styles.workerInfo}>
-                <Text style={styles.workerName}>{item.worker_name}</Text>
-                <Text style={styles.workerRole}>{item.worker_role}</Text>
-              </View>
-              <View style={[styles.submittedPill, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
-                <Text style={[styles.submittedPillText, { color: item.status === 'Present' ? '#047857' : '#B5120D' }]}>{item.status}</Text>
+                <Text style={styles.workerName}>{item.category}</Text>
+                <Text style={styles.workerRole}>{item.site_name ? `${item.site_name} • ` : ''}Present: {item.present_count || 0} • Absent: {item.absent_count || 0}</Text>
               </View>
             </View>
           ))}
@@ -579,6 +598,24 @@ export default function AttendanceScreen() {
                   <MaterialIcons name="add-a-photo" size={48} color={COLORS.textLight} />
                   <Text style={styles.placeholderText}>Tap to Capture Clock-in Selfie</Text>
                 </TouchableOpacity>
+              )}
+
+              {selfieUri && (
+                <>
+                  <Text style={styles.label}>CURRENT LOCATION {location ? '(AUTO-DETECTED — CONFIRM OR EDIT)' : ''}</Text>
+                  <TextInput
+                    style={styles.locationInput}
+                    placeholder="Type your current location"
+                    value={locationName}
+                    onChangeText={setLocationName}
+                    placeholderTextColor="#8B7B80"
+                  />
+                  {location && (
+                    <Text style={styles.gpsCoordsText}>
+                      📍 GPS: {location.latitude?.toFixed(5)}, {location.longitude?.toFixed(5)}
+                    </Text>
+                  )}
+                </>
               )}
             </>
           ) : (
@@ -1010,6 +1047,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '800',
     color: COLORS.textLight,
+  },
+  locationInput: {
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    padding: 14,
+    borderRadius: BORDER_RADIUS.md,
+    marginBottom: 8,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 26, 18, 0.12)',
+    color: COLORS.text,
+  },
+  gpsCoordsText: {
+    fontSize: 11,
+    color: COLORS.textLight,
+    fontWeight: '600',
+    marginBottom: SPACING.lg,
   },
   absentNote: {
     flexDirection: 'row',

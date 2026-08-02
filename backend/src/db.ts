@@ -106,6 +106,37 @@ export const initDb = async () => {
       );
     `);
 
+    // Create driver_bills table if not exists (diesel/fuel bills uploaded by drivers)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS driver_bills (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          user_id INT NULL,
+          driver_name VARCHAR(120) NOT NULL,
+          vehicle_name VARCHAR(120) NULL,
+          note TEXT NULL,
+          amount DECIMAL(12, 2) NULL,
+          image_url TEXT NOT NULL,
+          date DATE NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Create attendance_categories table if not exists (category + headcount, e.g.
+    // "Kothanar" x 5 present, instead of naming every individual worker)
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS attendance_categories (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          site_id INT NOT NULL,
+          date DATE NOT NULL,
+          category VARCHAR(100) NOT NULL,
+          present_count INT DEFAULT 0,
+          absent_count INT DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+          UNIQUE KEY (site_id, date, category)
+      );
+    `);
+
     // Add party_name to account_transactions (the specific person behind a category,
     // e.g. which real supervisor a payment went to) if it doesn't exist yet
     const [partyColResult] = await pool.execute("SHOW COLUMNS FROM account_transactions LIKE 'party_name'");
@@ -119,6 +150,14 @@ export const initDb = async () => {
     if ((pmColResult as any[]).length === 0) {
       await db.query("ALTER TABLE account_transactions ADD COLUMN payment_method ENUM('Cash', 'Bank') DEFAULT 'Cash' AFTER party_name;");
       console.log('Added payment_method column to account_transactions.');
+    }
+
+    // Add linked_id to account_transactions — links a transfer's OUT row to its
+    // auto-mirrored IN row on the other role's book, so deleting one removes both.
+    const [linkColResult] = await pool.execute("SHOW COLUMNS FROM account_transactions LIKE 'linked_id'");
+    if ((linkColResult as any[]).length === 0) {
+      await db.query('ALTER TABLE account_transactions ADD COLUMN linked_id INT NULL AFTER id;');
+      console.log('Added linked_id column to account_transactions.');
     }
 
     // Add phone to leads if it doesn't exist yet

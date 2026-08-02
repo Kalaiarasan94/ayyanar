@@ -12,7 +12,7 @@ export default function OwnerAccountsScreen() {
       <AccountsModule
         role="Owner"
         heading="Owner Accounts"
-        inputSources={['Client', 'Govt', 'Loan']}
+        inputSources={['Admin', 'Supervisors', 'Client', 'Govt', 'Loan']}
         outputTargets={['Admin', 'Supervisors', 'Personal Expenses']}
       />
     </ScrollView>

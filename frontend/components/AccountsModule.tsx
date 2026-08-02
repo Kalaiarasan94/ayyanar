@@ -98,10 +98,9 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const [entryName, setEntryName] = useState('');
   const [sites, setSites] = useState<{ id: any; name: string }[]>([]);
   const [selectedSite, setSelectedSite] = useState<{ id: any; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const isInput = flowTab === 'INPUT';
-  // Only the Owner records money-in by hand; other inputs arrive automatically
-  const canAddEntry = !isInput || role === 'Owner';
   const flow = isInput ? 'IN' : 'OUT';
   const accent = isInput ? COLORS.success : COLORS.primary;
 
@@ -225,6 +224,10 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
       Alert.alert('Missing Info', `Please enter the amount and select ${isInput ? 'who gave the money' : 'where the money went'}.`);
       return;
     }
+    if (category === 'Others' && !entryName.trim()) {
+      Alert.alert('Specify Name', `Please type the name in the NAME field for "Others".`);
+      return;
+    }
     const cleanAmount = parseFloat(amount);
     if (isNaN(cleanAmount) || cleanAmount <= 0) {
       Alert.alert('Invalid Amount', 'Amount must be a positive number.');
@@ -254,6 +257,35 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
       Alert.alert('Save Error', error?.message || 'Unable to save the entry.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteTransaction = () => {
+    if (!activeTransaction) return;
+    const confirmDelete = async () => {
+      setDeleting(true);
+      try {
+        await accountsService.deleteTransaction(activeTransaction.id);
+        setDetailsVisible(false);
+        setActiveTransaction(null);
+        await loadData(flowTab);
+      } catch (error: any) {
+        Alert.alert('Delete Error', error?.message || 'Unable to delete this entry.');
+      } finally {
+        setDeleting(false);
+      }
+    };
+    const isLinked = !!activeTransaction.linked_id;
+    const message = isLinked
+      ? 'This was an internal transfer — deleting it also removes the matching entry it created on the other account. Continue?'
+      : 'Delete this entry? This cannot be undone.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) confirmDelete();
+    } else {
+      Alert.alert('Delete Entry', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]);
     }
   };
 
@@ -614,17 +646,16 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         </TouchableOpacity>
       </View>
 
-      {/* Entry */}
-      {canAddEntry ? (
-        <TouchableOpacity style={[styles.addButton, { backgroundColor: accent }]} onPress={openEntry}>
-          <MaterialIcons name="add-circle-outline" size={20} color={COLORS.white} />
-          <Text style={styles.addButtonText}>{isInput ? 'New Receipt Entry' : 'New Payment Entry'}</Text>
-        </TouchableOpacity>
-      ) : (
+      {/* Entry — every role can log both money-in and money-out themselves */}
+      <TouchableOpacity style={[styles.addButton, { backgroundColor: accent }]} onPress={openEntry}>
+        <MaterialIcons name="add-circle-outline" size={20} color={COLORS.white} />
+        <Text style={styles.addButtonText}>{isInput ? 'New Receipt Entry' : 'New Payment Entry'}</Text>
+      </TouchableOpacity>
+      {isInput && (
         <View style={styles.infoCard}>
           <MaterialIcons name="info-outline" size={20} color={COLORS.textLight} />
           <Text style={styles.infoText}>
-            Money-in entries are logged automatically when {role === 'Admin' ? 'the Owner sends' : 'the Owner or Admin sends'} you money.
+            Transfers from {role === 'Admin' ? 'the Owner or a Supervisor' : role === 'Supervisor' ? 'the Owner or Admin' : 'Admin or Supervisors'} are also credited here automatically — you only need to log money received from outside (Client, Govt, Loan, etc.) or add it yourself using "Others".
           </Text>
         </View>
       )}
@@ -643,7 +674,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
             <Text style={styles.fieldLabel}>{isInput ? 'RECEIVED FROM' : 'GIVEN TO / SPENT ON'}</Text>
             <View style={styles.chipRow}>
-              {(isInput ? inputSources : outputTargets).map((option) => {
+              {[...(isInput ? inputSources : outputTargets), 'Others'].map((option) => {
                 // "Supervisors" expands into the real supervisors created by the admin
                 if (!isInput && option === 'Supervisors' && supervisors.length > 0) {
                   return supervisors.map((sup) => {
@@ -707,11 +738,14 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
               </>
             )}
 
-            {/* Name on every entry — auto-filled by supervisor/site picks, always editable */}
-            <Text style={styles.fieldLabel}>NAME ({isInput ? 'WHO GAVE' : 'PERSON / SITE / SHOP'})</Text>
+            {/* Name on every entry — auto-filled by supervisor/site picks, always editable.
+                Required when "Others" is picked, so the specific person/reason is on record. */}
+            <Text style={styles.fieldLabel}>
+              NAME ({isInput ? 'WHO GAVE' : 'PERSON / SITE / SHOP'}){category === 'Others' ? ' *REQUIRED' : ''}
+            </Text>
             <TextInput
               style={styles.input}
-              placeholder={isInput ? 'e.g., Rajan (Client side)' : 'e.g., Kumar Hardware, Alpha Site'}
+              placeholder={category === 'Others' ? 'Specify who / what this is' : isInput ? 'e.g., Rajan (Client side)' : 'e.g., Kumar Hardware, Alpha Site'}
               placeholderTextColor={COLORS.textLight}
               value={entryName}
               onChangeText={setEntryName}
@@ -837,9 +871,23 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
               </View>
             )}
 
-            <TouchableOpacity style={[styles.cancelButton, { marginTop: 20, width: '100%' }]} onPress={() => setDetailsVisible(false)}>
-              <Text style={styles.cancelButtonText}>Close</Text>
-            </TouchableOpacity>
+            <View style={[styles.modalActions, { marginTop: 20 }]}>
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setDetailsVisible(false)} disabled={deleting}>
+                <Text style={styles.cancelButtonText}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, { backgroundColor: COLORS.primary }, deleting && { opacity: 0.6 }]}
+                onPress={handleDeleteTransaction}
+                disabled={deleting}
+              >
+                {deleting ? <ActivityIndicator color={COLORS.white} /> : (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <MaterialIcons name="delete-outline" size={16} color={COLORS.white} />
+                    <Text style={styles.saveButtonText}>Delete</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

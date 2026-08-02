@@ -22,7 +22,7 @@ export default function AccountsTabScreen() {
       ? {
           role: 'Admin' as const,
           heading: 'Admin Accounts',
-          inputSources: ['Owner', 'Client'],
+          inputSources: ['Owner', 'Supervisors', 'Client'],
           outputTargets: ['Supervisors', 'Company Expenses'],
         }
       : {

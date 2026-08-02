@@ -34,15 +34,8 @@ export const accountsController = {
         res.status(400).json({ success: false, error: 'Invalid role or flow.' });
         return;
       }
-      // Only the Owner enters money-in by hand. Admin/Supervisor inputs are created
-      // automatically below when another role sends them money.
-      if (flow === 'IN' && role !== 'Owner') {
-        res.status(403).json({
-          success: false,
-          error: 'Only the Owner can enter money-in directly. Other inputs are logged automatically from transfers.',
-        });
-        return;
-      }
+      // Every role can log their own money-in directly now (in addition to the
+      // automatic mirrored entries created below when another role pays them).
       const cleanAmount = parseFloat(amount.toString());
       if (isNaN(cleanAmount) || cleanAmount <= 0) {
         res.status(400).json({ success: false, error: 'amount must be a positive number.' });
@@ -53,7 +46,7 @@ export const accountsController = {
       const cleanPartyName = partyName || null;
       const cleanMethod = paymentMethod === 'Bank' ? 'Bank' : 'Cash';
 
-      await db.query(
+      const inserted = await db.query(
         `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
@@ -68,6 +61,7 @@ export const accountsController = {
           cleanDate,
         ]
       );
+      const insertedId = (inserted.rows as any).insertId;
 
       // Synchronize Site Expenses into the main general site ledger
       if (flow === 'OUT' && category === 'Site Expenses' && req.body.siteId) {
@@ -90,9 +84,9 @@ export const accountsController = {
       // user_id and name so the receipt is attributed to that real person.
       const recipientRole = flow === 'OUT' ? TRANSFER_TARGETS[category] : undefined;
       if (recipientRole && recipientRole !== role) {
-        await db.query(
-          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
-           VALUES (?, ?, 'IN', ?, ?, ?, ?, ?, ?)`,
+        const mirrored = await db.query(
+          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date, linked_id)
+           VALUES (?, ?, 'IN', ?, ?, ?, ?, ?, ?, ?)`,
           [
             recipientRole,
             recipientUserId ? parseInt(recipientUserId.toString()) : null,
@@ -102,8 +96,13 @@ export const accountsController = {
             description || `Transfer from ${role}`,
             cleanAmount,
             cleanDate,
+            insertedId,
           ]
         );
+        const mirroredId = (mirrored.rows as any).insertId;
+        // Link the original row back to its mirror so deleting either removes both
+        await db.query('UPDATE account_transactions SET linked_id = ? WHERE id = ?', [mirroredId, insertedId]);
+
         res.status(201).json({
           success: true,
           message: `Payment recorded and credited to ${cleanPartyName || recipientRole} (${recipientRole} account).`,
@@ -114,6 +113,30 @@ export const accountsController = {
       res.status(201).json({ success: true, message: 'Transaction recorded.' });
     } catch (error: any) {
       console.error('addTransaction Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  // Deletes a transaction entry. If it was one side of an internal transfer
+  // (Admin pays Supervisor, etc.), the mirrored entry on the other role's book
+  // is deleted too so both books stay in sync.
+  deleteTransaction: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const found = await db.query('SELECT id, linked_id FROM account_transactions WHERE id = ?', [id]);
+      if (!found.rows[0]) {
+        res.status(404).json({ success: false, error: 'Transaction not found.' });
+        return;
+      }
+      const { linked_id } = found.rows[0];
+      if (linked_id) {
+        await db.query('DELETE FROM account_transactions WHERE id IN (?, ?)', [id, linked_id]);
+      } else {
+        await db.query('DELETE FROM account_transactions WHERE id = ?', [id]);
+      }
+      res.status(200).json({ success: true, message: 'Transaction deleted.' });
+    } catch (error: any) {
+      console.error('deleteTransaction Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   },

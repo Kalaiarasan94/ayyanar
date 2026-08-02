@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
-import { ScrollView, Text, View, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { ScrollView, Text, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { fieldService } from '../services/api';
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { fieldService, uploadPhoto } from '../services/api';
 import LogoutButton from '../components/LogoutButton';
 
 // ==========================================
@@ -25,6 +27,13 @@ export default function DriverLogScreen() {
   const [loadWeight, setLoadWeight] = useState('');
   const [startingTime, setStartingTime] = useState('');
   const [endingTime, setEndingTime] = useState('');
+
+  // Diesel Bill Upload states
+  const [billVehicleName, setBillVehicleName] = useState('');
+  const [billNote, setBillNote] = useState('');
+  const [billAmount, setBillAmount] = useState('');
+  const [billImageUri, setBillImageUri] = useState<string | null>(null);
+  const [isBillSubmitting, setIsBillSubmitting] = useState(false);
 
   // Total KM is auto-calculated from starting & ending km
   const totalKm = useMemo(() => {
@@ -74,6 +83,60 @@ export default function DriverLogScreen() {
       Alert.alert('Connection Failure', error.message || 'Could not dispatch data to backend server.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const captureBillPhoto = async (useCamera: boolean) => {
+    const permission = useCamera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== 'granted') {
+      Alert.alert('Permission Denied', `Permission to access ${useCamera ? 'camera' : 'gallery'} is required.`);
+      return;
+    }
+    const options: ImagePicker.ImagePickerOptions = { allowsEditing: true, quality: 0.7 };
+    const result = useCamera
+      ? await ImagePicker.launchCameraAsync(options)
+      : await ImagePicker.launchImageLibraryAsync(options);
+    if (!result.canceled && result.assets?.[0]) {
+      setBillImageUri(result.assets[0].uri);
+    }
+  };
+
+  const handleUploadDieselBill = async () => {
+    if (!driverName) {
+      Alert.alert('Missing Info', 'Please enter the driver name.');
+      return;
+    }
+    if (!billImageUri) {
+      Alert.alert('Missing Photo', 'Please capture or select the diesel bill photo.');
+      return;
+    }
+
+    try {
+      setIsBillSubmitting(true);
+      const username = (await AsyncStorage.getItem('userUsername')) || driverName;
+      const hostedImageUrl = await uploadPhoto(billImageUri, { role: 'driver', username, type: 'diesel-bill' });
+
+      await fieldService.saveDriverBill({
+        userId,
+        driverName,
+        vehicleName: billVehicleName || vehicleName || null,
+        note: billNote,
+        amount: billAmount ? parseFloat(billAmount) : null,
+        imageUrl: hostedImageUrl,
+        date: new Date().toISOString().split('T')[0],
+      });
+
+      Alert.alert('Success', 'Diesel bill uploaded. The admin can see it in Driver Reports.');
+      setBillVehicleName('');
+      setBillNote('');
+      setBillAmount('');
+      setBillImageUri(null);
+    } catch (error: any) {
+      Alert.alert('Upload Failed', error.message || 'Could not upload the diesel bill.');
+    } finally {
+      setIsBillSubmitting(false);
     }
   };
 
@@ -176,6 +239,56 @@ export default function DriverLogScreen() {
 
         <TouchableOpacity style={{ backgroundColor: '#15803D', padding: 16, borderRadius: 6, alignItems: 'center', marginTop: 6 }} onPress={handleSaveTripRecord} disabled={isSubmitting}>
           {isSubmitting ? <ActivityIndicator color="#FFF" /> : <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Save Trip Record</Text>}
+        </TouchableOpacity>
+      </View>
+
+      {/* Diesel Bill Upload — separate from the trip record, shows up for admin in Driver Reports */}
+      <View style={{ backgroundColor: '#FFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 40 }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 4 }}>Diesel Bill Upload</Text>
+        <Text style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>Upload the diesel/fuel bill photo with a note on which bill it is.</Text>
+
+        <Text style={fieldLabel}>VEHICLE NAME</Text>
+        <TextInput style={fieldInput} placeholder="e.g., Tata Tipper (defaults to trip vehicle)" value={billVehicleName} onChangeText={setBillVehicleName} />
+
+        <Text style={fieldLabel}>NOTE — WHICH BILL IS THIS *</Text>
+        <TextInput
+          style={[fieldInput, { height: 80, textAlignVertical: 'top' }]}
+          placeholder="e.g., Diesel refill at Indian Oil, Madurai bypass"
+          value={billNote}
+          onChangeText={setBillNote}
+          multiline
+        />
+
+        <Text style={fieldLabel}>BILL AMOUNT (₹, OPTIONAL)</Text>
+        <TextInput style={fieldInput} keyboardType="numeric" placeholder="0.00" value={billAmount} onChangeText={setBillAmount} />
+
+        <Text style={fieldLabel}>BILL PHOTO *</Text>
+        {billImageUri ? (
+          <View style={{ marginBottom: 14 }}>
+            <Image source={{ uri: billImageUri }} style={{ width: '100%', height: 200, borderRadius: 8, backgroundColor: '#F1F5F9' }} resizeMode="cover" />
+            <TouchableOpacity onPress={() => setBillImageUri(null)} style={{ marginTop: 8, alignSelf: 'flex-start' }}>
+              <Text style={{ color: '#E21A12', fontWeight: 'bold', fontSize: 12 }}>Remove Photo</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 14 }}>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#F1F5F9', padding: 14, borderRadius: 6 }}
+              onPress={() => captureBillPhoto(true)}
+            >
+              <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>📷 Camera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#F1F5F9', padding: 14, borderRadius: 6 }}
+              onPress={() => captureBillPhoto(false)}
+            >
+              <Text style={{ fontWeight: 'bold', color: '#0F172A' }}>🖼️ Gallery</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <TouchableOpacity style={{ backgroundColor: '#D97706', padding: 16, borderRadius: 6, alignItems: 'center' }} onPress={handleUploadDieselBill} disabled={isBillSubmitting}>
+          {isBillSubmitting ? <ActivityIndicator color="#FFF" /> : <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 16 }}>Upload Diesel Bill</Text>}
         </TouchableOpacity>
       </View>
     </ScrollView>

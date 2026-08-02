@@ -23,7 +23,7 @@ import AppBackground from './components/AppBackground';
 import LogoutButton from '../components/LogoutButton';
 import DatePickerField from '../components/DatePickerField';
 import { accountsService, adminService, fieldService } from '../services/api';
-import { csvCell, exportCsv, printHtmlOnWeb } from '../services/printReport';
+import { csvCell, downloadImage, exportCsv, printHtmlOnWeb, shareImageOnWhatsApp } from '../services/printReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
 type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
@@ -93,6 +93,24 @@ export default function AdminPanelScreen() {
   const [ioReport, setIoReport] = useState<any>(null);
   const [attendanceDetail, setAttendanceDetail] = useState<any>(null);
 
+  // Bill (ledger entry) edit modal
+  const [billEditVisible, setBillEditVisible] = useState(false);
+  const [editingBillId, setEditingBillId] = useState<string | number | null>(null);
+  const [billCategory, setBillCategory] = useState('');
+  const [billDescription, setBillDescription] = useState('');
+  const [billAmount, setBillAmount] = useState('');
+  const [billPaymentMode, setBillPaymentMode] = useState<'Direct' | 'Indirect'>('Direct');
+  const [billDate, setBillDate] = useState(todayIso());
+
+  // Driver bills (diesel bills uploaded by drivers)
+  const [driverBills, setDriverBills] = useState<any[]>([]);
+  const [driverBillDetail, setDriverBillDetail] = useState<any>(null);
+  const [processingBillAction, setProcessingBillAction] = useState(false);
+
+  // Driver trip record edit modal
+  const [driverRecordEditVisible, setDriverRecordEditVisible] = useState(false);
+  const [editingDriverRecord, setEditingDriverRecord] = useState<any>(null);
+
   const [staffName, setStaffName] = useState('');
   const [staffUsername, setStaffUsername] = useState('');
   const [staffPassword, setStaffPassword] = useState('');
@@ -104,6 +122,7 @@ export default function AdminPanelScreen() {
 
   const [newSiteName, setNewSiteName] = useState('');
   const [newSiteLocation, setNewSiteLocation] = useState('');
+  const [editingSiteId, setEditingSiteId] = useState<string | number | null>(null);
   const [selectedSiteForAllocation, setSelectedSiteForAllocation] = useState<string | null>(null);
   const [selectedSupervisorForAllocation, setSelectedSupervisorForAllocation] = useState<string | null>(null);
 
@@ -114,6 +133,7 @@ export default function AdminPanelScreen() {
   const [leadStatus, setLeadStatus] = useState<Lead['status']>('Hot Lead');
   const [leadReportMode, setLeadReportMode] = useState<'DAY' | 'MONTH'>('DAY');
   const [leadReportDate, setLeadReportDate] = useState(todayIso());
+  const [editingLeadId, setEditingLeadId] = useState<string | number | null>(null);
 
   const supervisors = useMemo(() => staffList.filter((staff) => staff.role === 'Supervisor'), [staffList]);
   const dashboardStats = useMemo(() => {
@@ -167,12 +187,14 @@ export default function AdminPanelScreen() {
       if (tab === 'TEAM') setStaffList(await adminService.getStaff());
       if (tab === 'LEADS') setLeadsList(await adminService.getLeads());
       if (tab === 'REPORTS') {
-        const [sites, drivers] = await Promise.all([
+        const [sites, drivers, bills] = await Promise.all([
           adminService.getSites(),
           fieldService.getDriverRecords(),
+          fieldService.getDriverBills(),
         ]);
         setSitesList(sites);
         setDriverRecords(drivers);
+        setDriverBills(bills);
         const selectedSite = reportSiteId || sites[0]?.id || null;
         setReportSiteId(selectedSite);
         if (selectedSite) await fetchReportData(selectedSite);
@@ -302,6 +324,36 @@ export default function AdminPanelScreen() {
     }
   };
 
+  const handleStartEditSite = (site: Site) => {
+    setEditingSiteId(site.id);
+    setNewSiteName(site.name);
+    setNewSiteLocation(site.location);
+  };
+
+  const handleCancelEditSite = () => {
+    setEditingSiteId(null);
+    setNewSiteName('');
+    setNewSiteLocation('');
+  };
+
+  const handleSaveSiteChanges = async () => {
+    if (!editingSiteId || !newSiteName || !newSiteLocation) {
+      Alert.alert('Missing Details', 'Enter project site name and location.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await adminService.updateSite(editingSiteId, { name: newSiteName, location: newSiteLocation });
+      handleCancelEditSite();
+      await loadTab('PROJECTS');
+      Alert.alert('Success', 'Project site updated.');
+    } catch {
+      Alert.alert('Project Error', 'Unable to update project site.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteSite = (id: string) => {
     Alert.alert('Delete Project', 'Remove this project site?', [
       { text: 'Cancel', style: 'cancel' },
@@ -341,17 +393,50 @@ export default function AdminPanelScreen() {
     }
     setLoading(true);
     try {
-      await adminService.createLead({ name: leadName.trim(), phone: leadPhone.trim(), projectNeeded: leadProject, source: leadSource, status: leadStatus });
-      setLeadName('');
-      setLeadPhone('');
-      setLeadProject('');
-      setLeadSource('');
-      setLeadStatus('Hot Lead');
+      if (editingLeadId) {
+        await adminService.updateLead(editingLeadId, { name: leadName.trim(), phone: leadPhone.trim(), projectNeeded: leadProject, source: leadSource });
+        Alert.alert('Success', 'Lead updated.');
+      } else {
+        await adminService.createLead({ name: leadName.trim(), phone: leadPhone.trim(), projectNeeded: leadProject, source: leadSource, status: leadStatus });
+      }
+      handleCancelEditLead();
       await loadTab('LEADS');
     } catch {
-      Alert.alert('Lead Error', 'Unable to create lead.');
+      Alert.alert('Lead Error', editingLeadId ? 'Unable to update lead.' : 'Unable to create lead.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleStartEditLead = (lead: any) => {
+    setEditingLeadId(lead.id);
+    setLeadName(lead.name);
+    setLeadPhone(lead.phone || '');
+    setLeadProject(lead.project_needed || '');
+    setLeadSource(lead.source || '');
+  };
+
+  const handleCancelEditLead = () => {
+    setEditingLeadId(null);
+    setLeadName('');
+    setLeadPhone('');
+    setLeadProject('');
+    setLeadSource('');
+    setLeadStatus('Hot Lead');
+  };
+
+  const handleDeleteLead = (id: string) => {
+    const confirmDelete = async () => {
+      await adminService.deleteLead(id);
+      loadTab('LEADS');
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this lead?')) confirmDelete();
+    } else {
+      Alert.alert('Delete Lead', 'Remove this lead?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]);
     }
   };
 
@@ -489,6 +574,155 @@ export default function AdminPanelScreen() {
       await fetchReportData(siteId);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ---------- Bill (ledger entry) edit / delete ----------
+  const handleStartEditBill = (item: any) => {
+    setEditingBillId(item.id);
+    setBillCategory(item.category || '');
+    setBillDescription(item.description || '');
+    setBillAmount(item.amount?.toString() || '');
+    setBillPaymentMode(item.payment_mode === 'Indirect' ? 'Indirect' : 'Direct');
+    setBillDate((item.date || todayIso()).toString().split('T')[0]);
+    setBillEditVisible(true);
+  };
+
+  const handleSaveBillChanges = async () => {
+    if (!editingBillId || !billCategory || !billAmount) {
+      Alert.alert('Missing Details', 'Fill category and amount.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await fieldService.updateExpense(editingBillId, {
+        category: billCategory,
+        description: billDescription,
+        amount: parseFloat(billAmount),
+        paymentMode: billPaymentMode,
+        date: billDate,
+      });
+      setBillEditVisible(false);
+      setEditingBillId(null);
+      await fetchReportData(reportSiteId);
+      Alert.alert('Success', 'Bill updated.');
+    } catch {
+      Alert.alert('Bill Error', 'Unable to update this bill.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteBill = (id: string | number) => {
+    const confirmDelete = async () => {
+      await fieldService.deleteExpense(id);
+      await fetchReportData(reportSiteId);
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this bill entry?')) confirmDelete();
+    } else {
+      Alert.alert('Delete Bill', 'Remove this bill entry?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]);
+    }
+  };
+
+  // ---------- Driver diesel bills: download / share / delete ----------
+  const handleDownloadDriverBill = async (bill: any) => {
+    setProcessingBillAction(true);
+    try {
+      await downloadImage(bill.image_url, `diesel-bill-${bill.id}.jpg`);
+    } catch (error: any) {
+      Alert.alert('Download Error', error?.message || 'Unable to download the bill photo.');
+    } finally {
+      setProcessingBillAction(false);
+    }
+  };
+
+  const handleShareDriverBillWhatsApp = async (bill: any) => {
+    setProcessingBillAction(true);
+    try {
+      const caption = `Diesel Bill — ${bill.driver_name}${bill.vehicle_name ? ` (${bill.vehicle_name})` : ''}${bill.note ? `: ${bill.note}` : ''}`;
+      await shareImageOnWhatsApp(bill.image_url, `diesel-bill-${bill.id}.jpg`, caption);
+    } catch (error: any) {
+      Alert.alert('Share Error', error?.message || 'Unable to share the bill photo.');
+    } finally {
+      setProcessingBillAction(false);
+    }
+  };
+
+  const handleDeleteDriverBill = (id: string | number) => {
+    const confirmDelete = async () => {
+      await fieldService.deleteDriverBill(id);
+      setDriverBillDetail(null);
+      setDriverBills(await fieldService.getDriverBills());
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this diesel bill?')) confirmDelete();
+    } else {
+      Alert.alert('Delete Bill', 'Remove this diesel bill?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]);
+    }
+  };
+
+  // ---------- Driver trip record edit / delete ----------
+  const handleStartEditDriverRecord = (rec: any) => {
+    setEditingDriverRecord({
+      id: rec.id,
+      vehicleName: rec.vehicle_name || '',
+      driverName: rec.driver_name || '',
+      startingKm: rec.starting_km?.toString() || '',
+      endingKm: rec.ending_km?.toString() || '',
+      distance: rec.distance || '',
+      dieselFare: rec.diesel_fare?.toString() || '',
+      loadName: rec.load_name || '',
+      loadType: rec.load_type === 'Rent' ? 'Rent' : 'Own',
+      customerName: rec.customer_name || '',
+      place: rec.place || '',
+      loadWeight: rec.load_weight || '',
+      startingTime: rec.starting_time || '',
+      endingTime: rec.ending_time || '',
+      date: (rec.date || todayIso()).toString().split('T')[0],
+    });
+    setDriverRecordEditVisible(true);
+  };
+
+  const handleSaveDriverRecordChanges = async () => {
+    if (!editingDriverRecord) return;
+    const r = editingDriverRecord;
+    if (!r.vehicleName || !r.driverName || !r.startingKm || !r.endingKm) {
+      Alert.alert('Missing Details', 'Fill vehicle name, driver name, starting KM, and ending KM.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await fieldService.updateDriverRecord(r.id, r);
+      setDriverRecordEditVisible(false);
+      setEditingDriverRecord(null);
+      setDriverRecords(await fieldService.getDriverRecords());
+      Alert.alert('Success', 'Driver trip record updated.');
+    } catch {
+      Alert.alert('Record Error', 'Unable to update this trip record.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteDriverRecord = (id: string | number) => {
+    const confirmDelete = async () => {
+      await fieldService.deleteDriverRecord(id);
+      setDriverRecords(await fieldService.getDriverRecords());
+    };
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this trip record?')) confirmDelete();
+    } else {
+      Alert.alert('Delete Record', 'Remove this trip record?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]);
     }
   };
 
@@ -944,7 +1178,8 @@ export default function AdminPanelScreen() {
   );
 
   const renderAttendance = () => {
-    const workerCount = attendance?.workers?.length || 0;
+    const categoryList = attendance?.categories || [];
+    const workerCount = categoryList.reduce((s: number, c: any) => s + Number(c.present_count || 0) + Number(c.absent_count || 0), 0);
     const supervisorCount = attendance?.supervisors?.length || 0;
     return (
       <View>
@@ -971,7 +1206,7 @@ export default function AdminPanelScreen() {
               key={`supervisor-${item.id}`}
               icon="person-pin-circle"
               title={item.supervisor_name || 'Supervisor'}
-              subtitle={`${item.site_name || 'Unassigned Site'} / ${item.location_name || item.site_location || 'Location not recorded'}`}
+              subtitle={`${item.site_name || 'Unassigned Site'} / ${item.location_name || item.site_location || 'Location not recorded'}${item.created_at ? ` / ${new Date(item.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ''}`}
               status={item.status}
               imageUrl={item.selfie_url?.startsWith('http') ? item.selfie_url : undefined}
               latitude={item.latitude}
@@ -982,18 +1217,24 @@ export default function AdminPanelScreen() {
           {supervisorCount === 0 && <EmptyState text="No supervisor attendance for this date." />}
         </View>
 
-        <SectionTitle title="Worker Attendance" />
+        <SectionTitle title="Worker Attendance (by Category)" />
         <View style={styles.card}>
-          {(attendance?.workers || []).map((item: any) => (
-            <AttendanceRow
-              key={`worker-${item.id}`}
-              icon="engineering"
-              title={item.worker_name || 'Worker'}
-              subtitle={`${item.worker_role || 'Worker'} / ${item.site_name || 'Site not recorded'}`}
-              status={item.status}
-            />
+          {categoryList.map((item: any) => (
+            <View key={`category-${item.id}`} style={styles.attendanceRow}>
+              <View style={styles.listIcon}><MaterialIcons name="groups" size={22} color={COLORS.primary} /></View>
+              <View style={styles.listContent}>
+                <Text style={styles.rowTitle}>{item.category}</Text>
+                <Text style={styles.rowMeta}>{item.site_name || 'Site not recorded'}</Text>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={{ color: COLORS.success, fontWeight: '900', fontSize: 13 }}>{item.present_count || 0} Present</Text>
+                {Number(item.absent_count || 0) > 0 && (
+                  <Text style={{ color: COLORS.primary, fontWeight: '900', fontSize: 11, marginTop: 2 }}>{item.absent_count} Absent</Text>
+                )}
+              </View>
+            </View>
           ))}
-          {workerCount === 0 && <EmptyState text="No worker attendance for this date." />}
+          {categoryList.length === 0 && <EmptyState text="No worker attendance for this date." />}
         </View>
       </View>
     );
@@ -1005,10 +1246,24 @@ export default function AdminPanelScreen() {
       <Text style={styles.screenSubtitle}>Create sites and assign supervisors without leaving admin.</Text>
 
       <View style={styles.card}>
-        <Text style={styles.formTitle}>New Project Site</Text>
+        <Text style={styles.formTitle}>{editingSiteId ? 'Edit Project Site' : 'New Project Site'}</Text>
         <TextInput style={styles.input} placeholder="Project site name" value={newSiteName} onChangeText={setNewSiteName} placeholderTextColor={COLORS.textLight} />
         <TextInput style={styles.input} placeholder="Location / address" value={newSiteLocation} onChangeText={setNewSiteLocation} placeholderTextColor={COLORS.textLight} />
-        <PrimaryButton label="Create Project" icon="add-business" onPress={handleAddSite} />
+        {editingSiteId ? (
+          <View style={{ flexDirection: 'row', gap: SPACING.md }}>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton label="Save Changes" icon="check" onPress={handleSaveSiteChanges} />
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: COLORS.textLight, borderRadius: BORDER_RADIUS.md, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flex: 1 }}
+              onPress={handleCancelEditSite}
+            >
+              <Text style={{ color: COLORS.white, fontWeight: '800' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <PrimaryButton label="Create Project" icon="add-business" onPress={handleAddSite} />
+        )}
       </View>
 
       <View style={styles.card}>
@@ -1027,6 +1282,9 @@ export default function AdminPanelScreen() {
             <Text style={styles.rowMeta}>{site.location}</Text>
             <Text style={styles.assignmentText}>{site.supervisor_name ? `Supervisor: ${site.supervisor_name}` : 'Supervisor not assigned'}</Text>
           </View>
+          <TouchableOpacity style={[styles.iconButton, { marginRight: 8 }]} onPress={() => handleStartEditSite(site)}>
+            <MaterialIcons name="edit" size={22} color={COLORS.success} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.iconButton} onPress={() => handleDeleteSite(site.id)}>
             <MaterialIcons name="delete-outline" size={22} color={COLORS.primary} />
           </TouchableOpacity>
@@ -1143,7 +1401,7 @@ export default function AdminPanelScreen() {
       <Text style={styles.screenSubtitle}>Track enquiry flow from lead to converted client.</Text>
 
       <View style={styles.card}>
-        <Text style={styles.formTitle}>Register Lead</Text>
+        <Text style={styles.formTitle}>{editingLeadId ? 'Edit Lead' : 'Register Lead'}</Text>
         <TextInput style={styles.input} placeholder="Client / lead name" value={leadName} onChangeText={setLeadName} placeholderTextColor={COLORS.textLight} />
         <TextInput style={styles.input} placeholder="Phone number" value={leadPhone} onChangeText={setLeadPhone} placeholderTextColor={COLORS.textLight} keyboardType="phone-pad" />
         <Text style={styles.fieldCaption}>PROJECT REQUIREMENT</Text>
@@ -1153,12 +1411,28 @@ export default function AdminPanelScreen() {
           onChange={setLeadProject}
         />
         <TextInput style={styles.input} placeholder="Lead source" value={leadSource} onChangeText={setLeadSource} placeholderTextColor={COLORS.textLight} />
-        <ChipSelect
-          items={(['Hot Lead', 'In Discussion', 'Converted Client'] as Lead['status'][]).map((status) => ({ id: status, label: status }))}
-          value={leadStatus}
-          onChange={(status) => setLeadStatus(status as Lead['status'])}
-        />
-        <PrimaryButton label="Register Lead" icon="add" onPress={handleAddLead} />
+        {!editingLeadId && (
+          <ChipSelect
+            items={(['Hot Lead', 'In Discussion', 'Converted Client'] as Lead['status'][]).map((status) => ({ id: status, label: status }))}
+            value={leadStatus}
+            onChange={(status) => setLeadStatus(status as Lead['status'])}
+          />
+        )}
+        {editingLeadId ? (
+          <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.xs }}>
+            <View style={{ flex: 1 }}>
+              <PrimaryButton label="Save Changes" icon="check" onPress={handleAddLead} />
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: COLORS.textLight, borderRadius: BORDER_RADIUS.md, paddingVertical: 14, alignItems: 'center', justifyContent: 'center', flex: 1 }}
+              onPress={handleCancelEditLead}
+            >
+              <Text style={{ color: COLORS.white, fontWeight: '800' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <PrimaryButton label="Register Lead" icon="add" onPress={handleAddLead} />
+        )}
       </View>
 
       {/* Leads report: pick a day or a month, download as PDF or Excel */}
@@ -1211,11 +1485,19 @@ export default function AdminPanelScreen() {
                       {lead.phone ? `📞 ${lead.phone} • ` : ''}Source: {lead.source}{lead.created_at ? ` • ${new Date(lead.created_at).toLocaleDateString('en-IN')}` : ''}
                     </Text>
                   </View>
-                  {lead.phone ? (
-                    <TouchableOpacity style={styles.callButton} onPress={() => Linking.openURL(`tel:${lead.phone}`)}>
-                      <MaterialIcons name="call" size={20} color={COLORS.white} />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    {lead.phone ? (
+                      <TouchableOpacity style={styles.callButton} onPress={() => Linking.openURL(`tel:${lead.phone}`)}>
+                        <MaterialIcons name="call" size={20} color={COLORS.white} />
+                      </TouchableOpacity>
+                    ) : null}
+                    <TouchableOpacity style={styles.iconButton} onPress={() => handleStartEditLead(lead)}>
+                      <MaterialIcons name="edit" size={20} color={COLORS.success} />
                     </TouchableOpacity>
-                  ) : null}
+                    <TouchableOpacity style={styles.iconButton} onPress={() => handleDeleteLead(lead.id)}>
+                      <MaterialIcons name="delete-outline" size={20} color={COLORS.primary} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 <ChipSelect
                   items={(['Hot Lead', 'In Discussion', 'Converted Client'] as Lead['status'][]).map((status) => ({ id: status, label: status }))}
@@ -1284,10 +1566,10 @@ export default function AdminPanelScreen() {
         </View>
 
         <SectionTitle title={`💵 Direct Cash Bills (${direct.length})`} />
-        <LedgerList data={direct} empty="No direct cash bills recorded for this site." />
+        <LedgerList data={direct} empty="No direct cash bills recorded for this site." onEdit={handleStartEditBill} onDelete={handleDeleteBill} />
 
         <SectionTitle title={`💳 Indirect / Credit Bills (${credit.length})`} />
-        <LedgerList data={credit} empty="No indirect credit bills recorded for this site." />
+        <LedgerList data={credit} empty="No indirect credit bills recorded for this site." onEdit={handleStartEditBill} onDelete={handleDeleteBill} />
       </View>
     );
   };
@@ -1365,9 +1647,37 @@ export default function AdminPanelScreen() {
               </View>
               <Text style={styles.rowAmount}>Rs {Number(rec.diesel_fare || 0).toLocaleString()}</Text>
             </View>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+              <TouchableOpacity style={styles.iconButtonSmall} onPress={() => handleStartEditDriverRecord(rec)}>
+                <MaterialIcons name="edit" size={18} color={COLORS.success} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconButtonSmall} onPress={() => handleDeleteDriverRecord(rec.id)}>
+                <MaterialIcons name="delete-outline" size={18} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
           </View>
         ))}
         {driverRecords.length === 0 && <EmptyState text="No driver trip records yet." />}
+      </View>
+
+      <SectionTitle title={`Diesel Bills Uploaded by Drivers (${driverBills.length})`} />
+      <View style={styles.card}>
+        {driverBills.map((bill: any) => (
+          <TouchableOpacity key={bill.id} style={styles.ledgerCard} onPress={() => setDriverBillDetail(bill)} activeOpacity={0.7}>
+            <View style={styles.pipelineHeader}>
+              {bill.image_url?.startsWith('http') && (
+                <Image source={{ uri: bill.image_url }} style={styles.thumb} />
+              )}
+              <View style={{ flex: 1, marginLeft: bill.image_url?.startsWith('http') ? 10 : 0 }}>
+                <Text style={styles.rowTitle}>{bill.driver_name}{bill.vehicle_name ? ` — ${bill.vehicle_name}` : ''}</Text>
+                <Text style={styles.rowMeta}>{bill.note || 'No note'}</Text>
+                <Text style={styles.assignmentText}>{new Date(bill.date).toLocaleDateString('en-IN')}</Text>
+              </View>
+              {bill.amount ? <Text style={styles.rowAmount}>Rs {Number(bill.amount).toLocaleString()}</Text> : null}
+            </View>
+          </TouchableOpacity>
+        ))}
+        {driverBills.length === 0 && <EmptyState text="No diesel bills uploaded by drivers yet." />}
       </View>
     </View>
   );
@@ -1518,6 +1828,7 @@ export default function AdminPanelScreen() {
                     <Text style={styles.detailName}>{attendanceDetail.supervisor_name || 'Supervisor'}</Text>
                     <Text style={styles.detailMeta}>
                       {attendanceDetail.site_name || 'Site'} • {new Date(attendanceDetail.date).toLocaleDateString('en-IN')}
+                      {attendanceDetail.created_at ? ` • ${new Date(attendanceDetail.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}` : ''}
                     </Text>
                   </View>
                   <StatusPill status={attendanceDetail.status || 'Present'} />
@@ -1561,6 +1872,120 @@ export default function AdminPanelScreen() {
               </>
             )}
           </View>
+        </View>
+      </Modal>
+
+      {/* Edit a material/petty-cash bill */}
+      <Modal visible={billEditVisible} transparent animationType="slide" onRequestClose={() => setBillEditVisible(false)}>
+        <View style={styles.detailBackdrop}>
+          <View style={styles.detailSheet}>
+            <View style={styles.detailHandle} />
+            <Text style={styles.detailName}>Edit Bill</Text>
+            <TextInput style={[styles.input, { marginTop: SPACING.md }]} placeholder="Category" value={billCategory} onChangeText={setBillCategory} placeholderTextColor={COLORS.textLight} />
+            <TextInput style={styles.input} placeholder="Description" value={billDescription} onChangeText={setBillDescription} placeholderTextColor={COLORS.textLight} />
+            <TextInput style={styles.input} placeholder="Amount" keyboardType="numeric" value={billAmount} onChangeText={setBillAmount} placeholderTextColor={COLORS.textLight} />
+            <ChipSelect
+              items={[{ id: 'Direct', label: 'Direct (Cash)' }, { id: 'Indirect', label: 'Indirect (Credit)' }]}
+              value={billPaymentMode}
+              onChange={(v) => setBillPaymentMode(v as 'Direct' | 'Indirect')}
+            />
+            <DatePickerField value={billDate} onChange={setBillDate} placeholder="Bill date" />
+            <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.md }}>
+              <TouchableOpacity style={[styles.detailCloseButton, { flex: 1 }]} onPress={() => setBillEditVisible(false)}>
+                <Text style={styles.detailCloseButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <View style={{ flex: 1 }}>
+                <PrimaryButton label="Save Changes" icon="check" onPress={handleSaveBillChanges} />
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Driver diesel bill detail: full photo + download / WhatsApp / delete */}
+      <Modal visible={!!driverBillDetail} transparent animationType="slide" onRequestClose={() => setDriverBillDetail(null)}>
+        <View style={styles.detailBackdrop}>
+          <View style={styles.detailSheet}>
+            <View style={styles.detailHandle} />
+            {driverBillDetail && (
+              <>
+                <Text style={styles.detailName}>{driverBillDetail.driver_name}{driverBillDetail.vehicle_name ? ` — ${driverBillDetail.vehicle_name}` : ''}</Text>
+                <Text style={styles.detailMeta}>{new Date(driverBillDetail.date).toLocaleDateString('en-IN')}{driverBillDetail.amount ? ` • Rs ${Number(driverBillDetail.amount).toLocaleString()}` : ''}</Text>
+                {driverBillDetail.note ? <Text style={[styles.detailMeta, { marginTop: 4 }]}>{driverBillDetail.note}</Text> : null}
+
+                {driverBillDetail.image_url?.startsWith('http') && (
+                  <Image source={{ uri: driverBillDetail.image_url }} style={[styles.detailPhoto, { marginTop: SPACING.md }]} resizeMode="cover" />
+                )}
+
+                <View style={styles.pdfActionsRow}>
+                  <TouchableOpacity style={[styles.pdfButton, processingBillAction && { opacity: 0.6 }]} onPress={() => handleDownloadDriverBill(driverBillDetail)} disabled={processingBillAction}>
+                    {processingBillAction ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="download" size={18} color={COLORS.white} />}
+                    <Text style={styles.pdfButtonText}>Download</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, processingBillAction && { opacity: 0.6 }]} onPress={() => handleShareDriverBillWhatsApp(driverBillDetail)} disabled={processingBillAction}>
+                    <MaterialIcons name="share" size={18} color={COLORS.white} />
+                    <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.sm }}>
+                  <TouchableOpacity style={[styles.detailCloseButton, { flex: 1 }]} onPress={() => setDriverBillDetail(null)}>
+                    <Text style={styles.detailCloseButtonText}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={{ flex: 1, backgroundColor: COLORS.primary, borderRadius: BORDER_RADIUS.md, alignItems: 'center', justifyContent: 'center' }} onPress={() => handleDeleteDriverBill(driverBillDetail.id)}>
+                    <Text style={{ color: COLORS.white, fontWeight: '900' }}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit a driver trip record */}
+      <Modal visible={driverRecordEditVisible} transparent animationType="slide" onRequestClose={() => setDriverRecordEditVisible(false)}>
+        <View style={styles.detailBackdrop}>
+          <ScrollView style={styles.detailSheet}>
+            <View style={styles.detailHandle} />
+            <Text style={styles.detailName}>Edit Trip Record</Text>
+            {editingDriverRecord && (
+              <>
+                <TextInput style={[styles.input, { marginTop: SPACING.md }]} placeholder="Vehicle name" value={editingDriverRecord.vehicleName} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, vehicleName: v })} placeholderTextColor={COLORS.textLight} />
+                <TextInput style={styles.input} placeholder="Driver name" value={editingDriverRecord.driverName} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, driverName: v })} placeholderTextColor={COLORS.textLight} />
+                <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+                  <TextInput style={[styles.input, { flex: 1 }]} placeholder="Starting KM" keyboardType="numeric" value={editingDriverRecord.startingKm} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, startingKm: v })} placeholderTextColor={COLORS.textLight} />
+                  <TextInput style={[styles.input, { flex: 1 }]} placeholder="Ending KM" keyboardType="numeric" value={editingDriverRecord.endingKm} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, endingKm: v })} placeholderTextColor={COLORS.textLight} />
+                </View>
+                <TextInput style={styles.input} placeholder="Distance" value={editingDriverRecord.distance} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, distance: v })} placeholderTextColor={COLORS.textLight} />
+                <TextInput style={styles.input} placeholder="Diesel fare" keyboardType="numeric" value={editingDriverRecord.dieselFare} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, dieselFare: v })} placeholderTextColor={COLORS.textLight} />
+                <TextInput style={styles.input} placeholder="Load name" value={editingDriverRecord.loadName} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, loadName: v })} placeholderTextColor={COLORS.textLight} />
+                <ChipSelect
+                  items={[{ id: 'Own', label: 'Own' }, { id: 'Rent', label: 'Rent' }]}
+                  value={editingDriverRecord.loadType}
+                  onChange={(v) => setEditingDriverRecord({ ...editingDriverRecord, loadType: v })}
+                />
+                {editingDriverRecord.loadType === 'Rent' && (
+                  <TextInput style={styles.input} placeholder="Customer name" value={editingDriverRecord.customerName} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, customerName: v })} placeholderTextColor={COLORS.textLight} />
+                )}
+                <TextInput style={styles.input} placeholder="Place" value={editingDriverRecord.place} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, place: v })} placeholderTextColor={COLORS.textLight} />
+                <TextInput style={styles.input} placeholder="Load weight" value={editingDriverRecord.loadWeight} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, loadWeight: v })} placeholderTextColor={COLORS.textLight} />
+                <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
+                  <TextInput style={[styles.input, { flex: 1 }]} placeholder="Starting time" value={editingDriverRecord.startingTime} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, startingTime: v })} placeholderTextColor={COLORS.textLight} />
+                  <TextInput style={[styles.input, { flex: 1 }]} placeholder="Ending time" value={editingDriverRecord.endingTime} onChangeText={(v) => setEditingDriverRecord({ ...editingDriverRecord, endingTime: v })} placeholderTextColor={COLORS.textLight} />
+                </View>
+                <DatePickerField value={editingDriverRecord.date} onChange={(v) => setEditingDriverRecord({ ...editingDriverRecord, date: v })} placeholder="Trip date" />
+
+                <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.md, marginBottom: SPACING.lg }}>
+                  <TouchableOpacity style={[styles.detailCloseButton, { flex: 1 }]} onPress={() => setDriverRecordEditVisible(false)}>
+                    <Text style={styles.detailCloseButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <PrimaryButton label="Save Changes" icon="check" onPress={handleSaveDriverRecordChanges} />
+                  </View>
+                </View>
+              </>
+            )}
+          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -1645,7 +2070,7 @@ function EmptyState({ text }: { text: string }) {
   return <Text style={styles.emptyText}>{text}</Text>;
 }
 
-function LedgerList({ data, empty }: { data: any[]; empty: string }) {
+function LedgerList({ data, empty, onEdit, onDelete }: { data: any[]; empty: string; onEdit: (item: any) => void; onDelete: (id: any) => void }) {
   return (
     <View style={styles.card}>
       {data.map((item) => {
@@ -1668,6 +2093,14 @@ function LedgerList({ data, empty }: { data: any[]; empty: string }) {
                 {images.map((uri) => <Image key={uri} source={{ uri }} style={styles.thumb} />)}
               </View>
             )}
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, justifyContent: 'flex-end' }}>
+              <TouchableOpacity style={styles.iconButtonSmall} onPress={() => onEdit(item)}>
+                <MaterialIcons name="edit" size={18} color={COLORS.success} />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.iconButtonSmall} onPress={() => onDelete(item.id)}>
+                <MaterialIcons name="delete-outline" size={18} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
           </View>
         );
       })}
@@ -1927,6 +2360,14 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.steel,
+  },
+  iconButtonSmall: {
+    width: 30,
+    height: 30,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.steel,

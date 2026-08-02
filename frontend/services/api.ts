@@ -211,15 +211,29 @@ export const adminService = {
       method: 'POST',
       body: JSON.stringify(lead),
     }),
+  updateLead: (id: string | number, lead: Record<string, any>) =>
+    request<ApiResponse>(`/leads/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(lead),
+    }),
   updateLeadStatus: (id: string | number, status: string) =>
     request<ApiResponse>(`/leads/${id}/status`, {
       method: 'PUT',
       body: JSON.stringify({ status }),
     }),
+  deleteLead: (id: string | number) =>
+    request<ApiResponse>(`/leads/${id}`, {
+      method: 'DELETE',
+    }),
   getSites: () => request<any[]>('/sites'),
   createSite: (site: Record<string, any>) =>
     request<ApiResponse>('/sites', {
       method: 'POST',
+      body: JSON.stringify(site),
+    }),
+  updateSite: (id: string | number, site: Record<string, any>) =>
+    request<ApiResponse>(`/sites/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(site),
     }),
   deleteSite: (id: string | number) =>
@@ -277,6 +291,10 @@ export const accountsService = {
   getPeriods: () => request<{ months: string[]; years: string[] }>('/accounts/periods'),
   getReport: (type: 'monthly' | 'yearly', period: string) =>
     request<any>(`/accounts/report?type=${type}&period=${encodeURIComponent(period)}`),
+  deleteTransaction: (id: string | number) =>
+    request<ApiResponse>(`/accounts/transactions/${id}`, {
+      method: 'DELETE',
+    }),
 };
 
 // Uploads a local photo (file:// or blob uri) to the backend and returns its public URL.
@@ -323,6 +341,15 @@ export const fieldService = {
     }),
   getLedgerBySite: (siteId: string | number, date?: string) =>
     request<any[]>(`/expenses/site/${siteId}${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+  updateExpense: (id: string | number, expense: Record<string, any>) =>
+    request<ApiResponse>(`/expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(expense),
+    }),
+  deleteExpense: (id: string | number) =>
+    request<ApiResponse>(`/expenses/${id}`, {
+      method: 'DELETE',
+    }),
   getSupervisorWallet: (userId: string | number) => request<any>(`/wallet/${userId}`),
   getSupervisorSites: (userId: string | number) => request<any[]>(`/supervisor-sites/${userId}`),
   submitAttendance: (attendance: Record<string, any>) =>
@@ -332,6 +359,13 @@ export const fieldService = {
     }),
   getAttendanceBySite: (siteId: string | number, date: string) =>
     request<any[]>(`/attendance/site/${siteId}?date=${encodeURIComponent(date)}`),
+  submitAttendanceCategory: (payload: Record<string, any>) =>
+    request<ApiResponse>('/attendance/category', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getAttendanceCategoryBySite: (siteId: string | number, date: string) =>
+    request<any[]>(`/attendance/category/site/${siteId}?date=${encodeURIComponent(date)}`),
   submitSupervisorAttendance: (attendance: Record<string, any>) =>
     request<ApiResponse>('/supervisor-attendance', {
       method: 'POST',
@@ -355,4 +389,29 @@ export const fieldService = {
     const qs = params.toString();
     return request<any[]>(`/driver-records${qs ? `?${qs}` : ''}`);
   },
+  updateDriverRecord: (id: string | number, record: Record<string, any>) =>
+    request<ApiResponse>(`/driver-records/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(record),
+    }),
+  deleteDriverRecord: (id: string | number) =>
+    request<ApiResponse>(`/driver-records/${id}`, {
+      method: 'DELETE',
+    }),
+  saveDriverBill: (bill: Record<string, any>) =>
+    request<ApiResponse>('/driver-bills', {
+      method: 'POST',
+      body: JSON.stringify(bill),
+    }),
+  getDriverBills: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const qs = params.toString();
+    return request<any[]>(`/driver-bills${qs ? `?${qs}` : ''}`);
+  },
+  deleteDriverBill: (id: string | number) =>
+    request<ApiResponse>(`/driver-bills/${id}`, {
+      method: 'DELETE',
+    }),
 };

@@ -34,22 +34,6 @@ export default function ActionsScreen() {
       roles: ['Admin', 'Supervisor', 'Site Engineer'],
     },
     {
-      title: 'Attendance',
-      subtitle: 'Daily staff count',
-      icon: 'how-to-reg',
-      route: '/attendance?tab=worker',
-      color: COLORS.success,
-      roles: ['Admin', 'Supervisor', 'Site Engineer'],
-    },
-    {
-      title: 'Supervisor Clock-In',
-      subtitle: 'Selfie & Site Check-in',
-      icon: 'add-a-photo',
-      route: '/attendance?tab=supervisor',
-      color: COLORS.accent,
-      roles: ['Admin', 'Supervisor', 'Site Engineer'],
-    },
-    {
       title: 'Daily Expense',
       subtitle: 'Petty cash log',
       icon: 'payments',

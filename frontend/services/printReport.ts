@@ -34,6 +34,51 @@ export const csvCell = (value: any) => {
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 };
 
+// Downloads a remote image (e.g. a driver's diesel bill photo) to the device.
+// Web: forces a browser file download. Native: saves to cache and opens the
+// share sheet, which includes a "Save Image" option on both iOS and Android.
+export const downloadImage = async (url: string, filename: string) => {
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(url)).blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+    return;
+  }
+
+  const FileSystem = await import('expo-file-system/legacy');
+  const Sharing = await import('expo-sharing');
+  const localUri = `${FileSystem.cacheDirectory}${filename}`;
+  await FileSystem.downloadAsync(url, localUri);
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(localUri, { mimeType: 'image/jpeg', dialogTitle: `Save ${filename}` });
+  }
+};
+
+// Shares a remote image. Web browsers cannot attach a binary file to WhatsApp
+// from JS, so we send the image's link as WhatsApp text instead; native opens
+// the OS share sheet with the actual image (pick WhatsApp there directly).
+export const shareImageOnWhatsApp = async (url: string, filename: string, caption?: string) => {
+  if (Platform.OS === 'web') {
+    const text = `${caption ? caption + '\n' : ''}${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    return;
+  }
+
+  const FileSystem = await import('expo-file-system/legacy');
+  const Sharing = await import('expo-sharing');
+  const localUri = `${FileSystem.cacheDirectory}${filename}`;
+  await FileSystem.downloadAsync(url, localUri);
+  if (await Sharing.isAvailableAsync()) {
+    await Sharing.shareAsync(localUri, { mimeType: 'image/jpeg', dialogTitle: 'Share on WhatsApp' });
+  }
+};
+
 // Web-only PDF generation and download using html2pdf.js CDN
 export const printHtmlOnWeb = (html: string, filename: string = 'report.pdf') =>
   new Promise<void>((resolve) => {
