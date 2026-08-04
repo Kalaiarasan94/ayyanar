@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
   Platform,
   StyleSheet,
@@ -12,11 +11,9 @@ import {
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
 import { accountsService, adminService, fieldService } from '../services/api';
-import { printHtmlOnWeb } from '../services/printReport';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 import DatePickerField from './DatePickerField';
 
@@ -300,142 +297,72 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
   // Full account report: Input | Output | Balance summary, then detailed
   // Input section (who gave, method, reason) and Output section (paid to whom, method, reason)
-  const buildAccountReportHtml = (inTxns: any[], outTxns: any[]) => {
+  const buildAccountPdfDoc = (inTxns: any[], outTxns: any[]) => {
     const totalIn = inTxns.reduce((s, t) => s + Number(t.amount), 0);
     const totalOut = outTxns.reduce((s, t) => s + Number(t.amount), 0);
     const balance = totalIn - totalOut;
 
-    const detailTableIn = (title: string, txns: any[], total: number) => `
-      <h3 style="color:#15803D;">${title} (${txns.length} entries)</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Date</th>
-            <th>From Whom</th>
-            <th>Name</th>
-            <th>Mode of Transfer</th>
-            <th>Note / Description</th>
-            <th class="r">Amount (Rs)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${txns.length ? txns.map((t: any, index: number) => `
-            <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-              <td>${index + 1}</td>
-              <td>${dateLabel(t.date)}</td>
-              <td>${t.category}</td>
-              <td><b>${t.party_name || '-'}</b></td>
-              <td>${t.payment_method || 'Cash'}</td>
-              <td>${t.description || '-'}</td>
-              <td style="text-align:right; color:#15803D; font-weight:bold;">${Number(t.amount).toLocaleString('en-IN')}</td>
-            </tr>
-          `).join('') : '<tr><td colspan="7" style="text-align:center; color:#64748B;">No entries in this period</td></tr>'}
-          <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-            <td colspan="6">TOTAL INPUT</td>
-            <td style="text-align:right;">${total.toLocaleString('en-IN')}</td>
-          </tr>
-        </tbody>
-      </table>`;
+    return buildPdfReport({
+      filename: `${heading.replace(/\s+/g, '_')}_Report.pdf`,
+      title: heading,
+      subtitle: rangeTitle,
+      summaryBoxes: [
+        { label: 'Input (Received)', value: rupees(totalIn), color: '#15803D' },
+        { label: 'Output (Paid)', value: rupees(totalOut), color: '#E21A12' },
+        { label: 'Balance', value: rupees(balance) },
+      ],
+      tables: [
+        {
+          title: `INPUT — Money Received (${inTxns.length} entries)`,
+          head: ['#', 'Date', 'From Whom', 'Name', 'Mode', 'Note', 'Amount (Rs)'],
+          body: inTxns.map((t: any, i: number) => [
+            i + 1,
+            dateLabel(t.date),
+            t.category,
+            t.party_name || '-',
+            t.payment_method || 'Cash',
+            t.description || '-',
+            Number(t.amount).toLocaleString('en-IN'),
+          ]),
+          foot: ['', '', '', '', '', 'TOTAL INPUT', totalIn.toLocaleString('en-IN')],
+          columnStyles: { 6: { halign: 'right' } },
+        },
+        {
+          title: `OUTPUT — Money Paid (${outTxns.length} entries)`,
+          head: ['#', 'Date', 'To Whom', 'Name', 'Mode', 'Note', 'Amount (Rs)', 'Balance (Rs)'],
+          body: outTxns.map((t: any, i: number) => [
+            i + 1,
+            dateLabel(t.date),
+            t.category,
+            t.party_name || '-',
+            t.payment_method || 'Cash',
+            t.description || '-',
+            Number(t.amount).toLocaleString('en-IN'),
+            Number(t.runningBalance).toLocaleString('en-IN'),
+          ]),
+          foot: ['', '', '', '', '', 'TOTAL OUTPUT', totalOut.toLocaleString('en-IN'), ''],
+          columnStyles: { 6: { halign: 'right' }, 7: { halign: 'right' } },
+        },
+      ],
+    });
+  };
 
-    const detailTableOut = (title: string, txns: any[], total: number) => `
-      <h3 style="color:#E21A12;">${title} (${txns.length} entries)</h3>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Date</th>
-            <th>To Whom</th>
-            <th>Name</th>
-            <th>Mode of Payment</th>
-            <th>Notes</th>
-            <th class="r">Amount (Rs)</th>
-            <th class="r">Balance (Rs)</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${txns.length ? txns.map((t: any, index: number) => `
-            <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-              <td>${index + 1}</td>
-              <td>${dateLabel(t.date)}</td>
-              <td>${t.category}</td>
-              <td><b>${t.party_name || '-'}</b></td>
-              <td>${t.payment_method || 'Cash'}</td>
-              <td>${t.description || '-'}</td>
-              <td style="text-align:right; color:#E21A12; font-weight:bold;">${Number(t.amount).toLocaleString('en-IN')}</td>
-              <td style="text-align:right; font-weight:bold;">${Number(t.runningBalance).toLocaleString('en-IN')}</td>
-            </tr>
-          `).join('') : '<tr><td colspan="8" style="text-align:center; color:#64748B;">No entries in this period</td></tr>'}
-          <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-            <td colspan="6">TOTAL OUTPUT</td>
-            <td style="text-align:right;">${total.toLocaleString('en-IN')}</td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>`;
-
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
-            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            h3 { font-size: 13px; margin: 20px 0 8px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
-            .boxes { display: flex; gap: 10px; margin-bottom: 6px; }
-            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
-            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
-            .box .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
-            table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
-            th.r { text-align: right; }
-            td { padding: 6px; border-bottom: 1px solid #E2E8F0; }
-          </style>
-        </head>
-        <body>
-          <h1>Ayyanar Construction — ${heading}</h1>
-          <div class="sub">${rangeTitle} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
-
-          <div class="boxes">
-            <div class="box"><div class="label">Input (Received)</div><div class="value" style="color:#15803D;">${rupees(totalIn)}</div></div>
-            <div class="box"><div class="label">Output (Paid)</div><div class="value" style="color:#E21A12;">${rupees(totalOut)}</div></div>
-            <div class="box"><div class="label">Balance</div><div class="value">${rupees(balance)}</div></div>
-          </div>
-
-          ${detailTableIn('INPUT — Money Received', inTxns, totalIn)}
-          ${detailTableOut('OUTPUT — Money Paid', outTxns, totalOut)}
-        </body>
-      </html>`;
+  const getReportTxns = async () => {
+    const allTxnsWithBalance = await getTransactionsWithBalance(appliedRange);
+    const inTxns = allTxnsWithBalance.filter((t) => t.flow === 'IN' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
+    const outTxns = allTxnsWithBalance.filter((t) => t.flow === 'OUT' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
+    return { inTxns, outTxns };
   };
 
   const handleDownloadReport = async () => {
     setGeneratingPdf(true);
     try {
-      const allTxnsWithBalance = await getTransactionsWithBalance(appliedRange);
-      
-      const inTxns = allTxnsWithBalance.filter(t => t.flow === 'IN' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
-      const outTxns = allTxnsWithBalance.filter(t => t.flow === 'OUT' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
-      
+      const { inTxns, outTxns } = await getReportTxns();
       if (inTxns.length === 0 && outTxns.length === 0) {
         Alert.alert('No Data', 'There are no transactions in the selected date range.');
         return;
       }
-      
-      if (Platform.OS === 'web') {
-        await printHtmlOnWeb(buildAccountReportHtml(inTxns, outTxns), `${heading.replace(/\s+/g, '_')}_Report.pdf`);
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildAccountReportHtml(inTxns, outTxns) });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: `${heading} — Report`,
-        });
-      } else {
-        Alert.alert('Saved', `PDF generated at:\n${uri}`);
-      }
+      await downloadPdfReport(await buildAccountPdfDoc(inTxns, outTxns));
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate the report.');
     } finally {
@@ -446,42 +373,20 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const handleShareWhatsApp = async () => {
     setGeneratingPdf(true);
     try {
-      const allTxnsWithBalance = await getTransactionsWithBalance(appliedRange);
-      
-      const inTxns = allTxnsWithBalance.filter(t => t.flow === 'IN' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
-      const outTxns = allTxnsWithBalance.filter(t => t.flow === 'OUT' && (!appliedRange.from || t.date >= appliedRange.from)).reverse();
-      
+      const { inTxns, outTxns } = await getReportTxns();
       if (inTxns.length === 0 && outTxns.length === 0) {
         Alert.alert('No Data', 'There are no transactions in the selected date range.');
         return;
       }
-      
-      const htmlContent = buildAccountReportHtml(inTxns, outTxns);
-      
-      if (Platform.OS === 'web') {
-        const totalIn = inTxns.reduce((s, t) => s + Number(t.amount), 0);
-        const totalOut = outTxns.reduce((s, t) => s + Number(t.amount), 0);
-        const balance = totalIn - totalOut;
-        const text =
-          `*Ayyanar Construction - ${heading}*\n` +
-          `Period: ${rangeTitle}\n` +
-          `Total Input: ${rupees(totalIn)}\n` +
-          `Total Output: ${rupees(totalOut)}\n` +
-          `Balance: ${rupees(balance)}`;
-        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
-        return;
-      }
-      
-      const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: `Share ${heading} PDF`,
-        });
-      } else {
-        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
-      }
+      const totalIn = inTxns.reduce((s, t) => s + Number(t.amount), 0);
+      const totalOut = outTxns.reduce((s, t) => s + Number(t.amount), 0);
+      const summary =
+        `*Ayyanar Construction - ${heading}*\n` +
+        `Period: ${rangeTitle}\n` +
+        `Total Input: ${rupees(totalIn)}\n` +
+        `Total Output: ${rupees(totalOut)}\n` +
+        `Balance: ${rupees(totalIn - totalOut)}`;
+      await sharePdfReportOnWhatsApp(await buildAccountPdfDoc(inTxns, outTxns), summary);
     } catch (error: any) {
       Alert.alert('Share Error', error?.message || 'Unable to share the report.');
     } finally {

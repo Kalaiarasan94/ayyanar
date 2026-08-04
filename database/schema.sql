@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS driver_records (
 -- Role Accounts table (money in/out ledgers for Admin, Supervisor and Owner)
 CREATE TABLE IF NOT EXISTS account_transactions (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    linked_id INT NULL,
     role ENUM('Admin', 'Supervisor', 'Owner') NOT NULL,
     user_id INT NULL,
     flow ENUM('IN', 'OUT') NOT NULL,
@@ -117,6 +118,64 @@ CREATE TABLE IF NOT EXISTS site_allocations (
     UNIQUE KEY (user_id, site_id),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
+);
+
+-- Supervisor selfie clock-in attendance (Present/Absent + GPS + photo)
+CREATE TABLE IF NOT EXISTS supervisor_attendance (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    site_id INT NOT NULL,
+    date DATE NOT NULL,
+    status ENUM('Present', 'Absent') DEFAULT 'Present',
+    selfie_url TEXT NULL,
+    latitude DECIMAL(10, 8) NULL,
+    longitude DECIMAL(11, 8) NULL,
+    location_name VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    UNIQUE KEY (user_id, site_id, date)
+);
+
+-- Site progress photos uploaded by supervisors (with GPS)
+CREATE TABLE IF NOT EXISTS site_photos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    site_id INT NOT NULL,
+    user_id INT NOT NULL,
+    image_url TEXT NOT NULL,
+    latitude DECIMAL(10, 8) NULL,
+    longitude DECIMAL(11, 8) NULL,
+    location_name VARCHAR(255) NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Diesel / fuel bills uploaded by drivers (photo + note + amount)
+CREATE TABLE IF NOT EXISTS driver_bills (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NULL,
+    driver_name VARCHAR(120) NOT NULL,
+    vehicle_name VARCHAR(120) NULL,
+    note TEXT NULL,
+    amount DECIMAL(12, 2) NULL,
+    image_url TEXT NOT NULL,
+    date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Worker attendance by category + headcount (e.g. "Kothanar" x 5 present)
+-- instead of naming every individual worker
+CREATE TABLE IF NOT EXISTS attendance_categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    site_id INT NOT NULL,
+    date DATE NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    present_count INT DEFAULT 0,
+    absent_count INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    UNIQUE KEY (site_id, date, category)
 );
 
 -- Insert some initial data

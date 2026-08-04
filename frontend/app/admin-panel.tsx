@@ -16,14 +16,13 @@ import {
   View,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
 import AppBackground from './components/AppBackground';
 import LogoutButton from '../components/LogoutButton';
 import DatePickerField from '../components/DatePickerField';
 import { accountsService, adminService, fieldService } from '../services/api';
-import { csvCell, downloadImage, exportCsv, printHtmlOnWeb, shareImageOnWhatsApp } from '../services/printReport';
+import { csvCell, downloadImage, exportCsv, shareImageOnWhatsApp } from '../services/printReport';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
 type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
@@ -70,6 +69,7 @@ const getBillImageUris = (imageUrl?: string | null) => {
 };
 
 const todayIso = () => new Date().toISOString().split('T')[0];
+const rupeesText = (value: any) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 
 export default function AdminPanelScreen() {
   const [activeTab, setActiveTab] = useState<AdminTab>('DASHBOARD');
@@ -451,61 +451,33 @@ export default function AdminPanelScreen() {
       return leadReportMode === 'DAY' ? localYmd === leadReportDate : localYmd.slice(0, 7) === leadReportDate.slice(0, 7);
     });
 
-  const buildLeadsReportHtml = (leads: any[]) => {
+  const buildLeadsPdfDoc = (leads: any[]) => {
     const count = (status: string) => leads.filter((l: any) => l.status === status).length;
-    const rows = leads
-      .map(
-        (l: any, i: number) => `
-        <tr style="background:${i % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td>${i + 1}</td>
-          <td>${new Date(l.created_at).toLocaleDateString('en-IN')}</td>
-          <td><b>${l.name}</b></td>
-          <td>${l.phone || '-'}</td>
-          <td>${l.project_needed || '-'}</td>
-          <td>${l.source || '-'}</td>
-          <td>${l.status}</td>
-        </tr>`
-      )
-      .join('');
-
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
-            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
-            .boxes { display: flex; gap: 10px; margin-bottom: 18px; }
-            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
-            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
-            .box .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
-            table { width: 100%; border-collapse: collapse; font-size: 11px; }
-            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
-            td { padding: 7px 6px; border-bottom: 1px solid #E2E8F0; }
-          </style>
-        </head>
-        <body>
-          <h1>Ayyanar Construction — Leads Report</h1>
-          <div class="sub">${leadReportMode === 'DAY' ? 'Date' : 'Month'}: <b>${leadReportPeriodLabel}</b> &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
-
-          <div class="boxes">
-            <div class="box"><div class="label">Total Leads</div><div class="value">${leads.length}</div></div>
-            <div class="box"><div class="label">Hot Leads</div><div class="value" style="color:#E21A12;">${count('Hot Lead')}</div></div>
-            <div class="box"><div class="label">In Discussion</div><div class="value" style="color:#B45309;">${count('In Discussion')}</div></div>
-            <div class="box"><div class="label">Converted</div><div class="value" style="color:#15803D;">${count('Converted Client')}</div></div>
-          </div>
-
-          <table>
-            <thead>
-              <tr><th>#</th><th>Date</th><th>Lead Name</th><th>Phone</th><th>Requirement</th><th>Source</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-              ${rows || '<tr><td colspan="7" style="text-align:center; color:#64748B;">No leads in this period</td></tr>'}
-            </tbody>
-          </table>
-        </body>
-      </html>`;
+    return buildPdfReport({
+      filename: `Leads_Report_${leadReportPeriodLabel}.pdf`,
+      title: 'Leads Report',
+      subtitle: `${leadReportMode === 'DAY' ? 'Date' : 'Month'}: ${leadReportPeriodLabel}`,
+      summaryBoxes: [
+        { label: 'Total Leads', value: leads.length.toString() },
+        { label: 'Hot Leads', value: count('Hot Lead').toString(), color: '#E21A12' },
+        { label: 'In Discussion', value: count('In Discussion').toString(), color: '#B45309' },
+        { label: 'Converted', value: count('Converted Client').toString(), color: '#15803D' },
+      ],
+      tables: [
+        {
+          head: ['#', 'Date', 'Lead Name', 'Phone', 'Requirement', 'Source', 'Status'],
+          body: leads.map((l: any, i: number) => [
+            i + 1,
+            new Date(l.created_at).toLocaleDateString('en-IN'),
+            l.name,
+            l.phone || '-',
+            l.project_needed || '-',
+            l.source || '-',
+            l.status,
+          ]),
+        },
+      ],
+    });
   };
 
   const handleLeadsPdf = async () => {
@@ -516,16 +488,30 @@ export default function AdminPanelScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        await printHtmlOnWeb(buildLeadsReportHtml(leads));
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildLeadsReportHtml(leads) });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', UTI: 'com.adobe.pdf', dialogTitle: `Leads Report ${leadReportPeriodLabel}` });
-      }
+      await downloadPdfReport(await buildLeadsPdfDoc(leads));
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate the leads report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleLeadsWhatsApp = async () => {
+    const leads = filteredLeadsForReport();
+    if (leads.length === 0) {
+      Alert.alert('No Data', `No leads registered in ${leadReportPeriodLabel}.`);
+      return;
+    }
+    setGeneratingPdf(true);
+    try {
+      const count = (status: string) => leads.filter((l: any) => l.status === status).length;
+      const summary =
+        `*Ayyanar Construction - Leads Report*\n` +
+        `Period: ${leadReportPeriodLabel}\n` +
+        `Total: ${leads.length} • Hot: ${count('Hot Lead')} • In Discussion: ${count('In Discussion')} • Converted: ${count('Converted Client')}`;
+      await sharePdfReportOnWhatsApp(await buildLeadsPdfDoc(leads), summary);
+    } catch (error: any) {
+      Alert.alert('Share Error', error?.message || 'Unable to share the leads report.');
     } finally {
       setGeneratingPdf(false);
     }
@@ -744,53 +730,39 @@ export default function AdminPanelScreen() {
 
   const ioRangeTitle = ioFrom || ioTo ? `${ioFrom || 'Beginning'} to ${ioTo || 'Today'}` : 'All Time';
 
-  const buildIoReportHtml = () => {
-    const rows = (ioReport?.rows || [])
-      .map(
-        (r: any, index: number) => `
-        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td>${new Date(r.date).toLocaleDateString('en-IN')}</td>
-          <td style="text-align:right; color:#15803D;">${r.input ? Number(r.input).toLocaleString('en-IN') : '-'}</td>
-          <td style="text-align:right; color:#E21A12;">${r.output ? Number(r.output).toLocaleString('en-IN') : '-'}</td>
-          <td style="text-align:right; font-weight:bold;">${Number(r.balance).toLocaleString('en-IN')}</td>
-        </tr>`
-      )
-      .join('');
-
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
-            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
-            table { width: 100%; border-collapse: collapse; font-size: 11px; }
-            th { background: #0F172A; color: #FFF; padding: 8px 6px; text-align: left; }
-            th.r { text-align: right; }
-            td { padding: 7px 6px; border-bottom: 1px solid #E2E8F0; }
-          </style>
-        </head>
-        <body>
-          <h1>Ayyanar Construction — ${ioRole} I/O Report</h1>
-          <div class="sub">Date-wise Input / Output / Balance &bull; ${ioRangeTitle} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
-          <table>
-            <thead>
-              <tr><th>Date</th><th class="r">Input (Rs)</th><th class="r">Output (Rs)</th><th class="r">Balance (Rs)</th></tr>
-            </thead>
-            <tbody>
-              ${ioFrom ? `<tr><td><i>Opening Balance</i></td><td></td><td></td><td style="text-align:right; font-weight:bold;">${Number(ioReport?.opening || 0).toLocaleString('en-IN')}</td></tr>` : ''}
-              ${rows}
-              <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-                <td>TOTAL</td>
-                <td style="text-align:right;">${Number(ioReport?.totals?.input || 0).toLocaleString('en-IN')}</td>
-                <td style="text-align:right;">${Number(ioReport?.totals?.output || 0).toLocaleString('en-IN')}</td>
-                <td style="text-align:right;">${Number(ioReport?.totals?.closing || 0).toLocaleString('en-IN')}</td>
-              </tr>
-            </tbody>
-          </table>
-        </body>
-      </html>`;
+  const buildIoPdfDoc = () => {
+    const rows = (ioReport?.rows || []).map((r: any) => [
+      new Date(r.date).toLocaleDateString('en-IN'),
+      r.input ? Number(r.input).toLocaleString('en-IN') : '-',
+      r.output ? Number(r.output).toLocaleString('en-IN') : '-',
+      Number(r.balance).toLocaleString('en-IN'),
+    ]);
+    if (ioFrom) {
+      rows.unshift(['Opening Balance', '', '', Number(ioReport?.opening || 0).toLocaleString('en-IN')]);
+    }
+    return buildPdfReport({
+      filename: `${ioRole}_IO_Report.pdf`,
+      title: `${ioRole} I/O Report`,
+      subtitle: `Date-wise Input / Output / Balance • ${ioRangeTitle}`,
+      summaryBoxes: [
+        { label: 'Total Input', value: rupeesText(ioReport?.totals?.input), color: '#15803D' },
+        { label: 'Total Output', value: rupeesText(ioReport?.totals?.output), color: '#E21A12' },
+        { label: 'Closing Balance', value: rupeesText(ioReport?.totals?.closing) },
+      ],
+      tables: [
+        {
+          head: ['Date', 'Input (Rs)', 'Output (Rs)', 'Balance (Rs)'],
+          body: rows,
+          foot: [
+            'TOTAL',
+            Number(ioReport?.totals?.input || 0).toLocaleString('en-IN'),
+            Number(ioReport?.totals?.output || 0).toLocaleString('en-IN'),
+            Number(ioReport?.totals?.closing || 0).toLocaleString('en-IN'),
+          ],
+          columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+        },
+      ],
+    });
   };
 
   const handleIoPdf = async (viaWhatsApp: boolean) => {
@@ -800,29 +772,16 @@ export default function AdminPanelScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        if (viaWhatsApp) {
-          const text =
-            `*Ayyanar Construction - ${ioRole} I/O Report*\n` +
-            `Period: ${ioRangeTitle}\n` +
-            `Total Input: Rs ${Number(ioReport.totals.input).toLocaleString('en-IN')}\n` +
-            `Total Output: Rs ${Number(ioReport.totals.output).toLocaleString('en-IN')}\n` +
-            `Closing Balance: Rs ${Number(ioReport.totals.closing).toLocaleString('en-IN')}`;
-          await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
-        } else {
-          await printHtmlOnWeb(buildIoReportHtml());
-        }
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildIoReportHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: viaWhatsApp ? 'Share I/O Report on WhatsApp' : `${ioRole} I/O Report`,
-        });
+      if (viaWhatsApp) {
+        const summary =
+          `*Ayyanar Construction - ${ioRole} I/O Report*\n` +
+          `Period: ${ioRangeTitle}\n` +
+          `Total Input: ${rupeesText(ioReport.totals.input)}\n` +
+          `Total Output: ${rupeesText(ioReport.totals.output)}\n` +
+          `Closing Balance: ${rupeesText(ioReport.totals.closing)}`;
+        await sharePdfReportOnWhatsApp(await buildIoPdfDoc(), summary);
       } else {
-        Alert.alert('Saved', `PDF generated at:\n${uri}`);
+        await downloadPdfReport(await buildIoPdfDoc());
       }
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate the I/O report.');
@@ -832,72 +791,48 @@ export default function AdminPanelScreen() {
   };
 
   // ---------- Site Expenses report (bills entered by supervisors) ----------
-  const buildSiteReportHtml = () => {
+  const buildSitePdfDoc = () => {
     const site = sitesList.find((s) => s.id === reportSiteId);
     const direct = reportData.filter((item) => item.payment_mode === 'Direct');
     const credit = reportData.filter((item) => item.payment_mode !== 'Direct');
     const sum = (rows: any[]) => rows.reduce((s, r) => s + Number(r.amount || 0), 0);
 
-    const billTable = (title: string, color: string, rows: any[]) => `
-      <h3 style="color:${color};">${title} (${rows.length} bills)</h3>
-      <table>
-        <thead><tr><th>#</th><th>Date</th><th>Supervisor</th><th>Category</th><th>Description</th><th class="r">Amount (Rs)</th></tr></thead>
-        <tbody>
-          ${rows.length
-            ? rows
-                .map(
-                  (r: any, i: number) => `
-              <tr style="background:${i % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-                <td>${i + 1}</td>
-                <td>${new Date(r.date).toLocaleDateString('en-IN')}</td>
-                <td>${r.supervisor_name || 'System'}</td>
-                <td>${r.category || '-'}</td>
-                <td>${r.description || '-'}</td>
-                <td style="text-align:right;">${Number(r.amount || 0).toLocaleString('en-IN')}</td>
-              </tr>`
-                )
-                .join('')
-            : '<tr><td colspan="6" style="text-align:center; color:#64748B;">No bills recorded</td></tr>'}
-          <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-            <td colspan="5">TOTAL</td>
-            <td style="text-align:right;">${sum(rows).toLocaleString('en-IN')}</td>
-          </tr>
-        </tbody>
-      </table>`;
+    const billRows = (rows: any[]) =>
+      rows.map((r: any, i: number) => [
+        i + 1,
+        new Date(r.date).toLocaleDateString('en-IN'),
+        r.supervisor_name || 'System',
+        r.category || '-',
+        r.description || '-',
+        Number(r.amount || 0).toLocaleString('en-IN'),
+      ]);
 
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
-            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            h3 { font-size: 13px; margin: 20px 0 8px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
-            .boxes { display: flex; gap: 10px; margin-bottom: 6px; }
-            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
-            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
-            .box .value { font-size: 17px; font-weight: bold; margin-top: 4px; }
-            table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
-            th.r { text-align: right; }
-            td { padding: 6px; border-bottom: 1px solid #E2E8F0; }
-          </style>
-        </head>
-        <body>
-          <h1>Ayyanar Construction — Site Expenses Report</h1>
-          <div class="sub">Site: <b>${site?.name || '-'}</b> (${site?.location || ''}) &bull; Bills entered by supervisors &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
-
-          <div class="boxes">
-            <div class="box"><div class="label">Direct Bills</div><div class="value">${`Rs ${sum(direct).toLocaleString('en-IN')}`}</div></div>
-            <div class="box"><div class="label">Indirect / Credit Bills</div><div class="value">${`Rs ${sum(credit).toLocaleString('en-IN')}`}</div></div>
-            <div class="box"><div class="label">Total Site Expense</div><div class="value" style="color:#E21A12;">${`Rs ${(sum(direct) + sum(credit)).toLocaleString('en-IN')}`}</div></div>
-          </div>
-
-          ${billTable('DIRECT BILLS (Cash)', '#15803D', direct)}
-          ${billTable('INDIRECT / CREDIT BILLS (Vendor)', '#B45309', credit)}
-        </body>
-      </html>`;
+    return buildPdfReport({
+      filename: `Site_Expenses_${site?.name || 'Report'}.pdf`,
+      title: 'Site Expenses Report',
+      subtitle: `Site: ${site?.name || '-'} (${site?.location || ''}) • Bills entered by supervisors`,
+      summaryBoxes: [
+        { label: 'Direct Bills', value: rupeesText(sum(direct)) },
+        { label: 'Indirect / Credit', value: rupeesText(sum(credit)) },
+        { label: 'Total Site Expense', value: rupeesText(sum(direct) + sum(credit)), color: '#E21A12' },
+      ],
+      tables: [
+        {
+          title: `DIRECT BILLS (Cash) — ${direct.length} bill(s)`,
+          head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
+          body: billRows(direct),
+          foot: ['', '', '', '', 'TOTAL', sum(direct).toLocaleString('en-IN')],
+          columnStyles: { 5: { halign: 'right' } },
+        },
+        {
+          title: `INDIRECT / CREDIT BILLS (Vendor) — ${credit.length} bill(s)`,
+          head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
+          body: billRows(credit),
+          foot: ['', '', '', '', 'TOTAL', sum(credit).toLocaleString('en-IN')],
+          columnStyles: { 5: { halign: 'right' } },
+        },
+      ],
+    });
   };
 
   const handleSitePdf = async (viaWhatsApp: boolean) => {
@@ -907,36 +842,23 @@ export default function AdminPanelScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        if (viaWhatsApp) {
-          const site = sitesList.find((s) => s.id === reportSiteId);
-          const total = reportData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-          const directBills = reportData.filter((r: any) => r.payment_mode === 'Direct');
-          const creditBills = reportData.filter((r: any) => r.payment_mode !== 'Direct');
-          const directSum = directBills.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-          const creditSum = creditBills.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-          const text =
-            `*Ayyanar Construction - Site Expenses Report*\n` +
-            `Site: ${site?.name || '-'}\n` +
-            `Total Bills: ${reportData.length}\n` +
-            `💵 Direct (Cash): Rs ${directSum.toLocaleString('en-IN')} (${directBills.length} bills)\n` +
-            `💳 Indirect (Credit): Rs ${creditSum.toLocaleString('en-IN')} (${creditBills.length} bills)\n` +
-            `💰 Grand Total: Rs ${total.toLocaleString('en-IN')}`;
-          await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
-        } else {
-          await printHtmlOnWeb(buildSiteReportHtml());
-        }
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildSiteReportHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: viaWhatsApp ? 'Share Site Expenses Report on WhatsApp' : 'Site Expenses Report',
-        });
+      if (viaWhatsApp) {
+        const site = sitesList.find((s) => s.id === reportSiteId);
+        const total = reportData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+        const directBills = reportData.filter((r: any) => r.payment_mode === 'Direct');
+        const creditBills = reportData.filter((r: any) => r.payment_mode !== 'Direct');
+        const directSum = directBills.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+        const creditSum = creditBills.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+        const summary =
+          `*Ayyanar Construction - Site Expenses Report*\n` +
+          `Site: ${site?.name || '-'}\n` +
+          `Total Bills: ${reportData.length}\n` +
+          `Direct (Cash): ${rupeesText(directSum)} (${directBills.length} bills)\n` +
+          `Indirect (Credit): ${rupeesText(creditSum)} (${creditBills.length} bills)\n` +
+          `Grand Total: ${rupeesText(total)}`;
+        await sharePdfReportOnWhatsApp(await buildSitePdfDoc(), summary);
       } else {
-        Alert.alert('Saved', `PDF generated at:\n${uri}`);
+        await downloadPdfReport(await buildSitePdfDoc());
       }
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate the site report.');
@@ -958,119 +880,52 @@ export default function AdminPanelScreen() {
     return Object.entries(map).sort((a, b) => b[1].km - a[1].km);
   };
 
-  const buildDriverReportHtml = () => {
+  const buildDriverPdfDoc = () => {
     const totalKmSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.total_km || 0), 0);
     const dieselSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.diesel_fare || 0), 0);
-
-    const summaryTable = (title: string, entries: [string, { trips: number; km: number; diesel: number }][]) => `
-      <h3>${title}</h3>
-      <table style="max-width:460px;">
-        <thead><tr><th>Name</th><th class="r">Trips</th><th class="r">Total KM</th><th class="r">Diesel (Rs)</th></tr></thead>
-        <tbody>
-          ${entries
-            .map(
-              ([name, s]) => `
-            <tr>
-              <td>${name}</td>
-              <td class="r">${s.trips}</td>
-              <td class="r">${s.km.toLocaleString('en-IN')}</td>
-              <td class="r">${s.diesel.toLocaleString('en-IN')}</td>
-            </tr>`
-            )
-            .join('')}
-        </tbody>
-      </table>`;
-
-    // Trips grouped by driver — every field the driver registered, in a readable table
     const drivers = summarizeDriverRecords('driver_name');
-    const driverSections = drivers
-      .map(([driverName, s]) => {
-        const trips = driverRecords.filter((r: any) => (r.driver_name || 'Unknown') === driverName);
-        const tripRows = trips
-          .map(
-            (rec: any, i: number) => `
-            <tr style="background:${i % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-              <td>${i + 1}</td>
-              <td>${new Date(rec.date).toLocaleDateString('en-IN')}</td>
-              <td>${rec.vehicle_name || '-'}</td>
-              <td class="r">${Number(rec.starting_km || 0)} &rarr; ${Number(rec.ending_km || 0)}</td>
-              <td class="r"><b>${Number(rec.total_km || 0)}</b></td>
-              <td>${rec.distance || '-'}</td>
-              <td class="r">${Number(rec.diesel_fare || 0).toLocaleString('en-IN')}</td>
-              <td>${rec.load_name || '-'}${rec.load_weight ? ` (${rec.load_weight})` : ''}</td>
-              <td>${rec.load_type || '-'}${rec.customer_name ? ` — ${rec.customer_name}` : ''}</td>
-              <td>${rec.place || '-'}</td>
-              <td>${rec.starting_time || '-'} &rarr; ${rec.ending_time || '-'}</td>
-            </tr>`
-          )
-          .join('');
+    const vehicles = summarizeDriverRecords('vehicle_name');
 
-        return `
-        <div class="driver-block">
-          <div class="driver-head">
-            <span class="driver-name">👤 ${driverName}</span>
-            <span class="driver-stats">${s.trips} trip(s) &bull; ${s.km.toLocaleString('en-IN')} km &bull; Diesel Rs ${s.diesel.toLocaleString('en-IN')}</span>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th><th>Date</th><th>Vehicle</th><th class="r">KM (Start &rarr; End)</th><th class="r">Total KM</th>
-                <th>Distance</th><th class="r">Diesel (Rs)</th><th>Load (Weight)</th><th>Type / Customer</th><th>Place</th><th>Time</th>
-              </tr>
-            </thead>
-            <tbody>${tripRows}</tbody>
-          </table>
-        </div>`;
-      })
-      .join('');
+    const summaryRows = (entries: [string, { trips: number; km: number; diesel: number }][]) =>
+      entries.map(([name, s]) => [name, s.trips, s.km.toLocaleString('en-IN'), s.diesel.toLocaleString('en-IN')]);
 
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            @page { size: A4 landscape; margin: 14mm; }
-            body { font-family: Helvetica, Arial, sans-serif; padding: 24px; color: #0F172A; }
-            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            h3 { font-size: 13px; margin: 20px 0 8px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
-            .boxes { display: flex; gap: 10px; margin-bottom: 18px; }
-            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
-            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
-            .box .value { font-size: 18px; font-weight: bold; margin-top: 4px; }
-            table { width: 100%; border-collapse: collapse; font-size: 10px; }
-            th { background: #0F172A; color: #FFFFFF; padding: 7px 5px; text-align: left; }
-            th.r, td.r { text-align: right; }
-            td { padding: 6px 5px; border-bottom: 1px solid #E2E8F0; }
-            .driver-block { margin-top: 18px; page-break-inside: avoid; }
-            .driver-head { display: flex; justify-content: space-between; align-items: center; background: #F1F5F9; border: 1px solid #E2E8F0; border-radius: 8px 8px 0 0; padding: 8px 10px; }
-            .driver-name { font-size: 13px; font-weight: bold; }
-            .driver-stats { font-size: 11px; color: #64748B; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <h1>Ayyanar Construction — Driver Trip Report</h1>
-          <div class="sub">Generated on ${new Date().toLocaleString('en-IN')} &bull; ${driverRecords.length} trip record(s)</div>
+    const tripTable = (driverName: string, s: { trips: number; km: number; diesel: number }) => {
+      const trips = driverRecords.filter((r: any) => (r.driver_name || 'Unknown') === driverName);
+      return {
+        title: `${driverName} — ${s.trips} trip(s) • ${s.km.toLocaleString('en-IN')} km • Diesel Rs ${s.diesel.toLocaleString('en-IN')}`,
+        head: ['#', 'Date', 'Vehicle', 'KM (Start→End)', 'Total KM', 'Distance', 'Diesel (Rs)', 'Load (Weight)', 'Type/Customer', 'Place', 'Time'],
+        body: trips.map((rec: any, i: number) => [
+          i + 1,
+          new Date(rec.date).toLocaleDateString('en-IN'),
+          rec.vehicle_name || '-',
+          `${Number(rec.starting_km || 0)} → ${Number(rec.ending_km || 0)}`,
+          Number(rec.total_km || 0),
+          rec.distance || '-',
+          Number(rec.diesel_fare || 0).toLocaleString('en-IN'),
+          `${rec.load_name || '-'}${rec.load_weight ? ` (${rec.load_weight})` : ''}`,
+          `${rec.load_type || '-'}${rec.customer_name ? ` — ${rec.customer_name}` : ''}`,
+          rec.place || '-',
+          `${rec.starting_time || '-'} → ${rec.ending_time || '-'}`,
+        ]),
+      };
+    };
 
-          <div class="boxes">
-            <div class="box"><div class="label">Total Trips</div><div class="value">${driverRecords.length}</div></div>
-            <div class="box"><div class="label">Total KM Travelled</div><div class="value">${totalKmSum.toLocaleString('en-IN')} km</div></div>
-            <div class="box"><div class="label">Total Diesel Fare</div><div class="value" style="color:#E21A12;">Rs ${dieselSum.toLocaleString('en-IN')}</div></div>
-          </div>
-
-          ${summaryTable('Vehicle-wise Summary', summarizeDriverRecords('vehicle_name'))}
-          ${summaryTable('Driver-wise Summary', drivers)}
-
-          <h3>Trip Details — Driver-wise (all fields registered by the driver)</h3>
-          ${driverSections}
-        </body>
-      </html>`;
-  };
-
-  const generateDriverPdf = async () => {
-    const html = buildDriverReportHtml();
-    const { uri } = await Print.printToFileAsync({ html });
-    return uri;
+    return buildPdfReport({
+      filename: 'Driver_Trip_Report.pdf',
+      title: 'Driver Trip Report',
+      subtitle: `${driverRecords.length} trip record(s)`,
+      orientation: 'landscape',
+      summaryBoxes: [
+        { label: 'Total Trips', value: driverRecords.length.toString() },
+        { label: 'Total KM Travelled', value: `${totalKmSum.toLocaleString('en-IN')} km` },
+        { label: 'Total Diesel Fare', value: rupeesText(dieselSum), color: '#E21A12' },
+      ],
+      tables: [
+        { title: 'Vehicle-wise Summary', head: ['Vehicle', 'Trips', 'Total KM', 'Diesel (Rs)'], body: summaryRows(vehicles) },
+        { title: 'Driver-wise Summary', head: ['Driver', 'Trips', 'Total KM', 'Diesel (Rs)'], body: summaryRows(drivers) },
+        ...drivers.map(([driverName, s]) => tripTable(driverName, s)),
+      ],
+    });
   };
 
   const handleDownloadDriverPdf = async () => {
@@ -1080,21 +935,7 @@ export default function AdminPanelScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        // On web expo-print opens the browser print dialog; user picks "Save as PDF"
-        await printHtmlOnWeb(buildDriverReportHtml());
-        return;
-      }
-      const uri = await generateDriverPdf();
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: 'Download Driver Report PDF',
-        });
-      } else {
-        Alert.alert('Saved', `PDF generated at:\n${uri}`);
-      }
+      await downloadPdfReport(await buildDriverPdfDoc());
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate the driver report PDF.');
     } finally {
@@ -1109,31 +950,14 @@ export default function AdminPanelScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        // Browsers cannot attach a local file to WhatsApp; share a text summary instead
-        const totalKmSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.total_km || 0), 0);
-        const dieselSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.diesel_fare || 0), 0);
-        const latest = driverRecords[0];
-        const text =
-          `*Ayyanar Construction - Driver Trip Report*\n` +
-          `Records: ${driverRecords.length}\n` +
-          `Total KM: ${totalKmSum.toLocaleString('en-IN')} km\n` +
-          `Total Diesel Fare: Rs ${dieselSum.toLocaleString('en-IN')}\n` +
-          (latest ? `Latest Trip: ${latest.vehicle_name} by ${latest.driver_name} (${Number(latest.total_km || 0)} km)` : '');
-        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
-        return;
-      }
-      // On native, generate the PDF and open the share sheet — pick WhatsApp there
-      const uri = await generateDriverPdf();
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: 'Share Driver Report on WhatsApp',
-        });
-      } else {
-        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
-      }
+      const totalKmSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.total_km || 0), 0);
+      const dieselSum = driverRecords.reduce((sum: number, rec: any) => sum + Number(rec.diesel_fare || 0), 0);
+      const summary =
+        `*Ayyanar Construction - Driver Trip Report*\n` +
+        `Records: ${driverRecords.length}\n` +
+        `Total KM: ${totalKmSum.toLocaleString('en-IN')} km\n` +
+        `Total Diesel Fare: ${rupeesText(dieselSum)}`;
+      await sharePdfReportOnWhatsApp(await buildDriverPdfDoc(), summary);
     } catch (error: any) {
       Alert.alert('Share Error', error?.message || 'Unable to share the driver report.');
     } finally {
@@ -1453,6 +1277,12 @@ export default function AdminPanelScreen() {
             {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
             <Text style={styles.pdfButtonText}>Download PDF</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={handleLeadsWhatsApp} disabled={generatingPdf}>
+            <MaterialIcons name="share" size={18} color={COLORS.white} />
+            <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={[styles.pdfActionsRow, { marginTop: SPACING.sm }]}>
           <TouchableOpacity style={[styles.pdfButton, { backgroundColor: '#15803D' }, generatingPdf && { opacity: 0.6 }]} onPress={handleLeadsExcel} disabled={generatingPdf}>
             <MaterialIcons name="grid-on" size={18} color={COLORS.white} />
             <Text style={styles.pdfButtonText}>Download Excel</Text>

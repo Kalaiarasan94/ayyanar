@@ -1,16 +1,11 @@
-# Hostinger / Apache routing for the exported Expo web app.
+# Hostinger / Apache routing for the exported Expo web app (single-page bundle).
 # This file is copied into the export output automatically (public/ -> dist/).
+# Expo Router handles all in-app navigation client-side, so every request
+# that isn't a real file/folder falls back to index.html.
 
 Options -MultiViews
 RewriteEngine On
 
-# Serve /driver as driver.html, /admin-panel as admin-panel.html, etc.
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{DOCUMENT_ROOT}/$1.html -f
-RewriteRule ^(.*)$ $1.html [L]
-
-# Anything else falls back to the app entry
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule . /index.html [L]

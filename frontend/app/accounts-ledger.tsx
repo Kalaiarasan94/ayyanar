@@ -2,9 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Linking,
   Modal,
-  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -14,12 +12,10 @@ import {
   View,
 } from 'react-native';
 import { Stack } from 'expo-router';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { accountsService } from '../services/api';
-import { printHtmlOnWeb } from '../services/printReport';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp, ReportTable } from '../services/pdfReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 import DatePickerField from '../components/DatePickerField';
 
@@ -213,98 +209,62 @@ export default function AccountsBookScreen() {
   // ---------- PDF ----------
   const periodTitle = report ? (report.type === 'monthly' ? monthLabel(report.period) : `Year ${report.period}`) : '';
 
-  const buildReportHtml = () => {
+  const buildAccountsReportPdfDoc = () => {
     const txns = report?.transactions || [];
     const totalDebit = txns.filter((t: any) => t.flow === 'OUT').reduce((s: number, t: any) => s + Number(t.amount), 0);
     const totalCredit = txns.filter((t: any) => t.flow === 'IN').reduce((s: number, t: any) => s + Number(t.amount), 0);
-    const rows = txns
-      .map((t: any, index: number) => {
-        const info = describeTxn(t);
-        const kind = KIND_STYLES[info.kind];
-        return `
-        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td>${index + 1}</td>
-          <td>${dateLabel(t.date)}</td>
-          <td>${kind.voucher}</td>
-          <td><b>${info.from}</b> &rarr; <b>${info.to}</b></td>
-          <td>${t.description || '-'}</td>
-          <td style="text-align:right; color:#E21A12;">${t.flow === 'OUT' ? Number(t.amount).toLocaleString('en-IN') : ''}</td>
-          <td style="text-align:right; color:#15803D;">${t.flow === 'IN' ? Number(t.amount).toLocaleString('en-IN') : ''}</td>
-        </tr>`;
-      })
-      .join('');
 
-    const breakdown = (title: string, items: any[]) =>
-      items.length
-        ? `<h3>${title}</h3>
-           <table class="mini">
-             ${items.map((b: any) => `<tr><td>${b.category}</td><td style="text-align:right;">${Number(b.total).toLocaleString('en-IN')}</td></tr>`).join('')}
-           </table>`
-        : '';
+    const tables: ReportTable[] = [
+      {
+        title: `Day Book Vouchers (${txns.length})`,
+        head: ['#', 'Date', 'Voucher', 'Particulars', 'Reason / Note', 'Debit (Rs)', 'Credit (Rs)'],
+        body: txns.map((t: any, index: number) => {
+          const info = describeTxn(t);
+          const kind = KIND_STYLES[info.kind];
+          return [
+            index + 1,
+            dateLabel(t.date),
+            kind.voucher,
+            `${info.from} → ${info.to}`,
+            t.description || '-',
+            t.flow === 'OUT' ? Number(t.amount).toLocaleString('en-IN') : '',
+            t.flow === 'IN' ? Number(t.amount).toLocaleString('en-IN') : '',
+          ];
+        }),
+        foot: ['', '', '', '', 'TOTAL', totalDebit.toLocaleString('en-IN'), totalCredit.toLocaleString('en-IN')],
+        columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' } },
+      },
+    ];
 
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
-            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            h3 { font-size: 13px; margin: 18px 0 6px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
-            .boxes { display: flex; gap: 10px; margin-bottom: 18px; }
-            .box { flex: 1; border: 1px solid #E2E8F0; border-radius: 8px; padding: 12px; }
-            .box .label { font-size: 10px; color: #64748B; text-transform: uppercase; font-weight: bold; }
-            .box .value { font-size: 17px; font-weight: bold; margin-top: 4px; }
-            table { width: 100%; border-collapse: collapse; font-size: 10px; }
-            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
-            th.r { text-align: right; }
-            td { padding: 6px; border-bottom: 1px solid #E2E8F0; }
-            table.mini { width: 320px; font-size: 11px; }
-            table.mini td { padding: 5px 6px; }
-            .totals { margin-top: 14px; font-size: 12px; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <h1>Ayyanar Construction — Accounts Report</h1>
-          <div class="sub">${periodTitle} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+    if (report?.receivedBreakdown?.length) {
+      tables.unshift({
+        title: 'Money Received From',
+        head: ['Party', 'Amount (Rs)'],
+        body: report.receivedBreakdown.map((b: any) => [b.category, Number(b.total).toLocaleString('en-IN')]),
+        columnStyles: { 1: { halign: 'right' } },
+      });
+    }
+    if (report?.paidBreakdown?.length) {
+      tables.splice(report?.receivedBreakdown?.length ? 1 : 0, 0, {
+        title: 'Money Paid To',
+        head: ['Party', 'Amount (Rs)'],
+        body: report.paidBreakdown.map((b: any) => [b.category, Number(b.total).toLocaleString('en-IN')]),
+        columnStyles: { 1: { halign: 'right' } },
+      });
+    }
 
-          <div class="boxes">
-            <div class="box"><div class="label">Revenue</div><div class="value" style="color:#15803D;">${rupees(report?.revenue)}</div></div>
-            <div class="box"><div class="label">Expenses</div><div class="value" style="color:#E21A12;">${rupees(report?.expenses)}</div></div>
-            <div class="box"><div class="label">${Number(report?.profit || 0) >= 0 ? 'Profit' : 'Loss'}</div><div class="value">${rupees(Math.abs(Number(report?.profit || 0)))}</div></div>
-            <div class="box"><div class="label">Internal Transfers</div><div class="value">${rupees(report?.transfers)}</div></div>
-          </div>
-
-          ${breakdown('Money Received From', report?.receivedBreakdown || [])}
-          ${breakdown('Money Paid To', report?.paidBreakdown || [])}
-
-          <h3>Day Book Vouchers (${txns.length})</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th><th>Date</th><th>Voucher</th><th>Particulars</th><th>Reason / Note</th>
-                <th class="r">Debit (Rs)</th><th class="r">Credit (Rs)</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-              <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-                <td colspan="5">TOTAL</td>
-                <td style="text-align:right;">${totalDebit.toLocaleString('en-IN')}</td>
-                <td style="text-align:right;">${totalCredit.toLocaleString('en-IN')}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div class="totals">
-            Total Debit: ${rupees(totalDebit)} &nbsp;&bull;&nbsp;
-            Total Credit: ${rupees(totalCredit)} &nbsp;&bull;&nbsp;
-            Revenue: ${rupees(report?.revenue)} &nbsp;&bull;&nbsp;
-            Expenses: ${rupees(report?.expenses)} &nbsp;&bull;&nbsp;
-            ${Number(report?.profit || 0) >= 0 ? 'Profit' : 'Loss'}: ${rupees(Math.abs(Number(report?.profit || 0)))}
-          </div>
-        </body>
-      </html>`;
+    return buildPdfReport({
+      filename: `Accounts_Report_${periodTitle.replace(/\s+/g, '_')}.pdf`,
+      title: 'Accounts Report',
+      subtitle: periodTitle,
+      summaryBoxes: [
+        { label: 'Revenue', value: rupees(report?.revenue), color: '#15803D' },
+        { label: 'Expenses', value: rupees(report?.expenses), color: '#E21A12' },
+        { label: Number(report?.profit || 0) >= 0 ? 'Profit' : 'Loss', value: rupees(Math.abs(Number(report?.profit || 0))) },
+        { label: 'Internal Transfers', value: rupees(report?.transfers) },
+      ],
+      tables,
+    });
   };
 
   const handleDownloadPdf = async () => {
@@ -314,20 +274,7 @@ export default function AccountsBookScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        await printHtmlOnWeb(buildReportHtml(), `Accounts_Report_${periodTitle.replace(/\s+/g, '_')}.pdf`);
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildReportHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: `Accounts Report - ${periodTitle}`,
-        });
-      } else {
-        Alert.alert('Saved', `PDF generated at:\n${uri}`);
-      }
+      await downloadPdfReport(await buildAccountsReportPdfDoc());
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate the report PDF.');
     } finally {
@@ -342,27 +289,14 @@ export default function AccountsBookScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        const text =
-          `*Ayyanar Construction - Accounts Report*\n` +
-          `Period: ${periodTitle}\n` +
-          `Revenue: ${rupees(report.revenue)}\n` +
-          `Expenses: ${rupees(report.expenses)}\n` +
-          `${report.profit >= 0 ? 'Profit' : 'Loss'}: ${rupees(Math.abs(report.profit))}\n` +
-          `Transactions: ${report.transactions.length}`;
-        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildReportHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: 'Share Accounts Report on WhatsApp',
-        });
-      } else {
-        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
-      }
+      const summary =
+        `*Ayyanar Construction - Accounts Report*\n` +
+        `Period: ${periodTitle}\n` +
+        `Revenue: ${rupees(report.revenue)}\n` +
+        `Expenses: ${rupees(report.expenses)}\n` +
+        `${report.profit >= 0 ? 'Profit' : 'Loss'}: ${rupees(Math.abs(report.profit))}\n` +
+        `Transactions: ${report.transactions.length}`;
+      await sharePdfReportOnWhatsApp(await buildAccountsReportPdfDoc(), summary);
     } catch (error: any) {
       Alert.alert('Share Error', error?.message || 'Unable to share the report.');
     } finally {
@@ -371,28 +305,8 @@ export default function AccountsBookScreen() {
   };
 
   // ---------- Day Book PDF report ----------
-  const buildDayBookHtml = () => {
-    const txns = filteredDayBook;
-    const totalDebit = txns.filter((t: any) => t.flow === 'OUT').reduce((s: number, t: any) => s + Number(t.amount), 0);
-    const totalCredit = txns.filter((t: any) => t.flow === 'IN').reduce((s: number, t: any) => s + Number(t.amount), 0);
-    const rows = txns
-      .map((t: any, index: number) => {
-        const info = describeTxn(t);
-        const kind = KIND_STYLES[info.kind];
-        return `
-        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td>${index + 1}</td>
-          <td>${dateLabel(t.date)}</td>
-          <td>${kind.voucher}</td>
-          <td><b>${info.from}</b> &rarr; <b>${info.to}</b></td>
-          <td>${t.description || '-'}</td>
-          <td style="text-align:right; color:#E21A12;">${t.flow === 'OUT' ? Number(t.amount).toLocaleString('en-IN') : ''}</td>
-          <td style="text-align:right; color:#15803D;">${t.flow === 'IN' ? Number(t.amount).toLocaleString('en-IN') : ''}</td>
-        </tr>`;
-      })
-      .join('');
-
-    const rangeLabel = dbRange.from && dbRange.to
+  const dayBookRangeLabel = () =>
+    dbRange.from && dbRange.to
       ? `Period: ${dateLabel(dbRange.from)} to ${dateLabel(dbRange.to)}`
       : dbRange.from
       ? `Date: ${dateLabel(dbRange.from)}`
@@ -400,42 +314,37 @@ export default function AccountsBookScreen() {
       ? `Date: ${dateLabel(dbRange.to)}`
       : 'All Time';
 
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
-            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
-            table { width: 100%; border-collapse: collapse; font-size: 10px; }
-            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
-            th.r { text-align: right; }
-            td { padding: 6px; border-bottom: 1px solid #E2E8F0; }
-          </style>
-        </head>
-        <body>
-          <h1>Ayyanar Construction — Accounts Day Book</h1>
-          <div class="sub">${rangeLabel} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+  const buildDayBookPdfDoc = () => {
+    const txns = filteredDayBook;
+    const totalDebit = txns.filter((t: any) => t.flow === 'OUT').reduce((s: number, t: any) => s + Number(t.amount), 0);
+    const totalCredit = txns.filter((t: any) => t.flow === 'IN').reduce((s: number, t: any) => s + Number(t.amount), 0);
+    const rangeLabel = dbRange.from && dbRange.to ? `${dbRange.from}_to_${dbRange.to}` : dbRange.from || dbRange.to || 'all_time';
 
-          <table>
-            <thead>
-              <tr>
-                <th>#</th><th>Date</th><th>Voucher</th><th>Particulars</th><th>Reason / Note</th>
-                <th class="r">Debit (Rs)</th><th class="r">Credit (Rs)</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-              <tr style="background:#0F172A; color:#FFF; font-weight:bold;">
-                <td colspan="5">TOTAL</td>
-                <td style="text-align:right;">${totalDebit.toLocaleString('en-IN')}</td>
-                <td style="text-align:right;">${totalCredit.toLocaleString('en-IN')}</td>
-              </tr>
-            </tbody>
-          </table>
-        </body>
-      </html>`;
+    return buildPdfReport({
+      filename: `DayBook_Report_${rangeLabel}.pdf`,
+      title: 'Accounts Day Book',
+      subtitle: dayBookRangeLabel(),
+      tables: [
+        {
+          head: ['#', 'Date', 'Voucher', 'Particulars', 'Reason / Note', 'Debit (Rs)', 'Credit (Rs)'],
+          body: txns.map((t: any, index: number) => {
+            const info = describeTxn(t);
+            const kind = KIND_STYLES[info.kind];
+            return [
+              index + 1,
+              dateLabel(t.date),
+              kind.voucher,
+              `${info.from} → ${info.to}`,
+              t.description || '-',
+              t.flow === 'OUT' ? Number(t.amount).toLocaleString('en-IN') : '',
+              t.flow === 'IN' ? Number(t.amount).toLocaleString('en-IN') : '',
+            ];
+          }),
+          foot: ['', '', '', '', 'TOTAL', totalDebit.toLocaleString('en-IN'), totalCredit.toLocaleString('en-IN')],
+          columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' } },
+        },
+      ],
+    });
   };
 
   const handleDownloadDayBook = async () => {
@@ -445,29 +354,7 @@ export default function AccountsBookScreen() {
     }
     setGeneratingPdf(true);
     try {
-      const rangeLabel = dbRange.from && dbRange.to
-        ? `${dbRange.from}_to_${dbRange.to}`
-        : dbRange.from
-        ? `${dbRange.from}`
-        : dbRange.to
-        ? `${dbRange.to}`
-        : 'all_time';
-      const filename = `DayBook_Report_${rangeLabel}.pdf`;
-      
-      if (Platform.OS === 'web') {
-        await printHtmlOnWeb(buildDayBookHtml(), filename);
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildDayBookHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: 'Day Book Report',
-        });
-      } else {
-        Alert.alert('Saved', `PDF generated at:\n${uri}`);
-      }
+      await downloadPdfReport(await buildDayBookPdfDoc());
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate day book PDF.');
     } finally {
@@ -482,33 +369,13 @@ export default function AccountsBookScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        const rangeLabel = dbRange.from && dbRange.to
-          ? `${dateLabel(dbRange.from)} to ${dateLabel(dbRange.to)}`
-          : dbRange.from
-          ? `Date: ${dateLabel(dbRange.from)}`
-          : dbRange.to
-          ? `Date: ${dateLabel(dbRange.to)}`
-          : 'All Time';
-        const text =
-          `*Ayyanar Construction - Day Book Report*\n` +
-          `Period: ${rangeLabel}\n` +
-          `Total Debit: ${rupees(dayBookTotals.debit)}\n` +
-          `Total Credit: ${rupees(dayBookTotals.credit)}\n` +
-          `Vouchers: ${filteredDayBook.length}`;
-        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildDayBookHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: 'Share Day Book Report on WhatsApp',
-        });
-      } else {
-        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
-      }
+      const summary =
+        `*Ayyanar Construction - Day Book Report*\n` +
+        `Period: ${dayBookRangeLabel()}\n` +
+        `Total Debit: ${rupees(dayBookTotals.debit)}\n` +
+        `Total Credit: ${rupees(dayBookTotals.credit)}\n` +
+        `Vouchers: ${filteredDayBook.length}`;
+      await sharePdfReportOnWhatsApp(await buildDayBookPdfDoc(), summary);
     } catch (error: any) {
       Alert.alert('Share Error', error?.message || 'Unable to share day book report.');
     } finally {
@@ -517,21 +384,8 @@ export default function AccountsBookScreen() {
   };
 
   // ---------- Ledger PDF report ----------
-  const buildLedgerHtml = () => {
-    const rows = ledger
-      .map((item: any, index: number) => `
-        <tr style="background:${index % 2 === 0 ? '#FFFFFF' : '#F8FAFC'};">
-          <td>${index + 1}</td>
-          <td><b>${item.party}</b>${item.category && item.party !== item.category ? ` (${item.category})` : ''}</td>
-          <td style="text-align:right; color:#E21A12;">${Number(item.paidTo).toLocaleString('en-IN')}</td>
-          <td style="text-align:right; color:#15803D;">${Number(item.receivedFrom).toLocaleString('en-IN')}</td>
-          <td style="text-align:right; font-weight:bold; color:${item.net >= 0 ? '#15803D' : '#E21A12'};">${drCr(item.net)}</td>
-          <td style="text-align:center;">${item.entries}</td>
-          <td style="text-align:center;">${item.lastDate ? dateLabel(item.lastDate) : '-'}</td>
-        </tr>`)
-      .join('');
-
-    const rangeLabel = ldRange.from && ldRange.to
+  const ledgerRangeLabel = () =>
+    ldRange.from && ldRange.to
       ? `Period: ${dateLabel(ldRange.from)} to ${dateLabel(ldRange.to)}`
       : ldRange.from
       ? `Date: ${dateLabel(ldRange.from)}`
@@ -539,43 +393,29 @@ export default function AccountsBookScreen() {
       ? `Date: ${dateLabel(ldRange.to)}`
       : 'All Time';
 
-    return `
-      <html>
-        <head>
-          <meta charset="utf-8" />
-          <style>
-            body { font-family: Helvetica, Arial, sans-serif; padding: 28px; color: #0F172A; }
-            h1 { color: #E21A12; font-size: 20px; margin-bottom: 2px; }
-            .sub { color: #64748B; font-size: 11px; margin-bottom: 18px; }
-            table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
-            th { background: #0F172A; color: #FFF; padding: 7px 6px; text-align: left; }
-            th.r { text-align: right; }
-            th.c { text-align: center; }
-            td { padding: 6px; border-bottom: 1px solid #E2E8F0; }
-          </style>
-        </head>
-        <body>
-          <h1>Ayyanar Construction — Accounts Ledger Summary</h1>
-          <div class="sub">${rangeLabel} &bull; Generated on ${new Date().toLocaleString('en-IN')}</div>
+  const buildLedgerPdfDoc = () => {
+    const rangeLabel = ldRange.from && ldRange.to ? `${ldRange.from}_to_${ldRange.to}` : ldRange.from || ldRange.to || 'all_time';
 
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Party / Account Name</th>
-                <th class="r">Debit (Paid, Rs)</th>
-                <th class="r">Credit (Received, Rs)</th>
-                <th class="r">Net Balance</th>
-                <th class="c">Vouchers</th>
-                <th class="c">Last Transaction</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows}
-            </tbody>
-          </table>
-        </body>
-      </html>`;
+    return buildPdfReport({
+      filename: `Ledger_Summary_${rangeLabel}.pdf`,
+      title: 'Accounts Ledger Summary',
+      subtitle: ledgerRangeLabel(),
+      tables: [
+        {
+          head: ['#', 'Party / Account Name', 'Debit (Paid, Rs)', 'Credit (Received, Rs)', 'Net Balance', 'Vouchers', 'Last Transaction'],
+          body: ledger.map((item: any, index: number) => [
+            index + 1,
+            `${item.party}${item.category && item.party !== item.category ? ` (${item.category})` : ''}`,
+            Number(item.paidTo).toLocaleString('en-IN'),
+            Number(item.receivedFrom).toLocaleString('en-IN'),
+            drCr(item.net),
+            item.entries,
+            item.lastDate ? dateLabel(item.lastDate) : '-',
+          ]),
+          columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'center' }, 6: { halign: 'center' } },
+        },
+      ],
+    });
   };
 
   const handleDownloadLedger = async () => {
@@ -585,29 +425,7 @@ export default function AccountsBookScreen() {
     }
     setGeneratingPdf(true);
     try {
-      const rangeLabel = ldRange.from && ldRange.to
-        ? `${ldRange.from}_to_${ldRange.to}`
-        : ldRange.from
-        ? `${ldRange.from}`
-        : ldRange.to
-        ? `${ldRange.to}`
-        : 'all_time';
-      const filename = `Ledger_Summary_${rangeLabel}.pdf`;
-      
-      if (Platform.OS === 'web') {
-        await printHtmlOnWeb(buildLedgerHtml(), filename);
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildLedgerHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: 'Ledger Report',
-        });
-      } else {
-        Alert.alert('Saved', `PDF generated at:\n${uri}`);
-      }
+      await downloadPdfReport(await buildLedgerPdfDoc());
     } catch (error: any) {
       Alert.alert('PDF Error', error?.message || 'Unable to generate ledger PDF.');
     } finally {
@@ -622,31 +440,11 @@ export default function AccountsBookScreen() {
     }
     setGeneratingPdf(true);
     try {
-      if (Platform.OS === 'web') {
-        const rangeLabel = ldRange.from && ldRange.to
-          ? `${dateLabel(ldRange.from)} to ${dateLabel(ldRange.to)}`
-          : ldRange.from
-          ? `Date: ${dateLabel(ldRange.from)}`
-          : ldRange.to
-          ? `Date: ${dateLabel(ldRange.to)}`
-          : 'All Time';
-        const text =
-          `*Ayyanar Construction - Ledger Summary Report*\n` +
-          `Period: ${rangeLabel}\n` +
-          `Ledger Accounts: ${ledger.length}`;
-        await Linking.openURL(`https://wa.me/?text=${encodeURIComponent(text)}`);
-        return;
-      }
-      const { uri } = await Print.printToFileAsync({ html: buildLedgerHtml() });
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          UTI: 'com.adobe.pdf',
-          dialogTitle: 'Share Ledger Summary Report on WhatsApp',
-        });
-      } else {
-        Alert.alert('Sharing Unavailable', 'Sharing is not available on this device.');
-      }
+      const summary =
+        `*Ayyanar Construction - Ledger Summary Report*\n` +
+        `Period: ${ledgerRangeLabel()}\n` +
+        `Ledger Accounts: ${ledger.length}`;
+      await sharePdfReportOnWhatsApp(await buildLedgerPdfDoc(), summary);
     } catch (error: any) {
       Alert.alert('Share Error', error?.message || 'Unable to share ledger report.');
     } finally {
