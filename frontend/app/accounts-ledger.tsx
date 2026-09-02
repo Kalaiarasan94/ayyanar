@@ -813,6 +813,13 @@ export default function AccountsBookScreen() {
                     <Text style={styles.detailLabel}>NOTES / REASON</Text>
                     <Text style={styles.detailValue}>{activeTransaction.description || '-'}</Text>
                   </View>
+
+                  {activeTransaction.entered_by_name && (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>ENTERED BY</Text>
+                      <Text style={styles.detailValue}>{activeTransaction.entered_by_name}</Text>
+                    </View>
+                  )}
                 </View>
               );
             })()}
@@ -843,6 +850,7 @@ function BookRow({ txn, showDate = false, onPress }: { txn: any; showDate?: bool
         </View>
         <Text style={styles.bookTitle}>{info.from}  →  {info.to}</Text>
         <Text style={styles.bookMeta}>{txn.payment_method || 'Cash'}{txn.description ? ` / ${txn.description}` : ''}</Text>
+        {txn.entered_by_name && <Text style={styles.bookMeta}>Entered by: {txn.entered_by_name}</Text>}
       </View>
       <Text style={[styles.amountCol, { color: isCredit ? COLORS.textLight : COLORS.primary }]}>
         {!isCredit ? Number(txn.amount).toLocaleString('en-IN') : ''}
