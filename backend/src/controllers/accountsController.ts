@@ -20,6 +20,15 @@ const TRANSFER_TARGETS: Record<string, 'Admin' | 'Supervisor' | 'Owner'> = {
   Owner: 'Owner',
 };
 
+// Reverse of TRANSFER_TARGETS: the category name a role is represented by when it
+// appears as the OTHER side of a transfer (e.g. role 'Supervisor' shows as category
+// 'Supervisors' on someone else's book). Used to mirror IN entries into an OUT.
+const ROLE_AS_CATEGORY: Record<'Admin' | 'Supervisor' | 'Owner', string> = {
+  Admin: 'Admin',
+  Supervisor: 'Supervisors',
+  Owner: 'Owner',
+};
+
 export const accountsController = {
   // Records a money-in or money-out entry for a role ledger (Admin / Supervisor / Owner)
   addTransaction: async (req: Request, res: Response): Promise<void> => {
@@ -106,6 +115,40 @@ export const accountsController = {
         res.status(201).json({
           success: true,
           message: `Payment recorded and credited to ${cleanPartyName || recipientRole} (${recipientRole} account).`,
+        });
+        return;
+      }
+
+      // Mirror the reverse case: an IN entry whose category names one of our own
+      // roles (e.g. Admin logs an IN from 'Owner') automatically records a matching
+      // OUT on that role's own book — so Owner's account shows the payment to Admin
+      // without Owner having to log it separately. Covers every internal role/team
+      // member the same way (Owner, Admin, or any present Supervisor).
+      const sourceRole = flow === 'IN' ? TRANSFER_TARGETS[category] : undefined;
+      if (sourceRole && sourceRole !== role) {
+        const mirrorCategory = ROLE_AS_CATEGORY[role as 'Admin' | 'Supervisor' | 'Owner'];
+        const mirrored = await db.query(
+          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date, linked_id)
+           VALUES (?, ?, 'OUT', ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            sourceRole,
+            recipientUserId ? parseInt(recipientUserId.toString()) : null,
+            mirrorCategory,
+            cleanPartyName,
+            cleanMethod,
+            description || `Transfer to ${role}`,
+            cleanAmount,
+            cleanDate,
+            insertedId,
+          ]
+        );
+        const mirroredId = (mirrored.rows as any).insertId;
+        // Link the original row back to its mirror so deleting either removes both
+        await db.query('UPDATE account_transactions SET linked_id = ? WHERE id = ?', [mirroredId, insertedId]);
+
+        res.status(201).json({
+          success: true,
+          message: `Receipt recorded, and automatically logged as a payment on ${sourceRole}'s account.`,
         });
         return;
       }

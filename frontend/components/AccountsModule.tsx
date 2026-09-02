@@ -170,9 +170,11 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     }
   }, [flowTab, userLoaded]);
 
-  // Load the real supervisors created by the admin so payments go to actual people
+  // Load the real, currently-active staff created by the admin — used both when
+  // paying a specific supervisor (Output) and when logging money received back
+  // from a specific supervisor (Input), so either side can name the real person.
   useEffect(() => {
-    if (!outputTargets.includes('Supervisors')) return;
+    if (!outputTargets.includes('Supervisors') && !inputSources.includes('Supervisors')) return;
     adminService
       .getStaff()
       .then((staff) => setSupervisors((staff || []).filter((s: any) => s.role === 'Supervisor').map((s: any) => ({ id: s.id, name: s.name }))))
@@ -588,8 +590,9 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
             <Text style={styles.fieldLabel}>{isInput ? 'RECEIVED FROM' : 'GIVEN TO / SPENT ON'}</Text>
             <View style={styles.chipRow}>
               {[...(isInput ? inputSources : outputTargets), 'Others'].map((option) => {
-                // "Supervisors" expands into the real supervisors created by the admin
-                if (!isInput && option === 'Supervisors' && supervisors.length > 0) {
+                // "Supervisors" expands into every present staff member in the Team,
+                // on both Input (who returned/sent the money) and Output (who it went to)
+                if (option === 'Supervisors' && supervisors.length > 0) {
                   return supervisors.map((sup) => {
                     const selected = category === 'Supervisors' && party?.userId === sup.id;
                     return (
@@ -664,11 +667,13 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
               onChangeText={setEntryName}
             />
 
-            {!isInput && category && ROLE_TARGETS.includes(category) && (
+            {category && ROLE_TARGETS.includes(category) && (
               <View style={styles.infoCard}>
                 <MaterialIcons name="sync-alt" size={18} color={COLORS.textLight} />
                 <Text style={styles.infoText}>
-                  This amount will automatically appear as money-in on {party ? `${party.name}'s Supervisor account` : `the ${category === 'Supervisors' ? 'Supervisor' : category} account`}.
+                  {isInput
+                    ? `This will automatically appear as a payment made on ${party ? `${party.name}'s` : `the`} ${category === 'Supervisors' ? 'Supervisor' : category} account (money out, to ${heading.replace(' Accounts', '')}).`
+                    : `This amount will automatically appear as money-in on ${party ? `${party.name}'s Supervisor account` : `the ${category === 'Supervisors' ? 'Supervisor' : category} account`}.`}
                 </Text>
               </View>
             )}
