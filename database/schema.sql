@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS account_transactions (
     linked_id INT NULL,
     role ENUM('Admin', 'Supervisor', 'Owner') NOT NULL,
     user_id INT NULL,
+    entered_by_name VARCHAR(150) NULL,
     flow ENUM('IN', 'OUT') NOT NULL,
     category VARCHAR(100) NOT NULL,
     party_name VARCHAR(150) NULL,

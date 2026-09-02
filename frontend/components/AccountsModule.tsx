@@ -63,16 +63,26 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const [summary, setSummary] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loggedInUserId, setLoggedInUserId] = useState<string | null>(null);
+  const [loggedInUserName, setLoggedInUserName] = useState<string | null>(null);
   const [userLoaded, setUserLoaded] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
       const uid = await AsyncStorage.getItem('userId');
+      const uname = await AsyncStorage.getItem('userName');
       setLoggedInUserId(uid);
+      setLoggedInUserName(uname);
       setUserLoaded(true);
     };
     fetchUser();
   }, []);
+
+  // "Me" for whoever is currently logged in and viewing this list, their real
+  // name for anyone else on the (shared) team who entered a transaction
+  const enteredByLabel = (name: string | null | undefined) => {
+    if (!name) return null;
+    return name === loggedInUserName ? 'Me' : name;
+  };
 
   // Date filter (applies to the Transactions sub-menu and the PDF report)
   const todayStr = (() => {
@@ -504,6 +514,9 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
               <Text style={styles.txnMeta}>
                 {dateLabel(item.date)} / {item.payment_method || 'Cash'}{item.description ? ` / ${item.description}` : ''}
               </Text>
+              {enteredByLabel(item.entered_by_name) && (
+                <Text style={styles.enteredByMeta}>Entered by: {enteredByLabel(item.entered_by_name)}</Text>
+              )}
               {!isInput && item.runningBalance !== undefined && (
                 <Text style={styles.runningBalanceMeta}>Balance: {rupees(item.runningBalance)}</Text>
               )}
@@ -782,7 +795,14 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                   <Text style={styles.detailLabel}>NOTES / REASON</Text>
                   <Text style={styles.detailValue}>{activeTransaction.description || '-'}</Text>
                 </View>
-                
+
+                {activeTransaction.entered_by_name && (
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>ENTERED BY</Text>
+                    <Text style={styles.detailValue}>{enteredByLabel(activeTransaction.entered_by_name)}</Text>
+                  </View>
+                )}
+
                 {activeTransaction.runningBalance !== undefined && (
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>RUNNING BALANCE</Text>
@@ -1076,6 +1096,13 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: 11,
     fontWeight: '600',
+    marginTop: 2,
+  },
+  enteredByMeta: {
+    color: COLORS.textLight,
+    fontSize: 10.5,
+    fontWeight: '700',
+    fontStyle: 'italic',
     marginTop: 2,
   },
   txnAmount: {

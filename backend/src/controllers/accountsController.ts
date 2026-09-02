@@ -54,13 +54,24 @@ export const accountsController = {
       const cleanDate = date || new Date().toISOString().split('T')[0];
       const cleanPartyName = partyName || null;
       const cleanMethod = paymentMethod === 'Bank' ? 'Bank' : 'Cash';
+      const cleanUserId = userId ? parseInt(userId.toString()) : null;
+
+      // Real name of whoever is actually submitting this entry (Admin, or which
+      // specific Supervisor) — stamped on this row AND its auto-mirrored twin,
+      // so both books show who is responsible for the transaction.
+      let enteredByName: string | null = null;
+      if (cleanUserId) {
+        const enteredByResult = await db.query('SELECT name FROM users WHERE id = ?', [cleanUserId]);
+        enteredByName = enteredByResult.rows[0]?.name || null;
+      }
 
       const inserted = await db.query(
-        `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO account_transactions (role, user_id, entered_by_name, flow, category, party_name, payment_method, description, amount, date)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           role,
-          userId ? parseInt(userId.toString()) : null,
+          cleanUserId,
+          enteredByName,
           flow,
           category,
           cleanPartyName,
@@ -79,7 +90,7 @@ export const accountsController = {
            VALUES (?, ?, 'DEBIT', ?, ?, ?, 'Indirect', ?)`,
           [
             parseInt(req.body.siteId.toString()),
-            userId ? parseInt(userId.toString()) : null,
+            cleanUserId,
             'Site Expenses',
             description || 'Supervisor Cash Expense',
             cleanAmount,
@@ -94,11 +105,12 @@ export const accountsController = {
       const recipientRole = flow === 'OUT' ? TRANSFER_TARGETS[category] : undefined;
       if (recipientRole && recipientRole !== role) {
         const mirrored = await db.query(
-          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date, linked_id)
-           VALUES (?, ?, 'IN', ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO account_transactions (role, user_id, entered_by_name, flow, category, party_name, payment_method, description, amount, date, linked_id)
+           VALUES (?, ?, ?, 'IN', ?, ?, ?, ?, ?, ?, ?)`,
           [
             recipientRole,
             recipientUserId ? parseInt(recipientUserId.toString()) : null,
+            enteredByName,
             role,
             cleanPartyName,
             cleanMethod,
@@ -128,11 +140,12 @@ export const accountsController = {
       if (sourceRole && sourceRole !== role) {
         const mirrorCategory = ROLE_AS_CATEGORY[role as 'Admin' | 'Supervisor' | 'Owner'];
         const mirrored = await db.query(
-          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date, linked_id)
-           VALUES (?, ?, 'OUT', ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO account_transactions (role, user_id, entered_by_name, flow, category, party_name, payment_method, description, amount, date, linked_id)
+           VALUES (?, ?, ?, 'OUT', ?, ?, ?, ?, ?, ?, ?)`,
           [
             sourceRole,
             recipientUserId ? parseInt(recipientUserId.toString()) : null,
+            enteredByName,
             mirrorCategory,
             cleanPartyName,
             cleanMethod,

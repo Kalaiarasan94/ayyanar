@@ -160,6 +160,15 @@ export const initDb = async () => {
       console.log('Added linked_id column to account_transactions.');
     }
 
+    // Add entered_by_name to account_transactions — the real name of whoever
+    // (Admin, or which Supervisor) actually submitted the entry, so every row
+    // (including its auto-mirrored twin) shows who is responsible for it.
+    const [enteredByColResult] = await pool.execute("SHOW COLUMNS FROM account_transactions LIKE 'entered_by_name'");
+    if ((enteredByColResult as any[]).length === 0) {
+      await db.query('ALTER TABLE account_transactions ADD COLUMN entered_by_name VARCHAR(150) NULL AFTER user_id;');
+      console.log('Added entered_by_name column to account_transactions.');
+    }
+
     // Add phone to leads if it doesn't exist yet
     const [leadPhoneResult] = await pool.execute("SHOW COLUMNS FROM leads LIKE 'phone'");
     if ((leadPhoneResult as any[]).length === 0) {
