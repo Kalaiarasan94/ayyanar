@@ -40,8 +40,12 @@ export default function AttendanceScreen() {
   const router = useRouter();
   const { siteId: paramSiteId, siteName: paramSiteName, tab: paramTab } = useLocalSearchParams();
 
-  // Navigation tab state: defaults to worker tab unless supervisor param is set
-  const [activeTab, setActiveTab] = useState<'worker' | 'supervisor'>('worker');
+  // Screen state: lands on the monthly dashboard first; entering attendance
+  // (Worker or Supervisor) switches into that form, picked via the top-right button
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'worker' | 'supervisor'>('dashboard');
+  const [entryPickerVisible, setEntryPickerVisible] = useState(false);
+  const [monthlyStats, setMonthlyStats] = useState({ present: 0, absent: 0, markedDays: 0, percentage: 0 });
+  const [loadingMonthlyStats, setLoadingMonthlyStats] = useState(false);
 
   // Shared state
   const [userId, setUserId] = useState<string | null>(null);
@@ -71,12 +75,11 @@ export default function AttendanceScreen() {
   const [supAttendanceDate, setSupAttendanceDate] = useState(todayLocal());
   const [supSubmittedList, setSupSubmittedList] = useState<any[]>([]);
 
-  // Route tab sync
+  // Route tab sync — a direct link (?tab=worker/supervisor) jumps straight into that
+  // entry form; otherwise the screen lands on the dashboard.
   useEffect(() => {
-    if (paramTab === 'supervisor') {
-      setActiveTab('supervisor');
-    } else {
-      setActiveTab('worker');
+    if (paramTab === 'supervisor' || paramTab === 'worker') {
+      setActiveTab(paramTab);
     }
   }, [paramTab]);
 
@@ -154,6 +157,46 @@ export default function AttendanceScreen() {
   useEffect(() => {
     loadSupervisorSubmitted();
   }, [supAttendanceDate, userName]);
+
+  // Dashboard: this calendar month's leave count + attendance percentage for the
+  // logged-in supervisor, built from one overview call per elapsed day (no range
+  // endpoint exists on the backend for this)
+  const loadMonthlyStats = async () => {
+    if (!userName) return;
+    setLoadingMonthlyStats(true);
+    try {
+      const now = new Date();
+      const daysElapsed = now.getDate();
+      const dateStrings = Array.from({ length: daysElapsed }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth(), i + 1);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      });
+      const results = await Promise.all(
+        dateStrings.map((d) => adminService.getAttendanceOverview(d, userId).catch(() => null))
+      );
+      let present = 0;
+      let absent = 0;
+      results.forEach((overview: any) => {
+        const mine = overview?.supervisors?.find((item: any) => item.supervisor_name === userName);
+        if (mine?.status === 'Present') present += 1;
+        else if (mine?.status === 'Absent') absent += 1;
+      });
+      setMonthlyStats({
+        present,
+        absent,
+        markedDays: present + absent,
+        percentage: daysElapsed > 0 ? Math.round((present / daysElapsed) * 100) : 0,
+      });
+    } finally {
+      setLoadingMonthlyStats(false);
+    }
+  };
+
+  useEffect(() => {
+    if (userName && activeTab === 'dashboard') {
+      loadMonthlyStats();
+    }
+  }, [userName, activeTab]);
 
   const handleSiteChange = (siteId: string) => {
     setSelectedSiteId(siteId);
@@ -397,6 +440,37 @@ export default function AttendanceScreen() {
     );
   }
 
+  const renderDashboard = () => {
+    const monthName = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.addCard}>
+          <Text style={styles.sectionTitle}>{monthName.toUpperCase()}</Text>
+          <View style={styles.dashboardHero}>
+            <Text style={styles.dashboardHeroLabel}>ATTENDANCE THIS MONTH</Text>
+            {loadingMonthlyStats ? (
+              <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 14 }} />
+            ) : (
+              <Text style={styles.dashboardHeroValue}>{monthlyStats.percentage}%</Text>
+            )}
+          </View>
+          <View style={styles.dashboardStatRow}>
+            <View style={[styles.dashboardStat, { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+              <MaterialIcons name="check-circle" size={22} color="#8C0F16" />
+              <Text style={styles.dashboardStatValue}>{monthlyStats.present}</Text>
+              <Text style={styles.dashboardStatLabel}>Present Days</Text>
+            </View>
+            <View style={[styles.dashboardStat, { backgroundColor: 'rgba(226, 26, 18, 0.08)' }]}>
+              <MaterialIcons name="event-busy" size={22} color="#E23744" />
+              <Text style={styles.dashboardStatValue}>{monthlyStats.absent}</Text>
+              <Text style={styles.dashboardStatLabel}>Leaves</Text>
+            </View>
+          </View>
+        </View>
+      </ScrollView>
+    );
+  };
+
   const renderWorkerTab = () => {
     const totalPresent = categoriesList.reduce((s, c) => s + (parseInt(c.presentCount) || 0), 0);
     const totalAbsent = categoriesList.reduce((s, c) => s + (parseInt(c.absentCount) || 0), 0);
@@ -490,7 +564,7 @@ export default function AttendanceScreen() {
             {categoriesList.map((cat) => (
               <View key={cat.id} style={styles.rosterCard}>
                 <View style={styles.avatarContainer}>
-                  <MaterialIcons name="groups" size={20} color="#E21A12" />
+                  <MaterialIcons name="groups" size={20} color="#E23744" />
                 </View>
                 <View style={styles.workerInfo}>
                   <Text style={styles.workerName}>{cat.category}</Text>
@@ -498,7 +572,7 @@ export default function AttendanceScreen() {
                 </View>
 
                 <TouchableOpacity onPress={() => removeCategory(cat.id)} style={styles.removeBtn}>
-                  <MaterialIcons name="remove-circle-outline" size={22} color="#E21A12" />
+                  <MaterialIcons name="remove-circle-outline" size={22} color="#E23744" />
                 </TouchableOpacity>
               </View>
             ))}
@@ -521,7 +595,7 @@ export default function AttendanceScreen() {
           {submittedList.map((item: any) => (
             <View key={item.id} style={styles.rosterCard}>
               <View style={[styles.avatarContainer, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
-                <MaterialIcons name="groups" size={20} color="#10B981" />
+                <MaterialIcons name="groups" size={20} color="#8C0F16" />
               </View>
               <View style={styles.workerInfo}>
                 <Text style={styles.workerName}>{item.category}</Text>
@@ -659,7 +733,7 @@ export default function AttendanceScreen() {
           {supSubmittedList.map((item: any) => (
             <View key={item.id} style={styles.rosterCard}>
               <View style={[styles.avatarContainer, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
-                <MaterialIcons name={item.status === 'Present' ? 'check' : 'close'} size={20} color={item.status === 'Present' ? '#10B981' : '#E21A12'} />
+                <MaterialIcons name={item.status === 'Present' ? 'check' : 'close'} size={20} color={item.status === 'Present' ? '#8C0F16' : '#E23744'} />
               </View>
               
               <View style={styles.workerInfo}>
@@ -677,7 +751,7 @@ export default function AttendanceScreen() {
               ) : null}
 
               <View style={[styles.submittedPill, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
-                <Text style={[styles.submittedPillText, { color: item.status === 'Present' ? '#047857' : '#B5120D' }]}>{item.status}</Text>
+                <Text style={[styles.submittedPillText, { color: item.status === 'Present' ? '#8C0F16' : '#CB202D' }]}>{item.status}</Text>
               </View>
             </View>
           ))}
@@ -725,28 +799,70 @@ export default function AttendanceScreen() {
   return (
     <View style={styles.outerContainer}>
       <AppBackground />
-      
+
       <View style={styles.headerSpacer} />
-      
-      <View style={styles.tabContainer}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'supervisor' && styles.activeTabButton]}
-          onPress={() => setActiveTab('supervisor')}
-        >
-          <MaterialIcons name="camera-front" size={20} color={activeTab === 'supervisor' ? '#FFF' : COLORS.textLight} />
-          <Text style={[styles.tabButtonText, activeTab === 'supervisor' && styles.activeTabButtonText]}>Supervisor Attendance</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'worker' && styles.activeTabButton]}
-          onPress={() => setActiveTab('worker')}
-        >
-          <MaterialIcons name="engineering" size={20} color={activeTab === 'worker' ? '#FFF' : COLORS.textLight} />
-          <Text style={[styles.tabButtonText, activeTab === 'worker' && styles.activeTabButtonText]}>Worker Attendance</Text>
-        </TouchableOpacity>
+
+      <View style={styles.pageHeaderRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.pageHeaderTitle}>
+            {activeTab === 'dashboard' ? 'Attendance' : activeTab === 'supervisor' ? 'Supervisor Attendance' : 'Worker Attendance'}
+          </Text>
+          <Text style={styles.pageHeaderSubtitle}>
+            {activeTab === 'dashboard' ? 'Monthly overview' : "Log today's attendance"}
+          </Text>
+        </View>
+        {activeTab === 'dashboard' ? (
+          <TouchableOpacity style={styles.pageHeaderAction} onPress={() => setEntryPickerVisible(true)}>
+            <MaterialIcons name="add" size={17} color={COLORS.white} />
+            <Text style={styles.pageHeaderActionText}>Enter</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.pageHeaderBack} onPress={() => setActiveTab('dashboard')}>
+            <MaterialIcons name="arrow-back" size={16} color={COLORS.primary} />
+            <Text style={styles.pageHeaderBackText}>Dashboard</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {activeTab === 'supervisor' ? renderSupervisorTab() : renderWorkerTab()}
+      {activeTab === 'dashboard' ? renderDashboard() : activeTab === 'supervisor' ? renderSupervisorTab() : renderWorkerTab()}
+
+      {/* Choose which attendance to log */}
+      <Modal visible={entryPickerVisible} transparent animationType="fade" onRequestClose={() => setEntryPickerVisible(false)}>
+        <View style={styles.modalCenteredView}>
+          <View style={[styles.modalView, { width: '85%' }]}>
+            <Text style={[styles.modalText, { fontSize: 18, marginBottom: 2 }]}>Enter Attendance</Text>
+            <Text style={[styles.workerRole, { marginBottom: 16, textAlign: 'center' }]}>Who is this attendance for?</Text>
+
+            <TouchableOpacity
+              style={styles.entryPickerOption}
+              onPress={() => { setEntryPickerVisible(false); setActiveTab('supervisor'); }}
+            >
+              <MaterialIcons name="camera-front" size={22} color={COLORS.primary} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.entryPickerOptionTitle}>Supervisor</Text>
+                <Text style={styles.entryPickerOptionSubtitle}>Your own clock-in selfie</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color={COLORS.textLight} />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.entryPickerOption}
+              onPress={() => { setEntryPickerVisible(false); setActiveTab('worker'); }}
+            >
+              <MaterialIcons name="engineering" size={22} color={COLORS.primary} />
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.entryPickerOptionTitle}>Worker</Text>
+                <Text style={styles.entryPickerOptionSubtitle}>Category-wise headcount</Text>
+              </View>
+              <MaterialIcons name="chevron-right" size={22} color={COLORS.textLight} />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.buttonClose} onPress={() => setEntryPickerVisible(false)}>
+              <Text style={styles.textStyle}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -766,40 +882,119 @@ const styles = StyleSheet.create({
   headerSpacer: {
     height: 15,
   },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
-    borderRadius: BORDER_RADIUS.xl,
-    padding: 4,
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.65)',
-  },
-  tabButton: {
-    flex: 1,
+  pageHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  pageHeaderTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  pageHeaderSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textLight,
+    marginTop: 2,
+  },
+  pageHeaderAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#E23744',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: BORDER_RADIUS.lg,
+    elevation: 4,
+    shadowColor: '#CB202D',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+  },
+  pageHeaderActionText: {
+    color: '#FFF',
+    fontWeight: '900',
+    fontSize: 13,
+  },
+  pageHeaderBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(226, 26, 18, 0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: BORDER_RADIUS.lg,
   },
-  activeTabButton: {
-    backgroundColor: '#E21A12',
-    elevation: 4,
-    shadowColor: '#B5120D',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+  pageHeaderBackText: {
+    color: COLORS.primary,
+    fontWeight: '900',
+    fontSize: 13,
   },
-  tabButtonText: {
-    fontSize: 12,
+  entryPickerOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.steel,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    width: '100%',
+  },
+  entryPickerOptionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  entryPickerOptionSubtitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textLight,
+    marginTop: 1,
+  },
+  dashboardHero: {
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(226, 26, 18, 0.1)',
+    marginBottom: SPACING.md,
+  },
+  dashboardHeroLabel: {
+    fontSize: 11,
     fontWeight: '800',
     color: COLORS.textLight,
+    letterSpacing: 0.5,
+    marginBottom: 6,
   },
-  activeTabButtonText: {
-    color: '#FFF',
+  dashboardHeroValue: {
+    fontSize: 40,
+    fontWeight: '900',
+    color: '#E23744',
+  },
+  dashboardStatRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dashboardStat: {
+    flex: 1,
+    alignItems: 'center',
+    borderRadius: BORDER_RADIUS.lg,
+    paddingVertical: SPACING.md,
+    gap: 4,
+  },
+  dashboardStatValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  dashboardStatLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textLight,
   },
   addCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.25)',
@@ -808,7 +1003,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.45)',
     elevation: 4,
-    shadowColor: '#E21A12',
+    shadowColor: '#E23744',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
@@ -818,7 +1013,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#E21A12',
+    color: '#E23744',
     marginBottom: 16,
     letterSpacing: 0.5,
   },
@@ -835,8 +1030,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   chipActive: {
-    backgroundColor: '#E21A12',
-    borderColor: '#E21A12',
+    backgroundColor: '#E23744',
+    borderColor: '#E23744',
   },
   chipText: {
     color: COLORS.text,
@@ -871,12 +1066,12 @@ const styles = StyleSheet.create({
     color: COLORS.text,
   },
   addBtn: {
-    backgroundColor: '#E21A12',
+    backgroundColor: '#E23744',
     padding: 15,
     borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
     elevation: 4,
-    shadowColor: '#B5120D',
+    shadowColor: '#CB202D',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -907,7 +1102,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.45)',
     elevation: 4,
-    shadowColor: '#E21A12',
+    shadowColor: '#E23744',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -950,12 +1145,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statusBtnPresent: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: '#8C0F16',
+    borderColor: '#8C0F16',
   },
   statusBtnAbsent: {
-    backgroundColor: '#E21A12',
-    borderColor: '#E21A12',
+    backgroundColor: '#E23744',
+    borderColor: '#E23744',
   },
   statusBtnText: {
     fontSize: 13,
@@ -975,13 +1170,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   submitBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#8C0F16',
     padding: 16,
     borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
     marginTop: 10,
     elevation: 6,
-    shadowColor: '#059669',
+    shadowColor: '#8C0F16',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -1036,12 +1231,12 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
   },
   statusOptionPresent: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+    backgroundColor: '#8C0F16',
+    borderColor: '#8C0F16',
   },
   statusOptionAbsent: {
-    backgroundColor: '#E21A12',
-    borderColor: '#E21A12',
+    backgroundColor: '#E23744',
+    borderColor: '#E23744',
   },
   statusOptionText: {
     fontSize: 14,
@@ -1130,7 +1325,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   submitButton: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#8C0F16',
     paddingVertical: 16,
     borderRadius: BORDER_RADIUS.md,
     flexDirection: 'row',
@@ -1163,7 +1358,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.45)',
     elevation: 4,
-    shadowColor: '#E21A12',
+    shadowColor: '#E23744',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
@@ -1199,7 +1394,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   buttonClose: {
-    backgroundColor: '#E21A12',
+    backgroundColor: '#E23744',
     borderRadius: 20,
     paddingHorizontal: 20,
     paddingVertical: 10,

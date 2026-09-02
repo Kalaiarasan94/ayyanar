@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Linking,
   Modal,
   Platform,
@@ -459,9 +460,9 @@ export default function AdminPanelScreen() {
       subtitle: `${leadReportMode === 'DAY' ? 'Date' : 'Month'}: ${leadReportPeriodLabel}`,
       summaryBoxes: [
         { label: 'Total Leads', value: leads.length.toString() },
-        { label: 'Hot Leads', value: count('Hot Lead').toString(), color: '#E21A12' },
-        { label: 'In Discussion', value: count('In Discussion').toString(), color: '#B45309' },
-        { label: 'Converted', value: count('Converted Client').toString(), color: '#15803D' },
+        { label: 'Hot Leads', value: count('Hot Lead').toString(), color: '#E23744' },
+        { label: 'In Discussion', value: count('In Discussion').toString(), color: '#CB202D' },
+        { label: 'Converted', value: count('Converted Client').toString(), color: '#8C0F16' },
       ],
       tables: [
         {
@@ -745,8 +746,8 @@ export default function AdminPanelScreen() {
       title: `${ioRole} I/O Report`,
       subtitle: `Date-wise Input / Output / Balance • ${ioRangeTitle}`,
       summaryBoxes: [
-        { label: 'Total Input', value: rupeesText(ioReport?.totals?.input), color: '#15803D' },
-        { label: 'Total Output', value: rupeesText(ioReport?.totals?.output), color: '#E21A12' },
+        { label: 'Total Input', value: rupeesText(ioReport?.totals?.input), color: '#8C0F16' },
+        { label: 'Total Output', value: rupeesText(ioReport?.totals?.output), color: '#E23744' },
         { label: 'Closing Balance', value: rupeesText(ioReport?.totals?.closing) },
       ],
       tables: [
@@ -814,7 +815,7 @@ export default function AdminPanelScreen() {
       summaryBoxes: [
         { label: 'Direct Bills', value: rupeesText(sum(direct)) },
         { label: 'Indirect / Credit', value: rupeesText(sum(credit)) },
-        { label: 'Total Site Expense', value: rupeesText(sum(direct) + sum(credit)), color: '#E21A12' },
+        { label: 'Total Site Expense', value: rupeesText(sum(direct) + sum(credit)), color: '#E23744' },
       ],
       tables: [
         {
@@ -918,7 +919,7 @@ export default function AdminPanelScreen() {
       summaryBoxes: [
         { label: 'Total Trips', value: driverRecords.length.toString() },
         { label: 'Total KM Travelled', value: `${totalKmSum.toLocaleString('en-IN')} km` },
-        { label: 'Total Diesel Fare', value: rupeesText(dieselSum), color: '#E21A12' },
+        { label: 'Total Diesel Fare', value: rupeesText(dieselSum), color: '#E23744' },
       ],
       tables: [
         { title: 'Vehicle-wise Summary', head: ['Vehicle', 'Trips', 'Total KM', 'Diesel (Rs)'], body: summaryRows(vehicles) },
@@ -1283,7 +1284,7 @@ export default function AdminPanelScreen() {
           </TouchableOpacity>
         </View>
         <View style={[styles.pdfActionsRow, { marginTop: SPACING.sm }]}>
-          <TouchableOpacity style={[styles.pdfButton, { backgroundColor: '#15803D' }, generatingPdf && { opacity: 0.6 }]} onPress={handleLeadsExcel} disabled={generatingPdf}>
+          <TouchableOpacity style={[styles.pdfButton, { backgroundColor: '#8C0F16' }, generatingPdf && { opacity: 0.6 }]} onPress={handleLeadsExcel} disabled={generatingPdf}>
             <MaterialIcons name="grid-on" size={18} color={COLORS.white} />
             <Text style={styles.pdfButtonText}>Download Excel</Text>
           </TouchableOpacity>
@@ -1360,26 +1361,26 @@ export default function AdminPanelScreen() {
         {/* Summary totals */}
         {reportData.length > 0 && (
           <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-            <View style={{ flex: 1, backgroundColor: '#EBF8EE', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#A3D9B1' }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#1A7A35', letterSpacing: 0.5 }}>DIRECT (CASH)</Text>
-              <Text style={{ fontSize: 17, fontWeight: '800', color: '#1A7A35', marginTop: 4 }}>
+            <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F4C6C8' }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#8C0F16', letterSpacing: 0.5 }}>DIRECT (CASH)</Text>
+              <Text style={{ fontSize: 17, fontWeight: '800', color: '#8C0F16', marginTop: 4 }}>
                 ₹{directTotal.toLocaleString()}
               </Text>
-              <Text style={{ fontSize: 10, color: '#1A7A35', marginTop: 2 }}>{direct.length} bill(s)</Text>
+              <Text style={{ fontSize: 10, color: '#8C0F16', marginTop: 2 }}>{direct.length} bill(s)</Text>
             </View>
-            <View style={{ flex: 1, backgroundColor: '#FFF3E0', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#FFCC80' }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#D56B00', letterSpacing: 0.5 }}>INDIRECT (CREDIT)</Text>
-              <Text style={{ fontSize: 17, fontWeight: '800', color: '#D56B00', marginTop: 4 }}>
+            <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F4C6C8' }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#CB202D', letterSpacing: 0.5 }}>INDIRECT (CREDIT)</Text>
+              <Text style={{ fontSize: 17, fontWeight: '800', color: '#CB202D', marginTop: 4 }}>
                 ₹{creditTotal.toLocaleString()}
               </Text>
-              <Text style={{ fontSize: 10, color: '#D56B00', marginTop: 2 }}>{credit.length} bill(s)</Text>
+              <Text style={{ fontSize: 10, color: '#CB202D', marginTop: 2 }}>{credit.length} bill(s)</Text>
             </View>
-            <View style={{ flex: 1, backgroundColor: '#EDE9FE', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#C4B5FD' }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#5B21B6', letterSpacing: 0.5 }}>GRAND TOTAL</Text>
-              <Text style={{ fontSize: 17, fontWeight: '800', color: '#5B21B6', marginTop: 4 }}>
+            <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F4C6C8' }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: '#CB202D', letterSpacing: 0.5 }}>GRAND TOTAL</Text>
+              <Text style={{ fontSize: 17, fontWeight: '800', color: '#CB202D', marginTop: 4 }}>
                 ₹{grandTotal.toLocaleString()}
               </Text>
-              <Text style={{ fontSize: 10, color: '#5B21B6', marginTop: 2 }}>{reportData.length} bill(s)</Text>
+              <Text style={{ fontSize: 10, color: '#CB202D', marginTop: 2 }}>{reportData.length} bill(s)</Text>
             </View>
           </View>
         )}
@@ -1637,14 +1638,17 @@ export default function AdminPanelScreen() {
         </ScrollView>
       </View>
 
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
       >
         {loading && !refreshing ? <ActivityIndicator color={COLORS.primary} style={styles.loader} /> : null}
         {renderActiveTab()}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Supervisor attendance detail: full selfie photo + location + map */}
       <Modal visible={!!attendanceDetail} transparent animationType="slide" onRequestClose={() => setAttendanceDetail(null)}>
@@ -1707,8 +1711,8 @@ export default function AdminPanelScreen() {
 
       {/* Edit a material/petty-cash bill */}
       <Modal visible={billEditVisible} transparent animationType="slide" onRequestClose={() => setBillEditVisible(false)}>
-        <View style={styles.detailBackdrop}>
-          <View style={styles.detailSheet}>
+        <KeyboardAvoidingView style={styles.detailBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView style={styles.detailSheet} keyboardShouldPersistTaps="handled">
             <View style={styles.detailHandle} />
             <Text style={styles.detailName}>Edit Bill</Text>
             <TextInput style={[styles.input, { marginTop: SPACING.md }]} placeholder="Category" value={billCategory} onChangeText={setBillCategory} placeholderTextColor={COLORS.textLight} />
@@ -1720,7 +1724,7 @@ export default function AdminPanelScreen() {
               onChange={(v) => setBillPaymentMode(v as 'Direct' | 'Indirect')}
             />
             <DatePickerField value={billDate} onChange={setBillDate} placeholder="Bill date" />
-            <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.md }}>
+            <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.md, marginBottom: SPACING.lg }}>
               <TouchableOpacity style={[styles.detailCloseButton, { flex: 1 }]} onPress={() => setBillEditVisible(false)}>
                 <Text style={styles.detailCloseButtonText}>Cancel</Text>
               </TouchableOpacity>
@@ -1728,8 +1732,8 @@ export default function AdminPanelScreen() {
                 <PrimaryButton label="Save Changes" icon="check" onPress={handleSaveBillChanges} />
               </View>
             </View>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Driver diesel bill detail: full photo + download / WhatsApp / delete */}
@@ -1774,8 +1778,8 @@ export default function AdminPanelScreen() {
 
       {/* Edit a driver trip record */}
       <Modal visible={driverRecordEditVisible} transparent animationType="slide" onRequestClose={() => setDriverRecordEditVisible(false)}>
-        <View style={styles.detailBackdrop}>
-          <ScrollView style={styles.detailSheet}>
+        <KeyboardAvoidingView style={styles.detailBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView style={styles.detailSheet} keyboardShouldPersistTaps="handled">
             <View style={styles.detailHandle} />
             <Text style={styles.detailName}>Edit Trip Record</Text>
             {editingDriverRecord && (
@@ -1816,7 +1820,7 @@ export default function AdminPanelScreen() {
               </>
             )}
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -2359,7 +2363,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
   },
   whatsappButton: {
-    backgroundColor: '#25D366',
+    backgroundColor: '#E23744',
   },
   pdfButtonText: {
     color: COLORS.white,
@@ -2440,6 +2444,7 @@ const styles = StyleSheet.create({
     padding: SPACING.lg,
     paddingBottom: SPACING.xl,
     maxWidth: 560,
+    maxHeight: '90%',
     width: '100%',
     alignSelf: 'center',
   },

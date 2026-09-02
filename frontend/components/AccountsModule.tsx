@@ -2,8 +2,10 @@ import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -53,6 +55,23 @@ const dateLabel = (isoDate: string) => {
 
 const isValidDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// [from, to] boundary dates (YYYY-MM-DD) for the calendar month `monthsAgo` months before today
+const monthRange = (monthsAgo: number) => {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
+  const last = new Date(now.getFullYear(), now.getMonth() - monthsAgo + 1, 0);
+  return {
+    from: `${first.getFullYear()}-${pad2(first.getMonth() + 1)}-${pad2(first.getDate())}`,
+    to: `${last.getFullYear()}-${pad2(last.getMonth() + 1)}-${pad2(last.getDate())}`,
+    label: monthsAgo === 0 ? 'This Month' : `${MONTH_NAMES[first.getMonth()]} ${first.getFullYear()}`,
+  };
+};
+
+// Quick-pick chips: current month + the previous 5
+const QUICK_MONTHS = [0, 1, 2, 3, 4, 5].map(monthRange);
+
 export default function AccountsModule({ role, heading, inputSources, outputTargets }: AccountsModuleProps) {
   const [flowTab, setFlowTab] = useState<FlowTab>('INPUT');
   const [viewTab, setViewTab] = useState<ViewTab>('ANALYTICS');
@@ -61,6 +80,14 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const [generatingPdf, setGeneratingPdf] = useState(false);
 
   const [summary, setSummary] = useState<any>(null);
+  // Current-calendar-month totals + category-wise breakdown, computed client-side
+  // from the full transaction list (the backend summary is lifetime, not month-scoped)
+  const [monthStats, setMonthStats] = useState<{
+    totalIn: number;
+    totalOut: number;
+    inByCategory: { category: string; total: number }[];
+    outByCategory: { category: string; total: number }[];
+  }>({ totalIn: 0, totalOut: 0, inByCategory: [], outByCategory: [] });
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loggedInUserId, setLoggedInUserId] = useState<string | null>(null);
   const [loggedInUserName, setLoggedInUserName] = useState<string | null>(null);
@@ -94,7 +121,10 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   })();
 
   const [fromDate, setFromDate] = useState('');
-  const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({});
+  // Defaults to the current calendar month so the transaction list opens uncluttered
+  const [appliedRange, setAppliedRange] = useState<{ from?: string; to?: string }>({ from: QUICK_MONTHS[0].from, to: QUICK_MONTHS[0].to });
+  const [activeMonthIdx, setActiveMonthIdx] = useState<number | null>(0); // index into QUICK_MONTHS, or null for "All Time" / custom date
+  const [showCustomDate, setShowCustomDate] = useState(false); // custom date picker is tucked away by default to keep the transaction list close to the top
 
   // Entry modal
   const [entryVisible, setEntryVisible] = useState(false);
@@ -151,7 +181,30 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         getTransactionsWithBalance(range),
       ]);
       setSummary(summaryData);
-      
+
+      // Category-wise totals for the current calendar month only (independent of
+      // the Transactions tab's own month/date filter)
+      const thisMonth = QUICK_MONTHS[0];
+      const txnsThisMonth = allTxnsWithBalance.filter((t: any) => {
+        const d = t.date ? t.date.toString().split('T')[0] : '';
+        return d >= thisMonth.from && d <= thisMonth.to;
+      });
+      const groupByCategory = (txns: any[]) => {
+        const map = new Map<string, number>();
+        txns.forEach((t) => map.set(t.category, (map.get(t.category) || 0) + Number(t.amount)));
+        return Array.from(map.entries())
+          .map(([category, total]) => ({ category, total }))
+          .sort((a, b) => b.total - a.total);
+      };
+      const inThisMonth = txnsThisMonth.filter((t: any) => t.flow === 'IN');
+      const outThisMonth = txnsThisMonth.filter((t: any) => t.flow === 'OUT');
+      setMonthStats({
+        totalIn: inThisMonth.reduce((s: number, t: any) => s + Number(t.amount), 0),
+        totalOut: outThisMonth.reduce((s: number, t: any) => s + Number(t.amount), 0),
+        inByCategory: groupByCategory(inThisMonth),
+        outByCategory: groupByCategory(outThisMonth),
+      });
+
       const filteredTxns = allTxnsWithBalance.filter(t => {
         if (t.flow !== (tab === 'INPUT' ? 'IN' : 'OUT')) return false;
         // Normalize DB date (may be ISO timestamp like 2026-07-13T00:00:00.000Z) to YYYY-MM-DD
@@ -208,21 +261,32 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     }
   }, [role, userLoaded, loggedInUserId]);
 
+  const selectMonth = (idx: number) => {
+    setActiveMonthIdx(idx);
+    setFromDate('');
+    const range = { from: QUICK_MONTHS[idx].from, to: QUICK_MONTHS[idx].to };
+    setAppliedRange(range);
+    loadData(flowTab, range);
+  };
+
+  const selectAllTime = () => {
+    setActiveMonthIdx(null);
+    setFromDate('');
+    setAppliedRange({});
+    loadData(flowTab, {});
+  };
+
   const applyDateRange = () => {
     if (fromDate && !isValidDate(fromDate)) {
       Alert.alert('Invalid Date', 'Use the YYYY-MM-DD format, e.g., 2026-07-01.');
       return;
     }
+    setActiveMonthIdx(null);
     const range = { from: fromDate || undefined };
     setAppliedRange(range);
     loadData(flowTab, range);
   };
 
-  const clearDateRange = () => {
-    setFromDate('');
-    setAppliedRange({});
-    loadData(flowTab, {});
-  };
 
   const openEntry = () => {
     setAmount('');
@@ -327,8 +391,8 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
       title: heading,
       subtitle: rangeTitle,
       summaryBoxes: [
-        { label: 'Input (Received)', value: rupees(totalIn), color: '#15803D' },
-        { label: 'Output (Paid)', value: rupees(totalOut), color: '#E21A12' },
+        { label: 'Input (Received)', value: rupees(totalIn), color: '#8C0F16' },
+        { label: 'Output (Paid)', value: rupees(totalOut), color: '#E23744' },
         { label: 'Balance', value: rupees(balance) },
       ],
       tables: [
@@ -416,17 +480,18 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
   // ---------- Sub views ----------
   const renderAnalytics = () => {
-    const breakdown = isInput ? summary?.inBreakdown : summary?.outBreakdown;
+    const categoryBreakdown = isInput ? monthStats.inByCategory : monthStats.outByCategory;
     return (
       <View>
+        <Text style={styles.sectionTitle}>This Month</Text>
         <View style={styles.statRow}>
           <View style={[styles.statCard, { backgroundColor: 'rgba(21, 128, 61, 0.08)' }]}>
-            <Text style={[styles.statValue, { color: COLORS.success }]}>{rupees(summary?.totalIn)}</Text>
-            <Text style={styles.statLabel}>Total Received</Text>
+            <Text style={[styles.statValue, { color: COLORS.success }]}>{rupees(monthStats.totalIn)}</Text>
+            <Text style={styles.statLabel}>Received</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: 'rgba(226, 26, 18, 0.06)' }]}>
-            <Text style={[styles.statValue, { color: COLORS.primary }]}>{rupees(summary?.totalOut)}</Text>
-            <Text style={styles.statLabel}>Total Paid</Text>
+            <Text style={[styles.statValue, { color: COLORS.primary }]}>{rupees(monthStats.totalOut)}</Text>
+            <Text style={styles.statLabel}>Paid</Text>
           </View>
         </View>
         <View style={styles.balanceCard}>
@@ -437,60 +502,93 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
           <MaterialIcons name="account-balance-wallet" size={30} color={COLORS.white} />
         </View>
 
-        {(breakdown || []).length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>{isInput ? 'Received From' : 'Paid To'}</Text>
-            <View style={styles.card}>
-              {(breakdown || []).map((item: any) => (
-                <View key={`${flowTab}-${item.category}-${item.party_name || ''}`} style={styles.breakdownRow}>
-                  <Text style={styles.breakdownName}>
-                    {isInput
-                      ? `${item.category}${item.party_name ? ` • ${item.party_name}` : ''}`
-                      : item.party_name || item.category}
-                  </Text>
-                  <Text style={[styles.breakdownAmount, { color: accent }]}>{rupees(item.total)}</Text>
-                </View>
-              ))}
-            </View>
-          </>
+        <Text style={styles.sectionTitle}>{isInput ? 'Received From' : 'Paid To'} — This Month</Text>
+        {categoryBreakdown.length > 0 ? (
+          <View style={styles.card}>
+            {categoryBreakdown.map((item) => (
+              <View key={item.category} style={styles.breakdownRow}>
+                <Text style={styles.breakdownName}>{item.category}</Text>
+                <Text style={[styles.breakdownAmount, { color: accent }]}>{rupees(item.total)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.emptyText}>{isInput ? 'No money received yet this month.' : 'No payments made yet this month.'}</Text>
+          </View>
         )}
       </View>
     );
   };
 
-  const renderTransactions = () => (
+  const renderTransactions = () => {
+    const periodLabel = activeMonthIdx !== null
+      ? QUICK_MONTHS[activeMonthIdx].label
+      : appliedRange.from
+      ? `From ${dateLabel(appliedRange.from)}`
+      : 'All Time';
+    const isAllTime = activeMonthIdx === null && !appliedRange.from;
+
+    return (
     <View>
-      {/* Date picker */}
-      <View style={styles.card}>
-        <Text style={styles.fieldLabel}>FILTER BY DATE (FROM)</Text>
-        <DatePickerField placeholder="All transactions (tap to filter)" value={fromDate} onChange={setFromDate} />
-        <View style={styles.dateActions}>
-          <TouchableOpacity style={styles.applyButton} onPress={applyDateRange}>
-            <MaterialIcons name="filter-alt" size={16} color={COLORS.white} />
-            <Text style={styles.applyButtonText}>Apply Filter</Text>
-          </TouchableOpacity>
-          {appliedRange.from && (
-            <TouchableOpacity style={styles.clearButton} onPress={clearDateRange}>
-              <Text style={styles.clearButtonText}>Show All</Text>
+      {/* Month quick-filter — defaults to the current month, so transactions stay one glance away */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.xs }}>
+        <View style={styles.monthChipRow}>
+          {QUICK_MONTHS.map((m, idx) => (
+            <TouchableOpacity
+              key={`${m.label}-${idx}`}
+              style={[styles.monthChip, activeMonthIdx === idx && { backgroundColor: accent, borderColor: accent }]}
+              onPress={() => selectMonth(idx)}
+            >
+              <Text style={[styles.monthChipText, activeMonthIdx === idx && styles.monthChipTextActive]}>{m.label}</Text>
             </TouchableOpacity>
-          )}
+          ))}
+          <TouchableOpacity
+            style={[styles.monthChip, isAllTime && { backgroundColor: accent, borderColor: accent }]}
+            onPress={selectAllTime}
+          >
+            <Text style={[styles.monthChipText, isAllTime && styles.monthChipTextActive]}>All Time</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.monthChip, styles.customDateChip, showCustomDate && { backgroundColor: accent, borderColor: accent }]}
+            onPress={() => setShowCustomDate((v) => !v)}
+          >
+            <MaterialIcons name="event" size={13} color={showCustomDate ? COLORS.white : COLORS.textLight} />
+            <Text style={[styles.monthChipText, showCustomDate && styles.monthChipTextActive]}>Custom</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
+
+      {/* Custom exact-date filter — tucked away unless asked for, to keep this page short */}
+      {showCustomDate && (
+        <View style={[styles.card, { marginBottom: SPACING.sm }]}>
+          <Text style={styles.fieldLabel}>PICK AN EXACT START DATE</Text>
+          <DatePickerField placeholder="Custom start date" value={fromDate} onChange={setFromDate} />
+          <View style={styles.dateActions}>
+            <TouchableOpacity style={styles.applyButton} onPress={applyDateRange}>
+              <MaterialIcons name="filter-alt" size={16} color={COLORS.white} />
+              <Text style={styles.applyButtonText}>Apply Filter</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      <View style={styles.periodSummaryRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.periodSummaryLabel}>{periodLabel}</Text>
+          <Text style={styles.periodSummaryValue}>
+            {transactions.length} txn{transactions.length === 1 ? '' : 's'} — {rupees(transactions.reduce((s, t) => s + Number(t.amount), 0))}
+          </Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.iconActionBtn} onPress={handleDownloadReport} disabled={generatingPdf}>
+            {generatingPdf ? <ActivityIndicator color={COLORS.primary} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.primary} />}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconActionBtn} onPress={handleShareWhatsApp} disabled={generatingPdf}>
+            <MaterialIcons name="share" size={18} color={COLORS.primary} />
+          </TouchableOpacity>
         </View>
       </View>
-
-      <View style={styles.pdfActionsRow}>
-        <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={handleDownloadReport} disabled={generatingPdf}>
-          {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
-          <Text style={styles.pdfButtonText}>Download PDF</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={handleShareWhatsApp} disabled={generatingPdf}>
-          <MaterialIcons name="share" size={18} color={COLORS.white} />
-          <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.sectionTitle}>
-        Transactions ({transactions.length}) — {rupees(transactions.reduce((s, t) => s + Number(t.amount), 0))}
-      </Text>
       <View style={styles.card}>
         {transactions.map((item: any) => (
           <TouchableOpacity 
@@ -531,14 +629,40 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         )}
       </View>
     </View>
-  );
+    );
+  };
 
   return (
     <View>
-      <Text style={styles.heading}>{heading}</Text>
-      <Text style={styles.subheading}>Cash in hand: <Text style={{ color: COLORS.text, fontWeight: '900' }}>{rupees(summary?.balance)}</Text></Text>
+      {/* Page header — role identity (right side) + live balance, profile-style card */}
+      <View style={styles.pageHeaderCard}>
+        <View style={styles.pageHeaderRow}>
+          <View style={styles.pageHeaderIconWrap}>
+            <MaterialIcons name="account-balance-wallet" size={21} color={COLORS.white} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.heading}>{heading}</Text>
+            <Text style={styles.subheading}>Cash & transfer ledger</Text>
+          </View>
+          <View style={styles.pageHeaderActions}>
+            <View style={styles.roleBadge}>
+              <MaterialIcons name="verified-user" size={12} color={COLORS.primary} />
+              <Text style={styles.roleBadgeText}>{role}</Text>
+            </View>
+            {/* Entry — every role can log both money-in and money-out themselves, from the top */}
+            <TouchableOpacity style={[styles.headerAddButton, { backgroundColor: accent }]} onPress={openEntry}>
+              <MaterialIcons name="add" size={16} color={COLORS.white} />
+              <Text style={styles.headerAddButtonText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.pageHeaderBalanceRow}>
+          <Text style={styles.pageHeaderBalanceLabel}>CASH IN HAND</Text>
+          <Text style={styles.pageHeaderBalanceValue}>{rupees(summary?.balance)}</Text>
+        </View>
+      </View>
 
-      {/* Input / Output submenu */}
+      {/* Input / Output submenu — same horizontal layout for every role */}
       <View style={styles.flowTabRow}>
         <TouchableOpacity
           style={[styles.flowTabButton, isInput && { backgroundColor: COLORS.success }]}
@@ -559,26 +683,25 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
       {/* Received/Paid vs Transactions sub-menu */}
       <View style={styles.viewTabRow}>
         <TouchableOpacity
-          style={[styles.viewTabButton, viewTab === 'ANALYTICS' && styles.viewTabButtonActive]}
+          style={styles.viewTabButton}
           onPress={() => setViewTab('ANALYTICS')}
         >
-          <Text style={[styles.viewTabText, viewTab === 'ANALYTICS' && styles.viewTabTextActive]}>
+          <MaterialIcons name="insights" size={15} color={viewTab === 'ANALYTICS' ? accent : COLORS.textLight} />
+          <Text style={[styles.viewTabText, viewTab === 'ANALYTICS' && [styles.viewTabTextActive, { color: accent }]]}>
             {isInput ? 'Received' : 'Paid'}
           </Text>
+          {viewTab === 'ANALYTICS' && <View style={[styles.viewTabIndicator, { backgroundColor: accent }]} />}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.viewTabButton, viewTab === 'TRANSACTIONS' && styles.viewTabButtonActive]}
+          style={styles.viewTabButton}
           onPress={() => setViewTab('TRANSACTIONS')}
         >
-          <Text style={[styles.viewTabText, viewTab === 'TRANSACTIONS' && styles.viewTabTextActive]}>Transactions</Text>
+          <MaterialIcons name="receipt-long" size={15} color={viewTab === 'TRANSACTIONS' ? accent : COLORS.textLight} />
+          <Text style={[styles.viewTabText, viewTab === 'TRANSACTIONS' && [styles.viewTabTextActive, { color: accent }]]}>Transactions</Text>
+          {viewTab === 'TRANSACTIONS' && <View style={[styles.viewTabIndicator, { backgroundColor: accent }]} />}
         </TouchableOpacity>
       </View>
 
-      {/* Entry — every role can log both money-in and money-out themselves */}
-      <TouchableOpacity style={[styles.addButton, { backgroundColor: accent }]} onPress={openEntry}>
-        <MaterialIcons name="add-circle-outline" size={20} color={COLORS.white} />
-        <Text style={styles.addButtonText}>{isInput ? 'New Receipt Entry' : 'New Payment Entry'}</Text>
-      </TouchableOpacity>
       {isInput && (
         <View style={styles.infoCard}>
           <MaterialIcons name="info-outline" size={20} color={COLORS.textLight} />
@@ -590,15 +713,23 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 
       {loading ? <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.md }} /> : null}
 
-      {viewTab === 'ANALYTICS' ? renderAnalytics() : renderTransactions()}
+      <View style={styles.pageContent}>
+        {viewTab === 'ANALYTICS' ? renderAnalytics() : renderTransactions()}
+      </View>
 
       {/* Entry modal */}
       <Modal visible={entryVisible} transparent animationType="slide" onRequestClose={() => setEntryVisible(false)}>
-        <View style={styles.modalBackdrop}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+        >
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>{isInput ? 'New Receipt Entry' : 'New Payment Entry'}</Text>
             <Text style={styles.modalSubtitle}>{heading} — {isInput ? 'money received' : 'money paid'}</Text>
+
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
             <Text style={styles.fieldLabel}>{isInput ? 'RECEIVED FROM' : 'GIVEN TO / SPENT ON'}</Text>
             <View style={styles.chipRow}>
@@ -739,8 +870,9 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                 {submitting ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.saveButtonText}>Save Entry</Text>}
               </TouchableOpacity>
             </View>
+            </ScrollView>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Transaction Details Modal */}
@@ -839,15 +971,77 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
 const styles = StyleSheet.create({
   heading: {
     color: COLORS.text,
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '900',
   },
   subheading: {
     color: COLORS.textLight,
-    fontSize: 13,
+    fontSize: 11.5,
     fontWeight: '600',
-    marginTop: 4,
+    marginTop: 1,
+  },
+  pageHeaderCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.xl,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    padding: SPACING.md,
     marginBottom: SPACING.md,
+    shadowColor: COLORS.shadowColor,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  pageHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  pageHeaderIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.headerBackground,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  roleBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.tint,
+    borderWidth: 1,
+    borderColor: COLORS.tintBorder,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  roleBadgeText: {
+    color: COLORS.primary,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  pageHeaderBalanceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginTop: SPACING.md,
+    paddingTop: SPACING.sm,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  pageHeaderBalanceLabel: {
+    color: COLORS.textLight,
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  pageHeaderBalanceValue: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: '900',
   },
   flowTabRow: {
     flexDirection: 'row',
@@ -877,29 +1071,37 @@ const styles = StyleSheet.create({
   },
   viewTabRow: {
     flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
+    gap: SPACING.lg,
+    marginBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    paddingHorizontal: 2,
   },
   viewTabButton: {
-    flex: 1,
+    position: 'relative',
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 9,
-    borderRadius: BORDER_RADIUS.md,
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  viewTabButtonActive: {
-    backgroundColor: COLORS.headerBackground,
-    borderColor: COLORS.headerBackground,
+    gap: 6,
+    paddingVertical: 10,
   },
   viewTabText: {
     color: COLORS.textLight,
-    fontSize: 12,
-    fontWeight: '900',
+    fontSize: 13,
+    fontWeight: '800',
   },
   viewTabTextActive: {
-    color: COLORS.white,
+    fontWeight: '900',
+  },
+  viewTabIndicator: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: -1,
+    height: 3,
+    borderRadius: 2,
+  },
+  pageContent: {
+    minHeight: 4,
   },
   statRow: {
     flexDirection: 'row',
@@ -992,6 +1194,45 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     padding: 11,
   },
+  monthChipRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    paddingBottom: 2,
+  },
+  monthChip: {
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  monthChipText: {
+    color: COLORS.textLight,
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+  monthChipTextActive: {
+    color: COLORS.white,
+  },
+  periodSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+    marginTop: SPACING.xs,
+  },
+  periodSummaryLabel: {
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  periodSummaryValue: {
+    color: COLORS.textLight,
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
   dateActions: {
     flexDirection: 'row',
     gap: SPACING.sm,
@@ -1040,19 +1281,27 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     fontSize: 13,
   },
-  addButton: {
+  pageHeaderActions: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
+  headerAddButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    borderRadius: BORDER_RADIUS.md,
-    paddingVertical: 14,
-    marginBottom: SPACING.sm,
+    gap: 4,
+    borderRadius: BORDER_RADIUS.lg,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    elevation: 2,
+    shadowColor: COLORS.shadowColor,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
   },
-  addButtonText: {
+  headerAddButtonText: {
     color: COLORS.white,
     fontWeight: '900',
-    fontSize: 14,
+    fontSize: 12,
   },
   infoCard: {
     flexDirection: 'row',
@@ -1126,6 +1375,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: BORDER_RADIUS.xl,
     padding: SPACING.lg,
     paddingBottom: SPACING.xl,
+    maxHeight: '92%',
   },
   modalHandle: {
     width: 44,
@@ -1261,27 +1511,19 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textTransform: 'uppercase',
   },
-  pdfActionsRow: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    marginBottom: SPACING.sm,
-  },
-  pdfButton: {
-    flex: 1,
+  customDateChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: COLORS.primary,
+    gap: 4,
+  },
+  iconActionBtn: {
+    width: 36,
+    height: 36,
     borderRadius: BORDER_RADIUS.md,
-    paddingVertical: 13,
-  },
-  whatsappButton: {
-    backgroundColor: '#25D366',
-  },
-  pdfButtonText: {
-    color: COLORS.white,
-    fontWeight: '900',
-    fontSize: 13,
+    backgroundColor: COLORS.tint,
+    borderWidth: 1,
+    borderColor: COLORS.tintBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

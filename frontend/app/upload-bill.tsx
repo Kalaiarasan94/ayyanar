@@ -324,7 +324,7 @@ export default function UploadBill() {
                   <MaterialIcons 
                     name={isSelected ? 'check-box' : 'check-box-outline-blank'} 
                     size={16} 
-                    color={isSelected ? '#FFF' : '#E21A12'} 
+                    color={isSelected ? '#FFF' : '#E23744'} 
                   />
                   <Text style={[styles.categoryChipText, isSelected && styles.categoryChipTextActive]}>{cat}</Text>
                 </TouchableOpacity>
@@ -355,11 +355,11 @@ export default function UploadBill() {
           <Text style={styles.formLabel}>BILL PHOTOS</Text>
           <View style={styles.photoActionRow}>
             <TouchableOpacity style={styles.photoBtn} onPress={() => pickImage(true)}>
-              <MaterialIcons name="photo-camera" size={20} color="#E21A12" />
+              <MaterialIcons name="photo-camera" size={20} color="#E23744" />
               <Text style={styles.photoBtnText}>Camera</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.photoBtn} onPress={() => pickImage(false)}>
-              <MaterialIcons name="photo-library" size={20} color="#E21A12" />
+              <MaterialIcons name="photo-library" size={20} color="#E23744" />
               <Text style={styles.photoBtnText}>Gallery</Text>
             </TouchableOpacity>
           </View>
@@ -403,7 +403,7 @@ export default function UploadBill() {
                   <Text style={styles.batchBillMode}>{bill.paymentMode} Bill • {bill.imageUris.length} Image(s) • {new Date(bill.date).toLocaleDateString('en-IN')}</Text>
                 </View>
                 <TouchableOpacity onPress={() => removeBill(bill.id)} style={styles.deleteBillBtn}>
-                  <MaterialIcons name="delete-outline" size={24} color="#E21A12" />
+                  <MaterialIcons name="delete-outline" size={24} color="#E23744" />
                 </TouchableOpacity>
               </View>
             ))}
@@ -425,7 +425,7 @@ export default function UploadBill() {
         {/* ─── SUBMITTED BILLS HISTORY ─── */}
         <View style={styles.historyCard}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}>
-            <MaterialIcons name="receipt-long" size={20} color="#E21A12" />
+            <MaterialIcons name="receipt-long" size={20} color="#E23744" />
             <Text style={styles.sectionTitle}>SUBMITTED BILLS</Text>
           </View>
 
@@ -436,7 +436,7 @@ export default function UploadBill() {
           />
 
           {loadingHistory ? (
-            <ActivityIndicator color="#E21A12" style={{ marginTop: 16 }} />
+            <ActivityIndicator color="#E23744" style={{ marginTop: 16 }} />
           ) : submittedBills.length === 0 ? (
             <View style={styles.emptyHistory}>
               <MaterialIcons name="inbox" size={32} color="#C4A8AE" />
@@ -446,15 +446,15 @@ export default function UploadBill() {
             <View>
               {/* Summary row */}
               <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12, marginTop: 8 }}>
-                <View style={{ flex: 1, backgroundColor: '#EBF8EE', borderRadius: 10, padding: 10 }}>
-                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#1A7A35' }}>DIRECT (CASH)</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#1A7A35', marginTop: 2 }}>
+                <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#8C0F16' }}>DIRECT (CASH)</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#8C0F16', marginTop: 2 }}>
                     ₹{submittedBills.filter(b => b.payment_mode === 'Direct').reduce((s: number, b: any) => s + Number(b.amount || 0), 0).toLocaleString()}
                   </Text>
                 </View>
-                <View style={{ flex: 1, backgroundColor: '#FFF3E0', borderRadius: 10, padding: 10 }}>
-                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#D56B00' }}>INDIRECT (CREDIT)</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#D56B00', marginTop: 2 }}>
+                <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#CB202D' }}>INDIRECT (CREDIT)</Text>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#CB202D', marginTop: 2 }}>
                     ₹{submittedBills.filter(b => b.payment_mode !== 'Direct').reduce((s: number, b: any) => s + Number(b.amount || 0), 0).toLocaleString()}
                   </Text>
                 </View>
@@ -471,14 +471,14 @@ export default function UploadBill() {
                       )}
                       <View style={{ flex: 1 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                          <View style={[styles.modeBadge, { backgroundColor: isDirect ? '#EBF8EE' : '#FFF3E0' }]}>
-                            <Text style={[styles.modeBadgeText, { color: isDirect ? '#1A7A35' : '#D56B00' }]}>
+                          <View style={[styles.modeBadge, { backgroundColor: isDirect ? '#FCE9E9' : '#FCE9E9' }]}>
+                            <Text style={[styles.modeBadgeText, { color: isDirect ? '#8C0F16' : '#CB202D' }]}>
                               {isDirect ? '💵 Direct' : '💳 Indirect'}
                             </Text>
                           </View>
                           {bill.is_gst ? (
-                            <View style={[styles.modeBadge, { backgroundColor: '#EDE9FE' }]}>
-                              <Text style={[styles.modeBadgeText, { color: '#5B21B6' }]}>GST</Text>
+                            <View style={[styles.modeBadge, { backgroundColor: '#FCE9E9' }]}>
+                              <Text style={[styles.modeBadgeText, { color: '#CB202D' }]}>GST</Text>
                             </View>
                           ) : null}
                         </View>
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.45)',
     elevation: 4,
-    shadowColor: '#E21A12',
+    shadowColor: '#E23744',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
@@ -535,14 +535,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#E21A12',
+    color: '#E23744',
     marginBottom: 16,
     letterSpacing: 0.5,
   },
   formLabel: {
     fontSize: 11,
     fontWeight: '800',
-    color: '#E21A12',
+    color: '#E23744',
     marginBottom: 8,
     marginTop: 10,
     letterSpacing: 0.5,
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   warningText: {
-    color: '#B5120D',
+    color: '#CB202D',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -587,11 +587,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   toggleBtnActiveDirect: {
-    borderColor: '#10B981',
+    borderColor: '#8C0F16',
     backgroundColor: 'rgba(16, 185, 129, 0.12)',
   },
   toggleBtnActiveIndirect: {
-    borderColor: '#E21A12',
+    borderColor: '#E23744',
     backgroundColor: 'rgba(226, 26, 18, 0.12)',
   },
   toggleBtnText: {
@@ -627,7 +627,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   switchTrackActive: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#8C0F16',
   },
   switchThumb: {
     backgroundColor: '#FFF',
@@ -657,8 +657,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.45)',
   },
   categoryChipActive: {
-    borderColor: '#E21A12',
-    backgroundColor: '#E21A12',
+    borderColor: '#E23744',
+    backgroundColor: '#E23744',
   },
   categoryChipText: {
     color: COLORS.text,
@@ -746,17 +746,17 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   clearPhotosText: {
-    color: '#B5120D',
+    color: '#CB202D',
     fontSize: 12,
     fontWeight: '700',
   },
   addToListBtn: {
-    backgroundColor: '#E21A12',
+    backgroundColor: '#E23744',
     padding: 16,
     borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
     elevation: 4,
-    shadowColor: '#B5120D',
+    shadowColor: '#CB202D',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -787,7 +787,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.45)',
     elevation: 4,
-    shadowColor: '#E21A12',
+    shadowColor: '#E23744',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 12,
@@ -814,7 +814,7 @@ const styles = StyleSheet.create({
   },
   batchBillMode: {
     fontSize: 10,
-    color: '#E21A12',
+    color: '#E23744',
     marginTop: 2,
     fontWeight: '700',
   },
@@ -822,13 +822,13 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   submitAllBtn: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#8C0F16',
     padding: 16,
     borderRadius: BORDER_RADIUS.md,
     alignItems: 'center',
     marginTop: 10,
     elevation: 6,
-    shadowColor: '#059669',
+    shadowColor: '#8C0F16',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
@@ -846,7 +846,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.45)',
     elevation: 4,
-    shadowColor: '#E21A12',
+    shadowColor: '#E23744',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.1,
     shadowRadius: 16,
@@ -895,7 +895,7 @@ const styles = StyleSheet.create({
   historyAmount: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#E21A12',
+    color: '#E23744',
   },
   emptyHistory: {
     alignItems: 'center',

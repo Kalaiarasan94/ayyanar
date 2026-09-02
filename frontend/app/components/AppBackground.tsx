@@ -14,9 +14,9 @@ export default function AppBackground() {
           </SvgLinearGradient>
         </Defs>
         <Rect width="100%" height="100%" fill="url(#bgGrad)" />
-        <Path d="M0 92 H1200" stroke="#E21A12" strokeOpacity={0.08} strokeWidth="16" />
-        <Path d="M-140 820 L560 120 L720 120 L20 820 Z" fill="#111317" opacity={0.035} />
-        <Path d="M280 0 L1200 0 L1200 70 L350 70 Z" fill="#E21A12" opacity={0.07} />
+        <Path d="M0 92 H1200" stroke="#E23744" strokeOpacity={0.08} strokeWidth="16" />
+        <Path d="M-140 820 L560 120 L720 120 L20 820 Z" fill="#E23744" opacity={0.035} />
+        <Path d="M280 0 L1200 0 L1200 70 L350 70 Z" fill="#E23744" opacity={0.07} />
       </Svg>
     </View>
   );

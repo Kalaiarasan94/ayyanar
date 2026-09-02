@@ -330,7 +330,7 @@ export default function DashboardScreen() {
     const expenseChartData = data?.siteWiseExpenseBreakdown?.slice(0, 5).map((exp: any, idx: number) => ({
       label: exp.site_name,
       value: Number(exp.total_expenses),
-      color: [COLORS.primary, COLORS.accent, COLORS.warning, COLORS.success, COLORS.secondary][idx % 5]
+      color: COLORS.chartRamp[idx % COLORS.chartRamp.length]
     })) || [];
 
     return (
@@ -385,7 +385,7 @@ export default function DashboardScreen() {
                       style={[
                         styles.progressBarFill,
                         {
-                          backgroundColor: [COLORS.primary, COLORS.accent, COLORS.warning][idx % 3],
+                          backgroundColor: COLORS.chartRamp[idx % COLORS.chartRamp.length],
                           width: `${Math.min((exp.total_expenses / 100000) * 100, 100)}%`
                         }
                       ]}
@@ -434,7 +434,7 @@ export default function DashboardScreen() {
                           Linking.openURL(url);
                         }}
                       >
-                        <MaterialIcons name="map" size={14} color="#0284C7" />
+                        <MaterialIcons name="map" size={14} color="#E23744" />
                         <Text style={styles.mapButtonText}>View on Maps</Text>
                       </TouchableOpacity>
                     ) : null}
@@ -458,8 +458,8 @@ export default function DashboardScreen() {
     const activeSites = sites.filter(s => s.status !== 'Completed');
 
     const walletChartData = [
-      { label: 'Cash in Hand', value: Number(wallet?.cashInHand || 0), color: '#10B981' },
-      { label: 'Total Spent', value: Number(wallet?.totalDebits || 0), color: '#EF4444' }
+      { label: 'Cash in Hand', value: Number(wallet?.cashInHand || 0), color: '#8C0F16' },
+      { label: 'Total Spent', value: Number(wallet?.totalDebits || 0), color: '#E23744' }
     ];
 
     return (
@@ -471,21 +471,21 @@ export default function DashboardScreen() {
 
         <View style={styles.statsRow}>
           <View style={[styles.statCard, { width: statCardWidth }]}>
-            <View style={[styles.iconContainer, { backgroundColor: '#DCFCE7' }]}>
-              <MaterialIcons name="account-balance-wallet" size={24} color="#15803D" />
+            <View style={[styles.iconContainer, { backgroundColor: '#FCE9E9' }]}>
+              <MaterialIcons name="account-balance-wallet" size={24} color="#8C0F16" />
             </View>
             <Text style={styles.statLabel}>Cash in Hand</Text>
-            <Text style={[styles.statValue, { color: '#10B981' }]}>
+            <Text style={[styles.statValue, { color: '#8C0F16' }]}>
               ₹{Number(wallet?.cashInHand || 0).toLocaleString()}
             </Text>
           </View>
 
           <View style={[styles.statCard, { width: statCardWidth }]}>
-            <View style={[styles.iconContainer, { backgroundColor: '#FEE2E2' }]}>
-              <MaterialIcons name="payments" size={24} color="#B91C1C" />
+            <View style={[styles.iconContainer, { backgroundColor: '#FCE9E9' }]}>
+              <MaterialIcons name="payments" size={24} color="#CB202D" />
             </View>
             <Text style={styles.statLabel}>Total Spent</Text>
-            <Text style={[styles.statValue, { color: '#EF4444' }]}>
+            <Text style={[styles.statValue, { color: '#E23744' }]}>
               ₹{Number(wallet?.totalDebits || 0).toLocaleString()}
             </Text>
           </View>
@@ -713,7 +713,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 10,
     fontWeight: 'bold',
-    color: '#047857',
+    color: '#8C0F16',
   },
   emptyCard: {
     backgroundColor: COLORS.white,

@@ -34,6 +34,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="driver" options={{ headerShown: false }} />
         <Stack.Screen name="upload-bill" options={{ title: 'Log Material Bill' }} />
         <Stack.Screen name="attendance" options={{ title: 'Daily Attendance' }} />
         <Stack.Screen name="cash-expense" options={{ title: 'Log Daily Expense' }} />

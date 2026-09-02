@@ -62,7 +62,7 @@ const describeTxn = (t: any) => {
 
 const KIND_STYLES = {
   RECEIPT: { voucher: 'Receipt', color: COLORS.success, bg: 'rgba(21, 128, 61, 0.1)' },
-  TRANSFER: { voucher: 'Contra', color: '#1D4ED8', bg: 'rgba(29, 78, 216, 0.08)' },
+  TRANSFER: { voucher: 'Contra', color: '#CB202D', bg: 'rgba(29, 78, 216, 0.08)' },
   PAYMENT: { voucher: 'Payment', color: COLORS.primary, bg: 'rgba(226, 26, 18, 0.08)' },
 };
 
@@ -258,8 +258,8 @@ export default function AccountsBookScreen() {
       title: 'Accounts Report',
       subtitle: periodTitle,
       summaryBoxes: [
-        { label: 'Revenue', value: rupees(report?.revenue), color: '#15803D' },
-        { label: 'Expenses', value: rupees(report?.expenses), color: '#E21A12' },
+        { label: 'Revenue', value: rupees(report?.revenue), color: '#8C0F16' },
+        { label: 'Expenses', value: rupees(report?.expenses), color: '#E23744' },
         { label: Number(report?.profit || 0) >= 0 ? 'Profit' : 'Loss', value: rupees(Math.abs(Number(report?.profit || 0))) },
         { label: 'Internal Transfers', value: rupees(report?.transfers) },
       ],
@@ -1163,7 +1163,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
   },
   whatsappButton: {
-    backgroundColor: '#25D366',
+    backgroundColor: '#E23744',
   },
   pdfButtonText: {
     color: COLORS.white,

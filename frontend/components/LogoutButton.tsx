@@ -18,7 +18,7 @@ export default function LogoutButton({ variant = 'header', showText = true }: Lo
       console.log('Logout: clearing storage...');
 
       // AsyncStorage works on every platform (it is backed by localStorage on web)
-      await AsyncStorage.multiRemove(['userRole', 'userName', 'userId']);
+      await AsyncStorage.multiRemove(['userRole', 'userName', 'userId', 'userUsername']);
 
       console.log('Logout: storage cleared successfully');
     } catch (error) {
@@ -52,27 +52,31 @@ export default function LogoutButton({ variant = 'header', showText = true }: Lo
 
   const isSolid = variant === 'solid';
   const isMenu = variant === 'menu';
-  const iconColor = isSolid ? COLORS.white : COLORS.primary;
+  const isHeader = variant === 'header';
+  // The header bar itself is solid red (COLORS.headerBackground) with white icons/title,
+  // so the header variant must read as white-on-red, not red-on-red.
+  const iconColor = isSolid ? COLORS.white : isHeader ? COLORS.white : COLORS.primary;
 
   return (
     <TouchableOpacity
       onPress={handleLogout}
+      hitSlop={isHeader ? { top: 8, bottom: 8, left: 8, right: 8 } : undefined}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: isMenu ? 12 : 5,
-        marginRight: variant === 'header' ? 12 : 0,
-        backgroundColor: isSolid ? COLORS.primary : 'rgba(226, 26, 18, 0.1)',
-        paddingHorizontal: isMenu ? 24 : 10,
-        paddingVertical: isMenu ? 16 : 6,
-        borderRadius: isMenu ? BORDER_RADIUS.xl : 6,
+        marginRight: isHeader ? 14 : 0,
+        backgroundColor: isSolid ? COLORS.primary : isHeader ? 'rgba(255, 255, 255, 0.18)' : 'rgba(226, 26, 18, 0.1)',
+        paddingHorizontal: isMenu ? 24 : isHeader ? 9 : 10,
+        paddingVertical: isMenu ? 16 : isHeader ? 7 : 6,
+        borderRadius: isMenu ? BORDER_RADIUS.xl : isHeader ? BORDER_RADIUS.lg : 6,
         borderWidth: isMenu ? 1 : 0,
         borderColor: COLORS.glassBorder,
       }}
     >
-      <MaterialIcons name="logout" size={isMenu ? 24 : 16} color={iconColor} />
-      {showText && (
+      <MaterialIcons name="logout" size={isMenu ? 24 : isHeader ? 18 : 16} color={iconColor} />
+      {showText && !isHeader && (
         <Text style={{ color: iconColor, fontWeight: 'bold', fontSize: isMenu ? 16 : 12 }}>
           LOGOUT
         </Text>

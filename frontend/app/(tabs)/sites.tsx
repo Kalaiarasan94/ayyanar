@@ -34,7 +34,7 @@ export default function SitesScreen() {
   const renderSite = ({ item }: { item: any }) => (
     <View style={styles.siteCard}>
       <View style={styles.siteIcon}>
-        <MaterialIcons name="location-city" size={24} color="#E21A12" />
+        <MaterialIcons name="location-city" size={24} color="#E23744" />
       </View>
       <View style={styles.siteInfo}>
         <Text style={styles.siteName}>{item.name}</Text>
@@ -46,7 +46,7 @@ export default function SitesScreen() {
           </Text>
         </View>
       </View>
-      <MaterialIcons name="chevron-right" size={24} color="#E21A12" />
+      <MaterialIcons name="chevron-right" size={24} color="#E23744" />
     </View>
   );
 
@@ -54,7 +54,7 @@ export default function SitesScreen() {
     return (
       <View style={styles.center}>
         <AppBackground />
-        <ActivityIndicator size="large" color="#E21A12" />
+        <ActivityIndicator size="large" color="#E23744" />
       </View>
     );
   }
@@ -68,7 +68,7 @@ export default function SitesScreen() {
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={styles.listContent}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E21A12" colors={["#E21A12"]} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E23744" colors={["#E23744"]} />
         }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     marginBottom: SPACING.md,
     elevation: 4,
-    shadowColor: '#E21A12',
+    shadowColor: '#E23744',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
