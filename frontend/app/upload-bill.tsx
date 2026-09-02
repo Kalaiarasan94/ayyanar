@@ -18,6 +18,7 @@ interface BillItem {
   paymentMode: 'Direct' | 'Indirect';
   isGst: boolean;
   imageUris: string[];
+  date: string;
 }
 
 export default function UploadBill() {
@@ -35,11 +36,11 @@ export default function UploadBill() {
   const [isGst, setIsGst] = useState(false);
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  
-  const [billsList, setBillsList] = useState<BillItem[]>([]);
 
   // Submitted bills history
   const todayStr = new Date().toISOString().split('T')[0];
+  const [billDate, setBillDate] = useState(todayStr);
+  const [billsList, setBillsList] = useState<BillItem[]>([]);
   const [historyDate, setHistoryDate] = useState(todayStr);
   const [submittedBills, setSubmittedBills] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -160,11 +161,12 @@ export default function UploadBill() {
       paymentMode,
       isGst,
       imageUris,
+      date: billDate,
     };
 
     setBillsList([...billsList, newBill]);
-    
-    // Reset fields
+
+    // Reset fields (billDate stays as picked, in case more bills for the same date follow)
     setVendorName('');
     setAmount('');
     setSelectedCategories(['Cement']);
@@ -213,7 +215,7 @@ export default function UploadBill() {
           paymentMode: bill.paymentMode,
           isGst: bill.isGst,
           imageUrl: hostedUris.join('||'),
-          date: new Date().toISOString().split('T')[0]
+          date: bill.date
         });
       }
 
@@ -330,11 +332,14 @@ export default function UploadBill() {
             })}
           </View>
 
-          <TextInput 
-            style={styles.textInput} 
-            placeholder="Vendor Name" 
-            value={vendorName} 
-            onChangeText={setVendorName} 
+          <Text style={styles.formLabel}>BILL DATE</Text>
+          <DatePickerField value={billDate} onChange={setBillDate} placeholder="Bill date" style={{ marginBottom: 14 }} />
+
+          <TextInput
+            style={styles.textInput}
+            placeholder="Vendor Name"
+            value={vendorName}
+            onChangeText={setVendorName}
             placeholderTextColor="#8B7B80"
           />
           
@@ -395,7 +400,7 @@ export default function UploadBill() {
                 <View style={styles.batchBillInfo}>
                   <Text style={styles.batchBillVendor} numberOfLines={1}>{bill.vendorName}</Text>
                   <Text style={styles.batchBillDetails}>{bill.categories.join(', ')} | ₹{bill.amount}</Text>
-                  <Text style={styles.batchBillMode}>{bill.paymentMode} Bill • {bill.imageUris.length} Image(s)</Text>
+                  <Text style={styles.batchBillMode}>{bill.paymentMode} Bill • {bill.imageUris.length} Image(s) • {new Date(bill.date).toLocaleDateString('en-IN')}</Text>
                 </View>
                 <TouchableOpacity onPress={() => removeBill(bill.id)} style={styles.deleteBillBtn}>
                   <MaterialIcons name="delete-outline" size={24} color="#E21A12" />

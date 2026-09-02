@@ -35,6 +35,12 @@ const rupees = (value: any) => `Rs ${Number(value || 0).toLocaleString('en-IN')}
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+// Local calendar date (Indian day, not UTC) used as the entry form's default date
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 const dateLabel = (isoDate: string) => {
   // Parse as local date (split on T to avoid UTC offset shifting the day)
   const parts = (isoDate || '').toString().split('T')[0].split('-');
@@ -95,6 +101,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const [entryName, setEntryName] = useState('');
   const [sites, setSites] = useState<{ id: any; name: string }[]>([]);
   const [selectedSite, setSelectedSite] = useState<{ id: any; name: string } | null>(null);
+  const [entryDate, setEntryDate] = useState(todayLocal());
   const [deleting, setDeleting] = useState(false);
 
   const isInput = flowTab === 'INPUT';
@@ -213,6 +220,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
     setSelectedSite(null);
     setPaymentMethod('Cash');
     setDescription('');
+    setEntryDate(todayLocal());
     setEntryVisible(true);
   };
 
@@ -244,7 +252,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         paymentMethod,
         description,
         amount: cleanAmount,
-        date: new Date().toISOString().split('T')[0],
+        date: entryDate,
         siteId: category === 'Site Expenses' ? selectedSite?.id || null : null,
       });
       setEntryVisible(false);
@@ -664,6 +672,9 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
                 </Text>
               </View>
             )}
+
+            <Text style={styles.fieldLabel}>DATE</Text>
+            <DatePickerField value={entryDate} onChange={setEntryDate} placeholder="Entry date" style={{ marginBottom: SPACING.md }} />
 
             <Text style={styles.fieldLabel}>PAYMENT METHOD</Text>
             <View style={styles.chipRow}>

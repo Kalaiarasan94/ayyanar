@@ -4,12 +4,19 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fieldService, adminService } from '../services/api';
+import DatePickerField from '../components/DatePickerField';
+
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 export default function CashExpenseScreen() {
   const router = useRouter();
   const { siteId, siteName, userId } = useLocalSearchParams();
   const [description, setDescription] = useState('');
   const [cost, setCost] = useState('');
+  const [expenseDate, setExpenseDate] = useState(todayLocal());
   const [loading, setLoading] = useState(false);
 
   const [assignedSites, setAssignedSites] = useState<any[]>([]);
@@ -82,14 +89,14 @@ export default function CashExpenseScreen() {
         category: 'Petty Cash',
         description: description,
         amount: parseFloat(cost),
-        date: new Date().toISOString().split('T')[0]
+        date: expenseDate
       });
 
       const expenseMessage = `💸 *CASH EXPENSE REPORT*\n\n` +
         `📍 *Site:* ${selectedSiteName || 'Not Specified'}\n` +
         `📝 *Description:* ${description}\n` +
         `💰 *Amount:* ₹${cost}\n` +
-        `📅 *Date:* ${new Date().toLocaleDateString()}\n` +
+        `📅 *Date:* ${new Date(expenseDate).toLocaleDateString('en-IN')}\n` +
         `✅ *Status:* Paid from Petty Cash & Logged to DB`;
 
       setLoading(false);
@@ -128,6 +135,9 @@ export default function CashExpenseScreen() {
         </View>
       )}
       
+      <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 8 }}>EXPENSE DATE</Text>
+      <DatePickerField value={expenseDate} onChange={setExpenseDate} placeholder="Expense date" style={{ marginBottom: 20 }} />
+
       <Text style={{ fontSize: 12, fontWeight: '600', color: '#64748B', marginBottom: 8 }}>EXPENSE ITEM DESCRIPTION</Text>
       <TextInput style={{ backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', padding: 14, borderRadius: 8, marginBottom: 20 }} placeholder="e.g. Tea & Snacks for laborers, Unloading tips" value={description} onChangeText={setDescription} />
 

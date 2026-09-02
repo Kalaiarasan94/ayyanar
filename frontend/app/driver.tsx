@@ -5,6 +5,12 @@ import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fieldService, uploadPhoto } from '../services/api';
 import LogoutButton from '../components/LogoutButton';
+import DatePickerField from '../components/DatePickerField';
+
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 // ==========================================
 // 2. DRIVER MODULE USER INTERFACE
@@ -27,12 +33,14 @@ export default function DriverLogScreen() {
   const [loadWeight, setLoadWeight] = useState('');
   const [startingTime, setStartingTime] = useState('');
   const [endingTime, setEndingTime] = useState('');
+  const [tripDate, setTripDate] = useState(todayLocal());
 
   // Diesel Bill Upload states
   const [billVehicleName, setBillVehicleName] = useState('');
   const [billNote, setBillNote] = useState('');
   const [billAmount, setBillAmount] = useState('');
   const [billImageUri, setBillImageUri] = useState<string | null>(null);
+  const [billDate, setBillDate] = useState(todayLocal());
   const [isBillSubmitting, setIsBillSubmitting] = useState(false);
 
   // Total KM is auto-calculated from starting & ending km
@@ -74,7 +82,7 @@ export default function DriverLogScreen() {
         loadWeight,
         startingTime,
         endingTime,
-        date: new Date().toISOString().split('T')[0],
+        date: tripDate,
       });
 
       Alert.alert('Success', `Trip record saved. Total KM: ${totalKm || 0}`);
@@ -125,7 +133,7 @@ export default function DriverLogScreen() {
         note: billNote,
         amount: billAmount ? parseFloat(billAmount) : null,
         imageUrl: hostedImageUrl,
-        date: new Date().toISOString().split('T')[0],
+        date: billDate,
       });
 
       Alert.alert('Success', 'Diesel bill uploaded. The admin can see it in Driver Reports.');
@@ -133,6 +141,7 @@ export default function DriverLogScreen() {
       setBillNote('');
       setBillAmount('');
       setBillImageUri(null);
+      setBillDate(todayLocal());
     } catch (error: any) {
       Alert.alert('Upload Failed', error.message || 'Could not upload the diesel bill.');
     } finally {
@@ -153,6 +162,7 @@ export default function DriverLogScreen() {
     setLoadWeight('');
     setStartingTime('');
     setEndingTime('');
+    setTripDate(todayLocal());
   };
 
   const fieldLabel = { fontSize: 11, fontWeight: 'bold' as const, color: '#64748B', marginBottom: 6 };
@@ -167,6 +177,9 @@ export default function DriverLogScreen() {
       <Text style={{ fontSize: 14, color: '#64748B', marginBottom: 20 }}>Submit your daily trip details directly into the database system</Text>
 
       <View style={{ backgroundColor: '#FFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 30 }}>
+        <Text style={fieldLabel}>TRIP DATE</Text>
+        <DatePickerField value={tripDate} onChange={setTripDate} placeholder="Trip date" style={{ marginBottom: 14 }} />
+
         <Text style={fieldLabel}>VEHICLE NAME *</Text>
         <TextInput style={fieldInput} placeholder="e.g., Tata Tipper, Eicher 407" value={vehicleName} onChangeText={setVehicleName} />
 
@@ -246,6 +259,9 @@ export default function DriverLogScreen() {
       <View style={{ backgroundColor: '#FFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 40 }}>
         <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0F172A', marginBottom: 4 }}>Diesel Bill Upload</Text>
         <Text style={{ fontSize: 13, color: '#64748B', marginBottom: 16 }}>Upload the diesel/fuel bill photo with a note on which bill it is.</Text>
+
+        <Text style={fieldLabel}>BILL DATE</Text>
+        <DatePickerField value={billDate} onChange={setBillDate} placeholder="Bill date" style={{ marginBottom: 14 }} />
 
         <Text style={fieldLabel}>VEHICLE NAME</Text>
         <TextInput style={fieldInput} placeholder="e.g., Tata Tipper (defaults to trip vehicle)" value={billVehicleName} onChangeText={setBillVehicleName} />
