@@ -122,7 +122,8 @@ export const initDb = async () => {
     `);
 
     // Create attendance_categories table if not exists (category + headcount, e.g.
-    // "Kothanar" x 5 present, instead of naming every individual worker)
+    // "Kothanar" x 5 present, instead of naming every individual worker).
+    // worker_name/image_url optionally tag who reported it and a crew photo proof.
     await db.query(`
       CREATE TABLE IF NOT EXISTS attendance_categories (
           id INT AUTO_INCREMENT PRIMARY KEY,
@@ -131,6 +132,8 @@ export const initDb = async () => {
           category VARCHAR(100) NOT NULL,
           present_count INT DEFAULT 0,
           absent_count INT DEFAULT 0,
+          worker_name VARCHAR(255) NULL,
+          image_url TEXT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
           UNIQUE KEY (site_id, date, category)
@@ -212,14 +215,26 @@ export const initDb = async () => {
     const latCols = latResult as any[];
     if (latCols.length === 0) {
       await db.query(`
-        ALTER TABLE supervisor_attendance 
+        ALTER TABLE supervisor_attendance
         ADD COLUMN latitude DECIMAL(10, 8) NULL,
         ADD COLUMN longitude DECIMAL(11, 8) NULL,
         ADD COLUMN location_name VARCHAR(255) NULL;
       `);
       console.log('Added latitude, longitude, and location_name columns to supervisor_attendance.');
     }
-    
+
+    // 4. Add worker_name and image_url columns to attendance_categories if they don't exist
+    // (lets a worker-category entry name who reported it and attach a crew photo)
+    const [workerNameResult] = await pool.execute("SHOW COLUMNS FROM attendance_categories LIKE 'worker_name'");
+    if ((workerNameResult as any[]).length === 0) {
+      await db.query(`
+        ALTER TABLE attendance_categories
+        ADD COLUMN worker_name VARCHAR(255) NULL,
+        ADD COLUMN image_url TEXT NULL;
+      `);
+      console.log('Added worker_name and image_url columns to attendance_categories.');
+    }
+
     console.log('MySQL Database initialized successfully.');
   } catch (error) {
     console.error('Failed to initialize database schema:', error);

@@ -702,15 +702,6 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         </TouchableOpacity>
       </View>
 
-      {isInput && (
-        <View style={styles.infoCard}>
-          <MaterialIcons name="info-outline" size={20} color={COLORS.textLight} />
-          <Text style={styles.infoText}>
-            Transfers from {role === 'Admin' ? 'the Owner or a Supervisor' : role === 'Supervisor' ? 'the Owner or Admin' : 'Admin or Supervisors'} are also credited here automatically — you only need to log money received from outside (Client, Govt, Loan, etc.) or add it yourself using "Others".
-          </Text>
-        </View>
-      )}
-
       {loading ? <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.md }} /> : null}
 
       <View style={styles.pageContent}>

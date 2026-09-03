@@ -261,10 +261,18 @@ export const fieldController = {
       for (const c of categories) {
         if (!c?.category) continue;
         await db.query(
-          `INSERT INTO attendance_categories (site_id, date, category, present_count, absent_count)
-           VALUES (?, ?, ?, ?, ?)
-           ON DUPLICATE KEY UPDATE present_count = VALUES(present_count), absent_count = VALUES(absent_count)`,
-          [cleanSiteId, cleanDate, c.category, parseInt(c.presentCount || 0), parseInt(c.absentCount || 0)]
+          `INSERT INTO attendance_categories (site_id, date, category, present_count, absent_count, worker_name, image_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE present_count = VALUES(present_count), absent_count = VALUES(absent_count), worker_name = VALUES(worker_name), image_url = VALUES(image_url)`,
+          [
+            cleanSiteId,
+            cleanDate,
+            c.category,
+            parseInt(c.presentCount || 0),
+            parseInt(c.absentCount || 0),
+            c.workerName || null,
+            c.imageUrl || null,
+          ]
         );
       }
       res.status(201).json({ success: true, message: `Attendance saved for ${categories.length} category/categories.` });

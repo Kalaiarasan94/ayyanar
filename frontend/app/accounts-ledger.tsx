@@ -19,12 +19,13 @@ import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp, ReportTabl
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 import DatePickerField from '../components/DatePickerField';
 
-type BookTab = 'DAYBOOK' | 'LEDGER' | 'REPORTS';
+type BookTab = 'DASHBOARD' | 'DAYBOOK' | 'LEDGER' | 'REPORTS';
 
 // Paying these parties is an internal transfer between our own books
 const ROLE_PARTIES = ['Owner', 'Admin', 'Supervisors', 'Supervisor'];
 
 const bottomTabs: { id: BookTab; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
+  { id: 'DASHBOARD', label: 'Dashboard', icon: 'dashboard' },
   { id: 'DAYBOOK', label: 'Day Book', icon: 'menu-book' },
   { id: 'LEDGER', label: 'Ledger', icon: 'account-balance' },
   { id: 'REPORTS', label: 'Reports', icon: 'assessment' },
@@ -78,10 +79,12 @@ const getTodayStr = () => {
 
 export default function AccountsBookScreen() {
   const insets = useSafeAreaInsets();
-  const [tab, setTab] = useState<BookTab>('DAYBOOK');
+  const [tab, setTab] = useState<BookTab>('DASHBOARD');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  const [dashboardSummary, setDashboardSummary] = useState<any>(null);
 
   const [dayBook, setDayBook] = useState<any[]>([]);
   const [dayFlowFilter, setDayFlowFilter] = useState<'ALL' | 'DEBIT' | 'CREDIT'>('ALL');
@@ -105,7 +108,9 @@ export default function AccountsBookScreen() {
   const loadTab = async (target: BookTab = tab, range?: { from?: string; to?: string }) => {
     setLoading(true);
     try {
-      if (target === 'DAYBOOK') {
+      if (target === 'DASHBOARD') {
+        setDashboardSummary(await accountsService.getTotalSummary());
+      } else if (target === 'DAYBOOK') {
         const activeRange = range !== undefined ? range : dbRange;
         const data = await accountsService.getDayBook(activeRange.from, activeRange.to);
         setDayBook(data);
@@ -453,6 +458,51 @@ export default function AccountsBookScreen() {
   };
 
   // ---------- Renderers ----------
+  const renderDashboard = () => {
+    const profitPositive = Number(dashboardSummary?.profit || 0) >= 0;
+    return (
+      <View>
+        <Text style={styles.screenTitle}>Dashboard</Text>
+        <Text style={styles.screenSubtitle}>Company-wide money picture — Owner, Admin and Supervisor books combined.</Text>
+
+        <View style={styles.statRow}>
+          <View style={[styles.statCard, { backgroundColor: 'rgba(21, 128, 61, 0.08)' }]}>
+            <Text style={[styles.statValue, { color: COLORS.success }]}>{rupees(dashboardSummary?.revenue)}</Text>
+            <Text style={styles.statLabel}>Revenue</Text>
+          </View>
+          <View style={[styles.statCard, { backgroundColor: 'rgba(226, 26, 18, 0.06)' }]}>
+            <Text style={[styles.statValue, { color: COLORS.primary }]}>{rupees(dashboardSummary?.expenses)}</Text>
+            <Text style={styles.statLabel}>Expenses</Text>
+          </View>
+        </View>
+
+        <View style={[styles.profitCard, { backgroundColor: profitPositive ? COLORS.success : COLORS.primary }]}>
+          <View>
+            <Text style={styles.profitLabel}>{profitPositive ? 'Profit' : 'Loss'} — Lifetime</Text>
+            <Text style={styles.profitValue}>{rupees(Math.abs(Number(dashboardSummary?.profit || 0)))}</Text>
+          </View>
+          <MaterialIcons name={profitPositive ? 'savings' : 'warning'} size={30} color={COLORS.white} />
+        </View>
+
+        <Text style={styles.sectionTitle}>Cash in Hand (By Role)</Text>
+        <View style={styles.card}>
+          {(dashboardSummary?.roleBalances || []).map((item: any) => (
+            <View key={item.role} style={styles.breakdownRow}>
+              <View>
+                <Text style={styles.breakdownName}>{item.role}</Text>
+                <Text style={styles.bookMeta}>In: {rupees(item.totalIn)} · Out: {rupees(item.totalOut)}</Text>
+              </View>
+              <Text style={[styles.breakdownAmount, { color: COLORS.text }]}>{rupees(item.balance)}</Text>
+            </View>
+          ))}
+          {(!dashboardSummary?.roleBalances || dashboardSummary.roleBalances.length === 0) && (
+            <Text style={styles.emptyText}>No role balances yet.</Text>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   const renderDayBook = () => (
     <View>
       <Text style={styles.screenTitle}>Day Book</Text>
@@ -736,6 +786,7 @@ export default function AccountsBookScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadTab(); }} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
       >
         {loading && !refreshing ? <ActivityIndicator color={COLORS.primary} style={{ marginBottom: SPACING.md }} /> : null}
+        {tab === 'DASHBOARD' && renderDashboard()}
         {tab === 'DAYBOOK' && renderDayBook()}
         {tab === 'LEDGER' && renderLedger()}
         {tab === 'REPORTS' && renderReports()}

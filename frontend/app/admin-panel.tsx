@@ -1045,10 +1045,14 @@ export default function AdminPanelScreen() {
         <SectionTitle title="Worker Attendance (by Category)" />
         <View style={styles.card}>
           {categoryList.map((item: any) => (
-            <View key={`category-${item.id}`} style={styles.attendanceRow}>
-              <View style={styles.listIcon}><MaterialIcons name="groups" size={22} color={COLORS.primary} /></View>
+            <TouchableOpacity key={`category-${item.id}`} style={styles.attendanceRow} onPress={() => setAttendanceDetail(item)} activeOpacity={0.7}>
+              {item.image_url?.startsWith('http') ? (
+                <Image source={{ uri: item.image_url }} style={styles.attendanceImage} />
+              ) : (
+                <View style={styles.listIcon}><MaterialIcons name="groups" size={22} color={COLORS.primary} /></View>
+              )}
               <View style={styles.listContent}>
-                <Text style={styles.rowTitle}>{item.category}</Text>
+                <Text style={styles.rowTitle}>{item.category}{item.worker_name ? ` — ${item.worker_name}` : ''}</Text>
                 <Text style={styles.rowMeta}>{item.site_name || 'Site not recorded'}</Text>
               </View>
               <View style={{ alignItems: 'flex-end' }}>
@@ -1057,7 +1061,8 @@ export default function AdminPanelScreen() {
                   <Text style={{ color: COLORS.primary, fontWeight: '900', fontSize: 11, marginTop: 2 }}>{item.absent_count} Absent</Text>
                 )}
               </View>
-            </View>
+              <MaterialIcons name="chevron-right" size={20} color={COLORS.textLight} />
+            </TouchableOpacity>
           ))}
           {categoryList.length === 0 && <EmptyState text="No worker attendance for this date." />}
         </View>
@@ -1655,7 +1660,38 @@ export default function AdminPanelScreen() {
         <View style={styles.detailBackdrop}>
           <View style={styles.detailSheet}>
             <View style={styles.detailHandle} />
-            {attendanceDetail && (
+            {attendanceDetail && attendanceDetail.category !== undefined ? (
+              <>
+                <View style={styles.detailHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailName}>{attendanceDetail.category}{attendanceDetail.worker_name ? ` — ${attendanceDetail.worker_name}` : ''}</Text>
+                    <Text style={styles.detailMeta}>
+                      {attendanceDetail.site_name || 'Site not recorded'} • {new Date(attendanceDetail.date).toLocaleDateString('en-IN')}
+                    </Text>
+                  </View>
+                </View>
+
+                {attendanceDetail.image_url?.startsWith('http') ? (
+                  <Image source={{ uri: attendanceDetail.image_url }} style={styles.detailPhoto} resizeMode="cover" />
+                ) : (
+                  <View style={styles.detailNoPhoto}>
+                    <MaterialIcons name="no-photography" size={40} color={COLORS.textLight} />
+                    <Text style={styles.detailNoPhotoText}>No crew photo uploaded.</Text>
+                  </View>
+                )}
+
+                <View style={styles.detailLocationRow}>
+                  <MaterialIcons name="groups" size={18} color={COLORS.success} />
+                  <Text style={styles.detailLocationText}>
+                    {attendanceDetail.present_count || 0} present{Number(attendanceDetail.absent_count || 0) > 0 ? ` • ${attendanceDetail.absent_count} absent` : ''}
+                  </Text>
+                </View>
+
+                <TouchableOpacity style={styles.detailCloseButton} onPress={() => setAttendanceDetail(null)}>
+                  <Text style={styles.detailCloseButtonText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            ) : attendanceDetail && (
               <>
                 <View style={styles.detailHeader}>
                   <View style={{ flex: 1 }}>

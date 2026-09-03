@@ -16,6 +16,8 @@ interface WorkerCategory {
   category: string;
   presentCount: string;
   absentCount: string;
+  workerName: string;
+  photoUri: string | null;
 }
 
 // Common daily-wage worker categories offered as quick-pick chips (free text also allowed)
@@ -61,6 +63,8 @@ export default function AttendanceScreen() {
   const [categoryName, setCategoryName] = useState('');
   const [presentCountInput, setPresentCountInput] = useState('');
   const [absentCountInput, setAbsentCountInput] = useState('');
+  const [categoryWorkerName, setCategoryWorkerName] = useState('');
+  const [categoryPhotoUri, setCategoryPhotoUri] = useState<string | null>(null);
   const [categoriesList, setCategoriesList] = useState<WorkerCategory[]>([]);
   const [submittedList, setSubmittedList] = useState<any[]>([]);
   const [workerLoading, setWorkerLoading] = useState(false);
@@ -220,15 +224,42 @@ export default function AttendanceScreen() {
     }
     setCategoriesList([
       ...categoriesList,
-      { id: Date.now().toString(), category: categoryName.trim(), presentCount: String(present), absentCount: String(absent) },
+      {
+        id: Date.now().toString(),
+        category: categoryName.trim(),
+        presentCount: String(present),
+        absentCount: String(absent),
+        workerName: categoryWorkerName.trim(),
+        photoUri: categoryPhotoUri,
+      },
     ]);
     setCategoryName('');
     setPresentCountInput('');
     setAbsentCountInput('');
+    setCategoryWorkerName('');
+    setCategoryPhotoUri(null);
   };
 
   const removeCategory = (id: string) => {
     setCategoriesList(categoriesList.filter((c) => c.id !== id));
+  };
+
+  // Take (or pick) a crew photo to attach as proof to the category being added
+  const captureCategoryPhoto = async (useCamera = true) => {
+    const permission = useCamera
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (permission.status !== 'granted') {
+      notify('Permission Denied', `Permission to access ${useCamera ? 'camera' : 'gallery'} is required.`);
+      return;
+    }
+    const options: ImagePicker.ImagePickerOptions = { allowsEditing: true, quality: 0.7 };
+    const result = useCamera
+      ? await ImagePicker.launchCameraAsync(options)
+      : await ImagePicker.launchImageLibraryAsync(options);
+    if (!result.canceled && result.assets?.[0]) {
+      setCategoryPhotoUri(result.assets[0].uri);
+    }
   };
 
   const sendToWhatsApp = (message: string) => {
@@ -259,20 +290,32 @@ export default function AttendanceScreen() {
 
     setWorkerLoading(true);
     try {
+      const username = (await AsyncStorage.getItem('userUsername')) || userName || 'unknown';
+      const categoriesPayload = await Promise.all(
+        categoriesList.map(async (c) => {
+          const imageUrl = c.photoUri
+            ? await uploadPhoto(c.photoUri, { role: 'worker', username, type: 'attendance' })
+            : null;
+          return {
+            category: c.category,
+            presentCount: parseInt(c.presentCount) || 0,
+            absentCount: parseInt(c.absentCount) || 0,
+            workerName: c.workerName || null,
+            imageUrl,
+          };
+        })
+      );
+
       await fieldService.submitAttendanceCategory({
         siteId: selectedSiteId,
         date: attendanceDate,
-        categories: categoriesList.map((c) => ({
-          category: c.category,
-          presentCount: parseInt(c.presentCount) || 0,
-          absentCount: parseInt(c.absentCount) || 0,
-        })),
+        categories: categoriesPayload,
       });
 
       const totalPresent = categoriesList.reduce((s, c) => s + (parseInt(c.presentCount) || 0), 0);
       const totalAbsent = categoriesList.reduce((s, c) => s + (parseInt(c.absentCount) || 0), 0);
       const categoryLines = categoriesList
-        .map((c, i) => `${i + 1}. *${c.category}* — Present: ${c.presentCount || 0}, Absent: ${c.absentCount || 0}`)
+        .map((c, i) => `${i + 1}. *${c.category}*${c.workerName ? ` (${c.workerName})` : ''} — Present: ${c.presentCount || 0}, Absent: ${c.absentCount || 0}`)
         .join('\n');
       const message =
         `👷 *DAILY ATTENDANCE REPORT*\n\n` +
@@ -551,6 +594,34 @@ export default function AttendanceScreen() {
             />
           </View>
 
+          <TextInput
+            style={styles.textInput}
+            placeholder="Worker / team lead name (optional)"
+            value={categoryWorkerName}
+            onChangeText={setCategoryWorkerName}
+            placeholderTextColor="#8B7B80"
+          />
+
+          {categoryPhotoUri ? (
+            <View style={styles.categoryPhotoPreview}>
+              <Image source={{ uri: categoryPhotoUri }} style={styles.categoryPhotoImage} resizeMode="cover" />
+              <TouchableOpacity style={styles.categoryPhotoRemove} onPress={() => setCategoryPhotoUri(null)}>
+                <MaterialIcons name="close" size={16} color="#FFF" />
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+              <TouchableOpacity style={styles.photoPickBtn} onPress={() => captureCategoryPhoto(true)}>
+                <MaterialIcons name="camera-alt" size={16} color={COLORS.primary} />
+                <Text style={styles.photoPickBtnText}>Take Photo</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.photoPickBtn} onPress={() => captureCategoryPhoto(false)}>
+                <MaterialIcons name="photo-library" size={16} color={COLORS.primary} />
+                <Text style={styles.photoPickBtnText}>Gallery</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <TouchableOpacity style={styles.addBtn} onPress={addCategory}>
             <Text style={styles.addBtnText}>+ ADD CATEGORY</Text>
           </TouchableOpacity>
@@ -563,11 +634,15 @@ export default function AttendanceScreen() {
             </Text>
             {categoriesList.map((cat) => (
               <View key={cat.id} style={styles.rosterCard}>
-                <View style={styles.avatarContainer}>
-                  <MaterialIcons name="groups" size={20} color="#E23744" />
-                </View>
+                {cat.photoUri ? (
+                  <Image source={{ uri: cat.photoUri }} style={styles.rosterThumb} resizeMode="cover" />
+                ) : (
+                  <View style={styles.avatarContainer}>
+                    <MaterialIcons name="groups" size={20} color="#E23744" />
+                  </View>
+                )}
                 <View style={styles.workerInfo}>
-                  <Text style={styles.workerName}>{cat.category}</Text>
+                  <Text style={styles.workerName}>{cat.category}{cat.workerName ? ` — ${cat.workerName}` : ''}</Text>
                   <Text style={styles.workerRole}>Present: {cat.presentCount || 0} • Absent: {cat.absentCount || 0}</Text>
                 </View>
 
@@ -594,11 +669,15 @@ export default function AttendanceScreen() {
           </Text>
           {submittedList.map((item: any) => (
             <View key={item.id} style={styles.rosterCard}>
-              <View style={[styles.avatarContainer, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
-                <MaterialIcons name="groups" size={20} color="#8C0F16" />
-              </View>
+              {item.image_url?.startsWith('http') ? (
+                <Image source={{ uri: item.image_url }} style={styles.rosterThumb} resizeMode="cover" />
+              ) : (
+                <View style={[styles.avatarContainer, { backgroundColor: 'rgba(16, 185, 129, 0.12)' }]}>
+                  <MaterialIcons name="groups" size={20} color="#8C0F16" />
+                </View>
+              )}
               <View style={styles.workerInfo}>
-                <Text style={styles.workerName}>{item.category}</Text>
+                <Text style={styles.workerName}>{item.category}{item.worker_name ? ` — ${item.worker_name}` : ''}</Text>
                 <Text style={styles.workerRole}>{item.site_name ? `${item.site_name} • ` : ''}Present: {item.present_count || 0} • Absent: {item.absent_count || 0}</Text>
               </View>
             </View>
@@ -1114,6 +1193,50 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  rosterThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  photoPickBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 26, 18, 0.12)',
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 12,
+  },
+  photoPickBtnText: {
+    color: COLORS.primary,
+    fontSize: 12.5,
+    fontWeight: '800',
+  },
+  categoryPhotoPreview: {
+    position: 'relative',
+    height: 140,
+    borderRadius: BORDER_RADIUS.lg,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  categoryPhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  categoryPhotoRemove: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   workerInfo: {
     flex: 1,

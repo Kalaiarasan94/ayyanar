@@ -166,7 +166,8 @@ CREATE TABLE IF NOT EXISTS driver_bills (
 );
 
 -- Worker attendance by category + headcount (e.g. "Kothanar" x 5 present)
--- instead of naming every individual worker
+-- instead of naming every individual worker. worker_name/image_url optionally
+-- tag who reported it and attach a crew photo as proof.
 CREATE TABLE IF NOT EXISTS attendance_categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
     site_id INT NOT NULL,
@@ -174,6 +175,8 @@ CREATE TABLE IF NOT EXISTS attendance_categories (
     category VARCHAR(100) NOT NULL,
     present_count INT DEFAULT 0,
     absent_count INT DEFAULT 0,
+    worker_name VARCHAR(255) NULL,
+    image_url TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
     UNIQUE KEY (site_id, date, category)

@@ -199,6 +199,8 @@ export const adminController = {
           ac.category,
           ac.present_count,
           ac.absent_count,
+          ac.worker_name,
+          ac.image_url,
           s.name as site_name,
           s.location as site_location
         FROM attendance_categories ac
