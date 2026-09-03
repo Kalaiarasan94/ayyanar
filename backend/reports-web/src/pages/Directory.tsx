@@ -26,7 +26,7 @@ export default function Directory() {
       ) : (
         <>
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Sites ({sites.length})</h3>
+            <h3 className="section-heading">Sites ({sites.length})</h3>
             <DataTable<any>
               rowKey={(s) => s.id}
               rows={sites}
@@ -41,7 +41,7 @@ export default function Directory() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Staff ({staff.length})</h3>
+            <h3 className="section-heading">Staff ({staff.length})</h3>
             <DataTable<any>
               rowKey={(s) => s.id}
               rows={staff}

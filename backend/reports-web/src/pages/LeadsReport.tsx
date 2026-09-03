@@ -57,7 +57,7 @@ export default function LeadsReport() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>By Channel</h3>
+            <h3 className="section-heading">By Channel</h3>
             <DataTable<any>
               rowKey={(r) => r.source}
               rows={sourceRows}
@@ -72,7 +72,7 @@ export default function LeadsReport() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>All Leads ({leads.length})</h3>
+            <h3 className="section-heading">All Leads ({leads.length})</h3>
             <DataTable<any>
               rowKey={(l) => l.id}
               rows={leads}

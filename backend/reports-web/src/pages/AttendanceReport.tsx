@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { UserCheck, UserMinus, UserX, Users } from 'lucide-react';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
@@ -46,14 +47,14 @@ export default function AttendanceReport() {
       </div>
 
       <div className="summary-row">
-        <SummaryCard label="Supervisors Present" value={present.toString()} color="#15803d" />
-        <SummaryCard label="Supervisors Absent" value={absent.toString()} color="#e23744" />
-        <SummaryCard label="Workers Present" value={workerPresent.toString()} color="#15803d" />
-        <SummaryCard label="Workers Absent" value={workerAbsent.toString()} color="#e23744" />
+        <SummaryCard label="Supervisors Present" value={present.toString()} color="#15803d" icon={UserCheck} />
+        <SummaryCard label="Supervisors Absent" value={absent.toString()} color="#e23744" icon={UserX} />
+        <SummaryCard label="Workers Present" value={workerPresent.toString()} color="#15803d" icon={Users} />
+        <SummaryCard label="Workers Absent" value={workerAbsent.toString()} color="#e23744" icon={UserMinus} />
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Supervisor Attendance</h3>
+        <h3 className="section-heading">Supervisor Attendance</h3>
         {loading ? (
           <div className="empty-note">Loading…</div>
         ) : (
@@ -87,7 +88,7 @@ export default function AttendanceReport() {
 
       {Array.from(grouped.entries()).map(([supervisorName, items]) => (
         <div className="card" key={supervisorName}>
-          <h3 style={{ marginTop: 0 }}>{supervisorName}'s Workers</h3>
+          <h3 className="section-heading">{supervisorName}'s Workers</h3>
           <DataTable<any>
             rowKey={(c) => c.id}
             rows={items}

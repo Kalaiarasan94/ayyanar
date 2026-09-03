@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-react';
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateRangePicker from '../components/DateRangePicker';
@@ -106,9 +108,9 @@ export default function IoReport() {
       ) : report ? (
         <>
           <div className="summary-row">
-            <SummaryCard label="Total Input" value={rupees(report.totals.input)} color="#15803d" />
-            <SummaryCard label="Total Output" value={rupees(report.totals.output)} color="#e23744" />
-            <SummaryCard label="Closing Balance" value={rupees(report.totals.closing)} />
+            <SummaryCard label="Total Input" value={rupees(report.totals.input)} color="#15803d" icon={ArrowDownCircle} />
+            <SummaryCard label="Total Output" value={rupees(report.totals.output)} color="#e23744" icon={ArrowUpCircle} />
+            <SummaryCard label="Closing Balance" value={rupees(report.totals.closing)} icon={Wallet} />
           </div>
 
           <div className="toolbar">
@@ -116,6 +118,21 @@ export default function IoReport() {
               {downloading ? 'Building PDF…' : 'Download PDF'}
             </button>
           </div>
+
+          {report.rows.length > 1 && (
+            <div className="card">
+              <h3 className="section-heading">Balance Trend</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={report.rows.map((r: any) => ({ name: dateLabel(r.date), Balance: Number(r.balance) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1dede" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v: any) => rupees(v)} />
+                  <Line type="monotone" dataKey="Balance" stroke="#e23744" strokeWidth={2.5} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
           <div className="card">
             <DataTable<any>

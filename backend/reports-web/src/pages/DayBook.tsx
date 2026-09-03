@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateRangePicker from '../components/DateRangePicker';
+import SummaryCard from '../components/SummaryCard';
 import { csvCell, exportCsv } from '../services/printReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
@@ -47,14 +49,8 @@ export default function DayBook() {
       <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} onApply={() => load(from, to)} />
 
       <div className="summary-row">
-        <div className="summary-tile">
-          <div className="summary-tile-label">Total Received</div>
-          <div className="summary-tile-value" style={{ color: '#15803d' }}>{rupees(totalIn)}</div>
-        </div>
-        <div className="summary-tile">
-          <div className="summary-tile-label">Total Paid</div>
-          <div className="summary-tile-value" style={{ color: '#e23744' }}>{rupees(totalOut)}</div>
-        </div>
+        <SummaryCard label="Total Received" value={rupees(totalIn)} color="#15803d" icon={ArrowDownCircle} />
+        <SummaryCard label="Total Paid" value={rupees(totalOut)} color="#e23744" icon={ArrowUpCircle} />
       </div>
 
       <div className="toolbar">

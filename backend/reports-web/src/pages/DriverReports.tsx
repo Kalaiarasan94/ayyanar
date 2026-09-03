@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Fuel, Route, Truck } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fieldApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
@@ -97,9 +99,9 @@ export default function DriverReports() {
       ) : (
         <>
           <div className="summary-row">
-            <SummaryCard label="Total Trips" value={records.length.toString()} />
-            <SummaryCard label="Total KM" value={totalKm.toLocaleString('en-IN')} />
-            <SummaryCard label="Total Diesel Fare" value={rupees(totalDiesel)} color="#e23744" />
+            <SummaryCard label="Total Trips" value={records.length.toString()} icon={Truck} />
+            <SummaryCard label="Total KM" value={totalKm.toLocaleString('en-IN')} icon={Route} />
+            <SummaryCard label="Total Diesel Fare" value={rupees(totalDiesel)} color="#e23744" icon={Fuel} />
           </div>
 
           <div className="toolbar">
@@ -108,8 +110,23 @@ export default function DriverReports() {
             </button>
           </div>
 
+          {byVehicle.length > 0 && (
+            <div className="card">
+              <h3 className="section-heading">KM by Vehicle</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={byVehicle.map((v) => ({ name: v.name, 'Total KM': v.total_km }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1dede" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip />
+                  <Bar dataKey="Total KM" fill="#e23744" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Vehicle-wise Summary</h3>
+            <h3 className="section-heading">Vehicle-wise Summary</h3>
             <DataTable<any>
               rowKey={(r) => r.name}
               rows={byVehicle}
@@ -124,7 +141,7 @@ export default function DriverReports() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Driver-wise Summary</h3>
+            <h3 className="section-heading">Driver-wise Summary</h3>
             <DataTable<any>
               rowKey={(r) => r.name}
               rows={byDriver}
@@ -139,7 +156,7 @@ export default function DriverReports() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Diesel Bills ({bills.length})</h3>
+            <h3 className="section-heading">Diesel Bills ({bills.length})</h3>
             <DataTable<any>
               rowKey={(b) => b.id}
               rows={bills}

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
@@ -122,9 +124,9 @@ export default function PeriodReport() {
       ) : report ? (
         <>
           <div className="summary-row">
-            <SummaryCard label="Revenue" value={rupees(report.revenue)} color="#15803d" />
-            <SummaryCard label="Expenses" value={rupees(report.expenses)} color="#e23744" />
-            <SummaryCard label={report.profit >= 0 ? 'Profit' : 'Loss'} value={rupees(Math.abs(report.profit))} />
+            <SummaryCard label="Revenue" value={rupees(report.revenue)} color="#15803d" icon={TrendingUp} />
+            <SummaryCard label="Expenses" value={rupees(report.expenses)} color="#e23744" icon={TrendingDown} />
+            <SummaryCard label={report.profit >= 0 ? 'Profit' : 'Loss'} value={rupees(Math.abs(report.profit))} icon={Wallet} />
           </div>
           <p className="text-muted" style={{ fontSize: 12.5, marginTop: -8 }}>
             Internal transfers this period: {rupees(report.transfers)} (not counted in revenue or expenses)
@@ -136,8 +138,29 @@ export default function PeriodReport() {
             </button>
           </div>
 
+          {(report.receivedBreakdown.length > 0 || report.paidBreakdown.length > 0) && (
+            <div className="card">
+              <h3 className="section-heading">Received vs Paid — By Category</h3>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart
+                  data={[
+                    ...report.receivedBreakdown.map((b: any) => ({ name: b.category, Received: Number(b.total), Paid: 0 })),
+                    ...report.paidBreakdown.map((b: any) => ({ name: b.category, Received: 0, Paid: Number(b.total) })),
+                  ]}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1dede" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-20} textAnchor="end" height={60} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v: any) => rupees(v)} />
+                  <Bar dataKey="Received" fill="#15803d" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Paid" fill="#e23744" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Received From</h3>
+            <h3 className="section-heading">Received From</h3>
             <DataTable<any>
               rowKey={(b) => b.category}
               rows={report.receivedBreakdown}
@@ -150,7 +173,7 @@ export default function PeriodReport() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Paid To</h3>
+            <h3 className="section-heading">Paid To</h3>
             <DataTable<any>
               rowKey={(b) => b.category}
               rows={report.paidBreakdown}
@@ -163,7 +186,7 @@ export default function PeriodReport() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Vouchers ({report.transactions.length})</h3>
+            <h3 className="section-heading">Vouchers ({report.transactions.length})</h3>
             <DataTable<any>
               rowKey={(t) => t.id}
               rows={report.transactions}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -59,8 +60,8 @@ export default function Overview() {
       <p className="page-subtitle">Company-wide financial picture — Owner, Admin and Supervisor books combined.</p>
 
       <div className="summary-row">
-        <SummaryCard label="Revenue (Lifetime)" value={rupees(summary?.revenue)} color="#15803d" />
-        <SummaryCard label="Expenses (Lifetime)" value={rupees(summary?.expenses)} color="#e23744" />
+        <SummaryCard label="Revenue (Lifetime)" value={rupees(summary?.revenue)} color="#15803d" icon={TrendingUp} />
+        <SummaryCard label="Expenses (Lifetime)" value={rupees(summary?.expenses)} color="#e23744" icon={TrendingDown} />
       </div>
 
       <div className="hero-card" style={{ background: profitPositive ? '#15803d' : '#cb202d' }}>
@@ -68,11 +69,12 @@ export default function Overview() {
           <div className="hero-label">{profitPositive ? 'Profit' : 'Loss'} — Lifetime</div>
           <div className="hero-value">{rupees(Math.abs(Number(summary?.profit || 0)))}</div>
         </div>
+        <Wallet size={34} strokeWidth={1.8} />
       </div>
 
       {monthlyTrend.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Revenue vs Expenses — Last 6 Months</h3>
+          <h3 className="section-heading">Revenue vs Expenses — Last 6 Months</h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={monthlyTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1dede" />
@@ -88,7 +90,7 @@ export default function Overview() {
       )}
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Cash in Hand (By Role)</h3>
+        <h3 className="section-heading">Cash in Hand (By Role)</h3>
         <DataTable<any>
           rowKey={(r) => r.role}
           rows={summary?.roleBalances || []}
@@ -104,7 +106,7 @@ export default function Overview() {
 
       {siteExpenses.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Site-wise Expense Distribution</h3>
+          <h3 className="section-heading">Site-wise Expense Distribution</h3>
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
               <Pie data={siteExpenses} dataKey="value" nameKey="name" outerRadius={100} label={(d) => d.name}>
@@ -120,7 +122,7 @@ export default function Overview() {
 
       {leadsChannel.length > 0 && (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Leads Channel Performance</h3>
+          <h3 className="section-heading">Leads Channel Performance</h3>
           <DataTable<any>
             rowKey={(r, i) => `${r.source}-${i}`}
             rows={leadsChannel}

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Banknote, CreditCard, Wallet } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { adminApi, fieldApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
@@ -11,6 +13,7 @@ export default function SiteReports() {
   const [sites, setSites] = useState<any[]>([]);
   const [siteId, setSiteId] = useState<string | null>(null);
   const [rows, setRows] = useState<any[]>([]);
+  const [allSitesBreakdown, setAllSitesBreakdown] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
@@ -19,6 +22,7 @@ export default function SiteReports() {
       setSites(s);
       if (s.length > 0) setSiteId(s[0].id.toString());
     });
+    adminApi.getAnalytics().then((a) => setAllSitesBreakdown(a?.siteWiseExpenseBreakdown || []));
   }, []);
 
   useEffect(() => {
@@ -35,6 +39,19 @@ export default function SiteReports() {
   const indirect = rows.filter((r) => r.payment_mode !== 'Direct');
   const directTotal = direct.reduce((s, r) => s + Number(r.amount), 0);
   const indirectTotal = indirect.reduce((s, r) => s + Number(r.amount), 0);
+
+  const compareChart = allSitesBreakdown
+    .filter((s) => Number(s.total_expenses) > 0)
+    .map((s) => ({
+      name: s.site_name,
+      Material: Number(s.material_costs || 0),
+      Fuel: Number(s.fuel_costs || 0),
+      'Petty Cash': Number(s.petty_cash_costs || 0),
+    }));
+  const pieData = [
+    { name: 'Direct', value: directTotal },
+    { name: 'Indirect', value: indirectTotal },
+  ].filter((d) => d.value > 0);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -72,8 +89,27 @@ export default function SiteReports() {
   return (
     <div>
       <h1 className="page-title">Site Expense Reports</h1>
-      <p className="page-subtitle">Direct vs indirect spending, per project site.</p>
+      <p className="page-subtitle">Compare every site at a glance, then drill into one for the full breakdown.</p>
 
+      {compareChart.length > 0 && (
+        <div className="card">
+          <h3 className="section-heading">All Sites — Expense Comparison</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={compareChart}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1dede" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} />
+              <Tooltip formatter={(v: any) => rupees(v)} />
+              <Legend />
+              <Bar dataKey="Material" stackId="a" fill="#8c0f16" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="Fuel" stackId="a" fill="#e23744" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="Petty Cash" stackId="a" fill="#f2787d" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <h3 className="section-heading" style={{ marginTop: 8 }}>Site Detail</h3>
       <div className="chip-row" style={{ marginBottom: 18 }}>
         {sites.map((s) => (
           <button key={s.id} className={`chip${siteId === s.id.toString() ? ' active' : ''}`} onClick={() => setSiteId(s.id.toString())}>
@@ -87,19 +123,34 @@ export default function SiteReports() {
       ) : (
         <>
           <div className="summary-row">
-            <SummaryCard label="Direct" value={rupees(directTotal)} color="#e23744" />
-            <SummaryCard label="Indirect" value={rupees(indirectTotal)} />
-            <SummaryCard label="Grand Total" value={rupees(directTotal + indirectTotal)} color="#15803d" />
+            <SummaryCard label="Direct" value={rupees(directTotal)} color="#e23744" icon={Banknote} />
+            <SummaryCard label="Indirect" value={rupees(indirectTotal)} color="#8c7576" icon={CreditCard} />
+            <SummaryCard label="Grand Total" value={rupees(directTotal + indirectTotal)} color="#15803d" icon={Wallet} />
           </div>
 
           <div className="toolbar">
             <button className="btn" onClick={handleDownload} disabled={downloading || rows.length === 0}>
-              {downloading ? 'Building PDF…' : 'Download PDF'}
+              Download PDF
             </button>
           </div>
 
+          {pieData.length > 0 && (
+            <div className="card">
+              <h3 className="section-heading">Direct vs Indirect — {site?.name}</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart>
+                  <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={90} label={(d) => `${d.name}: ${rupees(d.value)}`}>
+                    <Cell fill="#e23744" />
+                    <Cell fill="#8c7576" />
+                  </Pie>
+                  <Tooltip formatter={(v: any) => rupees(v)} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Direct Bills ({direct.length})</h3>
+            <h3 className="section-heading">Direct Bills ({direct.length})</h3>
             <DataTable<any>
               rowKey={(r) => r.id}
               rows={direct}
@@ -115,7 +166,7 @@ export default function SiteReports() {
           </div>
 
           <div className="card">
-            <h3 style={{ marginTop: 0 }}>Indirect / Credit Bills ({indirect.length})</h3>
+            <h3 className="section-heading">Indirect / Credit Bills ({indirect.length})</h3>
             <DataTable<any>
               rowKey={(r) => r.id}
               rows={indirect}
