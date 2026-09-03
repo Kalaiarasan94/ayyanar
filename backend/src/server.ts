@@ -19,8 +19,20 @@ app.use(express.json());
 // ---------- Photo uploads (attendance selfies, site photos, bills) ----------
 // Stored organized: images/<role>/<username>/<type>-<timestamp>.jpg
 // e.g. images/supervisor/sup1/attendance-1783680000000-12345.jpg
-const imagesDir = path.join(__dirname, '..', 'images');
-const uploadsDir = path.join(__dirname, '..', 'uploads'); // legacy photos keep working
+//
+// IMPORTANT — persistence across deploys: by default these folders live
+// INSIDE the app directory (backend/images, backend/uploads). Most Node.js
+// hosting (Hostinger included) redeploys by replacing the whole app
+// directory from the git source, which silently deletes every photo/bill a
+// user has uploaded since the last deploy. Set UPLOADS_ROOT_DIR (as an
+// Environment Variable in hPanel) to a folder OUTSIDE the deployed app path
+// — e.g. a sibling directory under your hosting account that survives
+// redeploys — and uploads will persist across every future code update.
+// The /  status page below reports which mode is currently active.
+const uploadsRoot = process.env.UPLOADS_ROOT_DIR || path.join(__dirname, '..');
+const usingPersistentUploadsDir = !!process.env.UPLOADS_ROOT_DIR;
+const imagesDir = path.join(uploadsRoot, 'images');
+const uploadsDir = path.join(uploadsRoot, 'uploads'); // legacy photos keep working
 fs.mkdirSync(imagesDir, { recursive: true });
 fs.mkdirSync(uploadsDir, { recursive: true });
 
@@ -66,6 +78,16 @@ app.post('/api/upload', upload.single('photo'), (req, res) => {
 
 // Attach all endpoints prefixed with /api
 app.use('/api', apiRoutes);
+
+// ---------- Admin Reports dashboard (backend/reports-web) ----------
+// Plain React/TS SPA, built by `npm run build` (see package.json) into
+// reports-web/dist, served at /reports on this same domain — same-origin,
+// so it calls /api/* directly with no CORS setup needed.
+const reportsWebDist = path.join(__dirname, '..', 'reports-web', 'dist');
+app.use('/reports', express.static(reportsWebDist));
+app.get('/reports/*', (req, res) => {
+  res.sendFile(path.join(reportsWebDist, 'index.html'));
+});
 
 // The tables the app expects (from database/schema.sql + auto-migrations)
 const EXPECTED_TABLES = [
@@ -132,6 +154,15 @@ app.get('/', async (req, res) => {
             <h2>Backend Server</h2>
             ${badge(true, 'Backend deployed successfully', '')}
             <div class="meta">Running on port ${PORT} &bull; Node ${process.version} &bull; started ${startedAt.toLocaleString('en-IN')} &bull; uptime ${uptimeMin} min</div>
+          </div>
+
+          <div class="card">
+            <h2>Uploaded Photos & Bills Storage</h2>
+            ${badge(usingPersistentUploadsDir, 'Persistent folder — survives code updates', 'Inside the app folder — WILL BE WIPED on the next code update')}
+            <div class="meta">Path: <b>${imagesDir}</b></div>
+            ${usingPersistentUploadsDir
+              ? ''
+              : `<div class="meta" style="color:#B91C1C;">Set the <b>UPLOADS_ROOT_DIR</b> environment variable in hPanel to a folder outside this app's deploy directory (e.g. a sibling "storage" folder in your hosting account) so uploaded photos/bills survive future deployments.</div>`}
           </div>
 
           <div class="card">

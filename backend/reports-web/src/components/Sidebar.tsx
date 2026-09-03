@@ -1,0 +1,55 @@
+import { NavLink, useNavigate } from 'react-router-dom';
+import { clearSession, getSession } from '../auth';
+
+const LINKS = [
+  { to: '/', label: 'Overview', end: true },
+  { to: '/daybook', label: 'Day Book' },
+  { to: '/ledger', label: 'Ledger' },
+  { to: '/period-report', label: 'Monthly / Yearly Report' },
+  { to: '/io-report', label: 'Role I/O Statement' },
+  { to: '/sites', label: 'Site Expense Reports' },
+  { to: '/drivers', label: 'Driver Reports' },
+  { to: '/attendance', label: 'Attendance Reports' },
+  { to: '/leads', label: 'Leads Report' },
+  { to: '/directory', label: 'Staff & Sites Directory' },
+];
+
+export default function Sidebar() {
+  const navigate = useNavigate();
+  const session = getSession();
+
+  const handleLogout = () => {
+    clearSession();
+    navigate('/login');
+  };
+
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-brand">
+        <div className="sidebar-brand-badge">AC</div>
+        <div>
+          <div className="sidebar-brand-title">Ayyanar Reports</div>
+          <div className="sidebar-brand-subtitle">Admin analytics</div>
+        </div>
+      </div>
+
+      {LINKS.map((link) => (
+        <NavLink
+          key={link.to}
+          to={link.to}
+          end={link.end}
+          className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+        >
+          {link.label}
+        </NavLink>
+      ))}
+
+      <div className="sidebar-footer">
+        {session && <div className="sidebar-brand-subtitle" style={{ padding: '0 10px 8px' }}>{session.name}</div>}
+        <button className="logout-btn" onClick={handleLogout}>
+          Log out
+        </button>
+      </div>
+    </aside>
+  );
+}

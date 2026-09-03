@@ -79,6 +79,10 @@ export default function AdminPanelScreen() {
 
   const [analytics, setAnalytics] = useState<any>(null);
   const [attendance, setAttendance] = useState<any>({ workers: [], supervisors: [] });
+  // Dashboard always reflects today, independent of whatever date the Supervisor/Worker
+  // drill-down views below are currently filtered to.
+  const [todayOverview, setTodayOverview] = useState<any>({ workers: [], categories: [], supervisors: [] });
+  const [attendanceView, setAttendanceView] = useState<'DASHBOARD' | 'SUPERVISOR' | 'WORKER'>('DASHBOARD');
   const [attendanceDate, setAttendanceDate] = useState(todayIso());
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [sitesList, setSitesList] = useState<Site[]>([]);
@@ -163,8 +167,13 @@ export default function AdminPanelScreen() {
   };
 
   const fetchAttendance = async () => {
-    const data = await adminService.getAttendanceOverview(attendanceDate);
-    setAttendance(data || { workers: [], supervisors: [] });
+    const isToday = attendanceDate === todayIso();
+    const [selectedData, todayData] = await Promise.all([
+      adminService.getAttendanceOverview(attendanceDate),
+      isToday ? Promise.resolve(null) : adminService.getAttendanceOverview(todayIso()),
+    ]);
+    setAttendance(selectedData || { workers: [], supervisors: [] });
+    setTodayOverview(isToday ? (selectedData || { workers: [], categories: [], supervisors: [] }) : (todayData || { workers: [], categories: [], supervisors: [] }));
   };
 
   const fetchSitesAndStaff = async () => {
@@ -1002,14 +1011,101 @@ export default function AdminPanelScreen() {
     </View>
   );
 
-  const renderAttendance = () => {
-    const categoryList = attendance?.categories || [];
-    const workerCount = categoryList.reduce((s: number, c: any) => s + Number(c.present_count || 0) + Number(c.absent_count || 0), 0);
+  const renderAttendanceDashboard = () => {
+    const todaySupervisors = todayOverview?.supervisors || [];
+    const presentToday = todaySupervisors.filter((s: any) => s.status === 'Present');
+    const absentToday = todaySupervisors.filter((s: any) => s.status === 'Absent');
+    const todayCategories = todayOverview?.categories || [];
+    const workerPresentToday = todayCategories.reduce((s: number, c: any) => s + Number(c.present_count || 0), 0);
+    const workerAbsentToday = todayCategories.reduce((s: number, c: any) => s + Number(c.absent_count || 0), 0);
+
+    return (
+      <View>
+        <Text style={styles.screenTitle}>Attendance</Text>
+        <Text style={styles.screenSubtitle}>
+          Today — {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+        </Text>
+
+        <SectionTitle title="Supervisors Today" />
+        <View style={styles.metricsGrid}>
+          <MetricCard icon="check-circle" label="Present" value={presentToday.length.toString()} />
+          <MetricCard icon="cancel" label="Absent" value={absentToday.length.toString()} />
+        </View>
+        <View style={styles.card}>
+          {presentToday.map((item: any) => (
+            <View key={`today-sup-${item.id}`} style={styles.attendanceRow}>
+              {item.selfie_url?.startsWith('http') ? (
+                <Image source={{ uri: item.selfie_url }} style={styles.attendanceImage} />
+              ) : (
+                <View style={styles.listIcon}><MaterialIcons name="person-pin-circle" size={22} color={COLORS.primary} /></View>
+              )}
+              <View style={styles.listContent}>
+                <Text style={styles.rowTitle}>{item.supervisor_name || 'Supervisor'}</Text>
+                <Text style={styles.rowMeta}>{item.site_name || 'Unassigned Site'}</Text>
+              </View>
+              {item.created_at && (
+                <Text style={{ color: COLORS.success, fontWeight: '900', fontSize: 12 }}>
+                  {new Date(item.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              )}
+            </View>
+          ))}
+          {absentToday.length > 0 && (
+            <View style={{ paddingTop: presentToday.length > 0 ? SPACING.sm : 0 }}>
+              {absentToday.map((item: any) => (
+                <View key={`today-abs-${item.id}`} style={styles.attendanceRow}>
+                  <View style={[styles.listIcon, { backgroundColor: 'rgba(226, 26, 18, 0.08)' }]}>
+                    <MaterialIcons name="person-off" size={22} color={COLORS.primary} />
+                  </View>
+                  <View style={styles.listContent}>
+                    <Text style={styles.rowTitle}>{item.supervisor_name || 'Supervisor'}</Text>
+                    <Text style={styles.rowMeta}>{item.site_name || 'Unassigned Site'}</Text>
+                  </View>
+                  <StatusPill status="Absent" />
+                </View>
+              ))}
+            </View>
+          )}
+          {todaySupervisors.length === 0 && <EmptyState text="No supervisor attendance recorded yet today." />}
+        </View>
+
+        <SectionTitle title="Workers Today" />
+        <View style={styles.metricsGrid}>
+          <MetricCard icon="engineering" label="Present" value={workerPresentToday.toString()} />
+          <MetricCard icon="event-busy" label="Absent" value={workerAbsentToday.toString()} />
+        </View>
+
+        <SectionTitle title="View Details" />
+        <TouchableOpacity style={styles.attendanceRow} onPress={() => setAttendanceView('SUPERVISOR')} activeOpacity={0.7}>
+          <View style={styles.listIcon}><MaterialIcons name="camera-front" size={22} color={COLORS.primary} /></View>
+          <View style={styles.listContent}>
+            <Text style={styles.rowTitle}>Supervisor Attendance</Text>
+            <Text style={styles.rowMeta}>Check-in photos, any date — downloadable</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={20} color={COLORS.textLight} />
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.attendanceRow, { marginTop: SPACING.sm }]} onPress={() => setAttendanceView('WORKER')} activeOpacity={0.7}>
+          <View style={styles.listIcon}><MaterialIcons name="groups" size={22} color={COLORS.primary} /></View>
+          <View style={styles.listContent}>
+            <Text style={styles.rowTitle}>Worker Attendance</Text>
+            <Text style={styles.rowMeta}>Grouped by supervisor's site, any date</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={20} color={COLORS.textLight} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderSupervisorAttendanceView = () => {
     const supervisorCount = attendance?.supervisors?.length || 0;
     return (
       <View>
-        <Text style={styles.screenTitle}>Daily Attendance</Text>
-        <Text style={styles.screenSubtitle}>Review supervisor check-ins and worker headcount by date.</Text>
+        <TouchableOpacity style={styles.backLink} onPress={() => setAttendanceView('DASHBOARD')}>
+          <MaterialIcons name="arrow-back" size={16} color={COLORS.primary} />
+          <Text style={styles.backLinkText}>Attendance Dashboard</Text>
+        </TouchableOpacity>
+        <Text style={styles.screenTitle}>Supervisor Attendance</Text>
+        <Text style={styles.screenSubtitle}>Check-ins with photo — tap a row to view and download.</Text>
 
         <View style={styles.dateRow}>
           <TouchableOpacity style={styles.dateButton} onPress={() => setAttendanceDate(todayIso())}>
@@ -1019,12 +1115,6 @@ export default function AdminPanelScreen() {
           <DatePickerField style={{ flex: 1 }} value={attendanceDate} onChange={setAttendanceDate} placeholder="Pick a date" />
         </View>
 
-        <View style={styles.metricsGrid}>
-          <MetricCard icon="engineering" label="Workers" value={workerCount.toString()} />
-          <MetricCard icon="verified-user" label="Supervisors" value={supervisorCount.toString()} />
-        </View>
-
-        <SectionTitle title="Supervisor Attendance" />
         <View style={styles.card}>
           {(attendance?.supervisors || []).map((item: any) => (
             <AttendanceRow
@@ -1041,33 +1131,76 @@ export default function AdminPanelScreen() {
           ))}
           {supervisorCount === 0 && <EmptyState text="No supervisor attendance for this date." />}
         </View>
-
-        <SectionTitle title="Worker Attendance (by Category)" />
-        <View style={styles.card}>
-          {categoryList.map((item: any) => (
-            <TouchableOpacity key={`category-${item.id}`} style={styles.attendanceRow} onPress={() => setAttendanceDetail(item)} activeOpacity={0.7}>
-              {item.image_url?.startsWith('http') ? (
-                <Image source={{ uri: item.image_url }} style={styles.attendanceImage} />
-              ) : (
-                <View style={styles.listIcon}><MaterialIcons name="groups" size={22} color={COLORS.primary} /></View>
-              )}
-              <View style={styles.listContent}>
-                <Text style={styles.rowTitle}>{item.category}{item.worker_name ? ` — ${item.worker_name}` : ''}</Text>
-                <Text style={styles.rowMeta}>{item.site_name || 'Site not recorded'}</Text>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={{ color: COLORS.success, fontWeight: '900', fontSize: 13 }}>{item.present_count || 0} Present</Text>
-                {Number(item.absent_count || 0) > 0 && (
-                  <Text style={{ color: COLORS.primary, fontWeight: '900', fontSize: 11, marginTop: 2 }}>{item.absent_count} Absent</Text>
-                )}
-              </View>
-              <MaterialIcons name="chevron-right" size={20} color={COLORS.textLight} />
-            </TouchableOpacity>
-          ))}
-          {categoryList.length === 0 && <EmptyState text="No worker attendance for this date." />}
-        </View>
       </View>
     );
+  };
+
+  const renderWorkerAttendanceView = () => {
+    const categoryList = attendance?.categories || [];
+    const grouped = new Map<string, any[]>();
+    categoryList.forEach((item: any) => {
+      const key = item.site_supervisor_name || 'Unassigned Supervisor';
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(item);
+    });
+
+    return (
+      <View>
+        <TouchableOpacity style={styles.backLink} onPress={() => setAttendanceView('DASHBOARD')}>
+          <MaterialIcons name="arrow-back" size={16} color={COLORS.primary} />
+          <Text style={styles.backLinkText}>Attendance Dashboard</Text>
+        </TouchableOpacity>
+        <Text style={styles.screenTitle}>Worker Attendance</Text>
+        <Text style={styles.screenSubtitle}>Category headcounts grouped by the site's supervisor.</Text>
+
+        <View style={styles.dateRow}>
+          <TouchableOpacity style={styles.dateButton} onPress={() => setAttendanceDate(todayIso())}>
+            <MaterialIcons name="today" size={18} color={COLORS.primary} />
+            <Text style={styles.dateButtonText}>Today</Text>
+          </TouchableOpacity>
+          <DatePickerField style={{ flex: 1 }} value={attendanceDate} onChange={setAttendanceDate} placeholder="Pick a date" />
+        </View>
+
+        {Array.from(grouped.entries()).map(([supervisorName, items]) => (
+          <View key={supervisorName}>
+            <SectionTitle title={`${supervisorName}'s Workers`} />
+            <View style={styles.card}>
+              {items.map((item: any) => (
+                <TouchableOpacity key={`category-${item.id}`} style={styles.attendanceRow} onPress={() => setAttendanceDetail(item)} activeOpacity={0.7}>
+                  {item.image_url?.startsWith('http') ? (
+                    <Image source={{ uri: item.image_url }} style={styles.attendanceImage} />
+                  ) : (
+                    <View style={styles.listIcon}><MaterialIcons name="groups" size={22} color={COLORS.primary} /></View>
+                  )}
+                  <View style={styles.listContent}>
+                    <Text style={styles.rowTitle}>{item.category}{item.worker_name ? ` — ${item.worker_name}` : ''}</Text>
+                    <Text style={styles.rowMeta}>{item.site_name || 'Site not recorded'}</Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={{ color: COLORS.success, fontWeight: '900', fontSize: 13 }}>{item.present_count || 0} Present</Text>
+                    {Number(item.absent_count || 0) > 0 && (
+                      <Text style={{ color: COLORS.primary, fontWeight: '900', fontSize: 11, marginTop: 2 }}>{item.absent_count} Absent</Text>
+                    )}
+                  </View>
+                  <MaterialIcons name="chevron-right" size={20} color={COLORS.textLight} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        ))}
+        {categoryList.length === 0 && (
+          <View style={styles.card}>
+            <EmptyState text="No worker attendance for this date." />
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderAttendance = () => {
+    if (attendanceView === 'SUPERVISOR') return renderSupervisorAttendanceView();
+    if (attendanceView === 'WORKER') return renderWorkerAttendanceView();
+    return renderAttendanceDashboard();
   };
 
   const renderProjects = () => (
@@ -1672,7 +1805,16 @@ export default function AdminPanelScreen() {
                 </View>
 
                 {attendanceDetail.image_url?.startsWith('http') ? (
-                  <Image source={{ uri: attendanceDetail.image_url }} style={styles.detailPhoto} resizeMode="cover" />
+                  <>
+                    <Image source={{ uri: attendanceDetail.image_url }} style={styles.detailPhoto} resizeMode="cover" />
+                    <TouchableOpacity
+                      style={styles.detailDownloadButton}
+                      onPress={() => downloadImage(attendanceDetail.image_url, `${attendanceDetail.category}-${attendanceDetail.date}.jpg`)}
+                    >
+                      <MaterialIcons name="download" size={18} color={COLORS.white} />
+                      <Text style={styles.detailMapButtonText}>Download Photo</Text>
+                    </TouchableOpacity>
+                  </>
                 ) : (
                   <View style={styles.detailNoPhoto}>
                     <MaterialIcons name="no-photography" size={40} color={COLORS.textLight} />
@@ -1705,7 +1847,16 @@ export default function AdminPanelScreen() {
                 </View>
 
                 {attendanceDetail.selfie_url?.startsWith('http') ? (
-                  <Image source={{ uri: attendanceDetail.selfie_url }} style={styles.detailPhoto} resizeMode="cover" />
+                  <>
+                    <Image source={{ uri: attendanceDetail.selfie_url }} style={styles.detailPhoto} resizeMode="cover" />
+                    <TouchableOpacity
+                      style={styles.detailDownloadButton}
+                      onPress={() => downloadImage(attendanceDetail.selfie_url, `${attendanceDetail.supervisor_name || 'supervisor'}-${attendanceDetail.date}.jpg`)}
+                    >
+                      <MaterialIcons name="download" size={18} color={COLORS.white} />
+                      <Text style={styles.detailMapButtonText}>Download Photo</Text>
+                    </TouchableOpacity>
+                  </>
                 ) : (
                   <View style={styles.detailNoPhoto}>
                     <MaterialIcons name="no-photography" size={40} color={COLORS.textLight} />
@@ -2155,6 +2306,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
   },
+  backLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    alignSelf: 'flex-start',
+    marginBottom: SPACING.sm,
+  },
+  backLinkText: {
+    color: COLORS.primary,
+    fontWeight: '800',
+    fontSize: 13,
+  },
   dateRow: {
     flexDirection: 'row',
     gap: SPACING.sm,
@@ -2551,6 +2714,16 @@ const styles = StyleSheet.create({
     borderRadius: BORDER_RADIUS.md,
     paddingVertical: 13,
     marginTop: SPACING.xs,
+  },
+  detailDownloadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: COLORS.primary,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 13,
+    marginTop: SPACING.sm,
   },
   detailMapButtonText: {
     color: COLORS.white,

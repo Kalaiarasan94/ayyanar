@@ -44,7 +44,7 @@ export default function AttendanceScreen() {
 
   // Screen state: lands on the monthly dashboard first; entering attendance
   // (Worker or Supervisor) switches into that form, picked via the top-right button
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'worker' | 'supervisor'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'worker' | 'supervisor' | 'submitted'>('dashboard');
   const [entryPickerVisible, setEntryPickerVisible] = useState(false);
   const [monthlyStats, setMonthlyStats] = useState({ present: 0, absent: 0, markedDays: 0, percentage: 0 });
   const [loadingMonthlyStats, setLoadingMonthlyStats] = useState(false);
@@ -510,6 +510,15 @@ export default function AttendanceScreen() {
             </View>
           </View>
         </View>
+
+        <TouchableOpacity style={styles.entryPickerOption} onPress={() => setActiveTab('submitted')}>
+          <MaterialIcons name="fact-check" size={22} color={COLORS.primary} />
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.entryPickerOptionTitle}>Submitted Attendance</Text>
+            <Text style={styles.entryPickerOptionSubtitle}>Look up any date's clock-in record</Text>
+          </View>
+          <MaterialIcons name="chevron-right" size={22} color={COLORS.textLight} />
+        </TouchableOpacity>
       </ScrollView>
     );
   };
@@ -693,6 +702,57 @@ export default function AttendanceScreen() {
     );
   };
 
+  const renderSubmittedAttendance = () => (
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <View style={styles.rosterSection}>
+        <Text style={styles.rosterTitle}>PICK A DATE</Text>
+        <View style={[styles.cardGlass, { marginTop: 0, marginBottom: 15, padding: SPACING.md }]}>
+          <TouchableOpacity style={{ marginBottom: 10 }} onPress={() => setSupAttendanceDate(todayLocal())}>
+            <Text style={{ color: COLORS.primary, fontWeight: '800', fontSize: 12 }}>TODAY</Text>
+          </TouchableOpacity>
+          <DatePickerField value={supAttendanceDate} onChange={setSupAttendanceDate} placeholder="Select date" />
+        </View>
+
+        <Text style={styles.rosterTitle}>
+          SUBMITTED FOR {supAttendanceDate} ({supSubmittedList.length})
+        </Text>
+
+        {supSubmittedList.map((item: any) => (
+          <View key={item.id} style={styles.rosterCard}>
+            <View style={[styles.avatarContainer, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
+              <MaterialIcons name={item.status === 'Present' ? 'check' : 'close'} size={20} color={item.status === 'Present' ? '#8C0F16' : '#E23744'} />
+            </View>
+
+            <View style={styles.workerInfo}>
+              <Text style={styles.workerName}>{item.supervisor_name || 'Supervisor'}</Text>
+              <Text style={styles.workerRole}>Site: {item.site_name || 'N/A'}</Text>
+              {item.status === 'Present' && item.location_name && (
+                <Text style={styles.locationText} numberOfLines={1}>
+                  📍 {item.location_name}
+                </Text>
+              )}
+            </View>
+
+            {item.status === 'Present' && item.selfie_url ? (
+              <Image source={{ uri: item.selfie_url }} style={styles.selfieThumbnail} resizeMode="cover" />
+            ) : null}
+
+            <View style={[styles.submittedPill, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
+              <Text style={[styles.submittedPillText, { color: item.status === 'Present' ? '#8C0F16' : '#CB202D' }]}>{item.status}</Text>
+            </View>
+          </View>
+        ))}
+
+        {supSubmittedList.length === 0 && (
+          <View style={styles.rosterCard}>
+            <MaterialIcons name="event-note" size={20} color={COLORS.textLight} />
+            <Text style={[styles.workerRole, { marginLeft: 10 }]}>No supervisor clock-in records for this date.</Text>
+          </View>
+        )}
+      </View>
+    </ScrollView>
+  );
+
   const renderSupervisorTab = () => {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
@@ -798,51 +858,6 @@ export default function AttendanceScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Supervisor Attendance already registered for the selected date */}
-        <View style={[styles.rosterSection, { marginTop: 15 }]}>
-          <Text style={styles.rosterTitle}>SELECT DATE TO VIEW CLOCK-IN HISTORY</Text>
-          <View style={[styles.cardGlass, { marginTop: 0, marginBottom: 15, padding: SPACING.md }]}>
-            <DatePickerField value={supAttendanceDate} onChange={setSupAttendanceDate} placeholder="Select date" />
-          </View>
-
-          <Text style={styles.rosterTitle}>
-            SUBMITTED FOR {supAttendanceDate} ({supSubmittedList.length})
-          </Text>
-          
-          {supSubmittedList.map((item: any) => (
-            <View key={item.id} style={styles.rosterCard}>
-              <View style={[styles.avatarContainer, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
-                <MaterialIcons name={item.status === 'Present' ? 'check' : 'close'} size={20} color={item.status === 'Present' ? '#8C0F16' : '#E23744'} />
-              </View>
-              
-              <View style={styles.workerInfo}>
-                <Text style={styles.workerName}>{item.supervisor_name || 'Supervisor'}</Text>
-                <Text style={styles.workerRole}>Site: {item.site_name || 'N/A'}</Text>
-                {item.status === 'Present' && item.location_name && (
-                  <Text style={styles.locationText} numberOfLines={1}>
-                    📍 {item.location_name}
-                  </Text>
-                )}
-              </View>
-
-              {item.status === 'Present' && item.selfie_url ? (
-                <Image source={{ uri: item.selfie_url }} style={styles.selfieThumbnail} resizeMode="cover" />
-              ) : null}
-
-              <View style={[styles.submittedPill, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
-                <Text style={[styles.submittedPillText, { color: item.status === 'Present' ? '#8C0F16' : '#CB202D' }]}>{item.status}</Text>
-              </View>
-            </View>
-          ))}
-          
-          {supSubmittedList.length === 0 && (
-            <View style={styles.rosterCard}>
-              <MaterialIcons name="event-note" size={20} color={COLORS.textLight} />
-              <Text style={[styles.workerRole, { marginLeft: 10 }]}>No supervisor clock-in records for this date.</Text>
-            </View>
-          )}
-        </View>
-
         <Modal
           animationType="slide"
           transparent={true}
@@ -884,10 +899,10 @@ export default function AttendanceScreen() {
       <View style={styles.pageHeaderRow}>
         <View style={{ flex: 1 }}>
           <Text style={styles.pageHeaderTitle}>
-            {activeTab === 'dashboard' ? 'Attendance' : activeTab === 'supervisor' ? 'Supervisor Attendance' : 'Worker Attendance'}
+            {activeTab === 'dashboard' ? 'Attendance' : activeTab === 'supervisor' ? 'Supervisor Attendance' : activeTab === 'submitted' ? 'Submitted Attendance' : 'Worker Attendance'}
           </Text>
           <Text style={styles.pageHeaderSubtitle}>
-            {activeTab === 'dashboard' ? 'Monthly overview' : "Log today's attendance"}
+            {activeTab === 'dashboard' ? 'Monthly overview' : activeTab === 'submitted' ? 'Look up any date' : "Log today's attendance"}
           </Text>
         </View>
         {activeTab === 'dashboard' ? (
@@ -903,7 +918,13 @@ export default function AttendanceScreen() {
         )}
       </View>
 
-      {activeTab === 'dashboard' ? renderDashboard() : activeTab === 'supervisor' ? renderSupervisorTab() : renderWorkerTab()}
+      {activeTab === 'dashboard'
+        ? renderDashboard()
+        : activeTab === 'supervisor'
+        ? renderSupervisorTab()
+        : activeTab === 'submitted'
+        ? renderSubmittedAttendance()
+        : renderWorkerTab()}
 
       {/* Choose which attendance to log */}
       <Modal visible={entryPickerVisible} transparent animationType="fade" onRequestClose={() => setEntryPickerVisible(false)}>

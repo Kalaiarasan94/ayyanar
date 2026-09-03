@@ -202,9 +202,11 @@ export const adminController = {
           ac.worker_name,
           ac.image_url,
           s.name as site_name,
-          s.location as site_location
+          s.location as site_location,
+          u.name as site_supervisor_name
         FROM attendance_categories ac
         LEFT JOIN sites s ON ac.site_id = s.id
+        LEFT JOIN users u ON s.supervisor_id = u.id
         WHERE ac.date = ?
       `;
       const categoryParams: any[] = [date];
