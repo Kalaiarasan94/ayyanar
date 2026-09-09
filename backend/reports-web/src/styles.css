@@ -78,6 +78,29 @@ button {
   background: var(--tint-border);
 }
 
+.sidebar-expand-floating-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  margin-bottom: 18px;
+  border-radius: 10px;
+  border: 1px solid var(--tint-border);
+  background: var(--tint);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(203, 32, 45, 0.12);
+  transition: all 0.18s ease;
+}
+
+.sidebar-expand-floating-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
 /* ---------- Layout ---------- */
 
 .app-shell {

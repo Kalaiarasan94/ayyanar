@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { Menu } from 'lucide-react';
+import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import { getSession } from './auth';
 import Login from './pages/Login';
@@ -69,9 +69,9 @@ function RequireAuth({ children }: { children: ReactNode }) {
           className="header-toggle-btn"
           onClick={toggleSidebar}
           aria-label="Toggle navigation menu"
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={sidebarCollapsed ? 'Open sidebar' : 'Close sidebar'}
         >
-          <Menu size={22} />
+          {sidebarCollapsed ? <PanelLeftOpen size={22} /> : <Menu size={22} />}
         </button>
         <div className="header-brand">
           <span className="header-brand-badge">AC</span>
@@ -85,10 +85,22 @@ function RequireAuth({ children }: { children: ReactNode }) {
         isOpen={sidebarOpen}
         isCollapsed={sidebarCollapsed}
         onNavigate={() => setSidebarOpen(false)}
-        onToggleCollapse={() => setSidebarCollapsed(true)}
+        onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
       />
 
-      <main className="main-content">{children}</main>
+      <main className="main-content">
+        {sidebarCollapsed && (
+          <button
+            className="sidebar-expand-floating-btn"
+            onClick={() => setSidebarCollapsed(false)}
+            title="Open sidebar"
+          >
+            <PanelLeftOpen size={18} />
+            <span>Open Sidebar</span>
+          </button>
+        )}
+        {children}
+      </main>
     </div>
   );
 }
