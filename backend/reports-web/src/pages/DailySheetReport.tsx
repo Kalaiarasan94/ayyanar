@@ -4,7 +4,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveCo
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
-import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
+import { buildPdfReport, buildSingleDailySheetPdfDoc, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
@@ -258,6 +258,53 @@ export default function DailySheetReport() {
     exportCsv(`daily-sheets-${date || 'report'}.csv`, [header.join(','), ...lines].join('\n'));
   };
 
+  const handleDownloadSinglePdf = async (sheet: any) => {
+    setDownloading(true);
+    try {
+      const pdf = await buildSingleDailySheetPdfDoc({
+        supervisorName: sheet.supervisor_name,
+        siteName: sheet.site_name,
+        date: sheet.date,
+        workDescription: sheet.work_description,
+        attendance: sheet.attendance || [],
+        amountReceived: sheet.amount_received,
+        billsNormal: sheet.bills_normal,
+        billsGst: sheet.bills_gst,
+        billsCredit: sheet.bills_credit,
+        vehicleRental: sheet.vehicle_rental,
+        labourSalary: sheet.labourSalary || [],
+        totalAmount: sheet.total_amount,
+      });
+      await downloadPdfReport(pdf);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleShareSingleWhatsApp = async (sheet: any) => {
+    setDownloading(true);
+    try {
+      const pdf = await buildSingleDailySheetPdfDoc({
+        supervisorName: sheet.supervisor_name,
+        siteName: sheet.site_name,
+        date: sheet.date,
+        workDescription: sheet.work_description,
+        attendance: sheet.attendance || [],
+        amountReceived: sheet.amount_received,
+        billsNormal: sheet.bills_normal,
+        billsGst: sheet.bills_gst,
+        billsCredit: sheet.bills_credit,
+        vehicleRental: sheet.vehicle_rental,
+        labourSalary: sheet.labourSalary || [],
+        totalAmount: sheet.total_amount,
+      });
+      const text = `*Ayyanar Builders — Daily Sheet Report*\nSupervisor: ${sheet.supervisor_name}\nSite: ${sheet.site_name}\nDate: ${dateLabel(sheet.date)}\nReceived: ${rupees(sheet.amount_received)}\nTotal Spent: ${rupees(sheet.total_amount)}`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="page-title">Daily Sheet Reports</h1>
@@ -399,12 +446,20 @@ export default function DailySheetReport() {
                 { header: 'Received', align: 'right', render: (r) => <span className="text-success">{rupees(r.amount_received)}</span> },
                 { header: 'Total Spent', align: 'right', render: (r) => <b>{rupees(r.total_amount)}</b> },
                 {
-                  header: '',
+                  header: 'Actions',
                   align: 'right',
                   render: (r) => (
-                    <button className="icon-btn" onClick={() => setDetail(r)}>
-                      View Detail
-                    </button>
+                    <div className="row-actions">
+                      <button className="icon-btn" onClick={() => setDetail(r)} title="View Detail">
+                        View
+                      </button>
+                      <button className="icon-btn" onClick={() => handleDownloadSinglePdf(r)} disabled={downloading} title="Download Single Daily Sheet PDF">
+                        <Download size={13} /> Single PDF
+                      </button>
+                      <button className="icon-btn" onClick={() => handleShareSingleWhatsApp(r)} disabled={downloading} title="Share Single Sheet on WhatsApp" style={{ color: '#25D366' }}>
+                        <Share2 size={13} /> WhatsApp
+                      </button>
+                    </div>
                   ),
                 },
               ]}
@@ -484,7 +539,15 @@ export default function DailySheetReport() {
               <span>{rupees(detail.total_amount)}</span>
             </div>
 
-            <div className="modal-actions">
+            <div className="modal-actions" style={{ flexDirection: 'column', gap: 8, marginTop: 18 }}>
+              <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                <button className="btn" onClick={() => handleDownloadSinglePdf(detail)} disabled={downloading}>
+                  <Download size={15} /> Download Single Sheet PDF
+                </button>
+                <button className="btn whatsapp" onClick={() => handleShareSingleWhatsApp(detail)} disabled={downloading}>
+                  <Share2 size={15} /> WhatsApp
+                </button>
+              </div>
               <button className="btn secondary" onClick={() => setDetail(null)}>
                 Close
               </button>
