@@ -1,10 +1,5 @@
-// Ported from frontend/services/pdfReport.ts — web-only (this app never runs
-// on native, so the Platform.OS branching and expo-file-system/expo-sharing
-// paths from the original are dropped; every function keeps the same name
-// and signature as the mobile app's version).
-//
-// Builds REAL vector PDFs (actual text + tables) using jsPDF — never a
-// screenshot/canvas rasterization of the page.
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export type SummaryBox = { label: string; value: string; color?: string };
 
@@ -32,9 +27,6 @@ export const buildPdfReport = async (opts: {
   tables: ReportTable[];
   orientation?: 'portrait' | 'landscape';
 }): Promise<ReportDoc> => {
-  const { jsPDF } = await import('jspdf');
-  const { default: autoTable } = await import('jspdf-autotable');
-
   const doc = new jsPDF({ orientation: opts.orientation || 'portrait', unit: 'pt', format: 'a4' });
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 40;

@@ -159,7 +159,20 @@ export default function AttendanceReport() {
             columns={[
               {
                 header: 'Photo',
-                render: (s: any) => (s.selfie_url?.startsWith('http') ? <img className="thumb" src={s.selfie_url} /> : '—'),
+                render: (s: any) => {
+                  if (!s.selfie_url) return '—';
+                  const src = s.selfie_url.startsWith('http') || s.selfie_url.startsWith('/') ? s.selfie_url : `/${s.selfie_url}`;
+                  return (
+                    <img
+                      className="thumb"
+                      src={src}
+                      alt="Selfie"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                  );
+                },
               },
               { header: 'Supervisor', render: (s: any) => s.supervisor_name || 'Supervisor' },
               { header: 'Site', render: (s: any) => s.site_name || '—' },
@@ -168,12 +181,15 @@ export default function AttendanceReport() {
               { header: 'Location', render: (s: any) => s.location_name || '—' },
               {
                 header: '',
-                render: (s: any) =>
-                  s.selfie_url?.startsWith('http') ? (
-                    <button className="btn secondary" onClick={() => downloadImage(s.selfie_url, `${s.supervisor_name}-${s.date}.jpg`)}>
+                render: (s: any) => {
+                  if (!s.selfie_url) return null;
+                  const src = s.selfie_url.startsWith('http') || s.selfie_url.startsWith('/') ? s.selfie_url : `/${s.selfie_url}`;
+                  return (
+                    <button className="btn secondary" onClick={() => downloadImage(src, `${s.supervisor_name}-${date}.jpg`)}>
                       Download
                     </button>
-                  ) : null,
+                  );
+                },
               },
             ]}
           />

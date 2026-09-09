@@ -93,7 +93,23 @@ app.use('/api', apiRoutes);
 // so it calls /api/* directly with no CORS setup needed.
 const reportsWebDist = path.join(__dirname, '..', 'reports-web', 'dist');
 app.use('/reports', express.static(reportsWebDist));
+
+// Return 204 for /favicon.ico if missing to avoid browser 404 warnings
+app.get('/favicon.ico', (req, res) => {
+  const faviconPath = path.join(reportsWebDist, 'favicon.ico');
+  if (fs.existsSync(faviconPath)) {
+    res.sendFile(faviconPath);
+  } else {
+    res.status(204).end();
+  }
+});
+
+// SPA fallback for /reports routes, excluding missing static assets/files
 app.get('/reports/*', (req, res) => {
+  if (req.path.includes('/assets/') || path.extname(req.path) !== '') {
+    res.status(404).send('Asset not found');
+    return;
+  }
   res.sendFile(path.join(reportsWebDist, 'index.html'));
 });
 

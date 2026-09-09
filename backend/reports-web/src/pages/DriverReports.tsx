@@ -203,7 +203,20 @@ export default function DriverReports() {
               columns={[
                 {
                   header: 'Photo',
-                  render: (b: any) => (b.image_url?.startsWith('http') ? <img className="thumb" src={b.image_url} /> : '—'),
+                  render: (b: any) => {
+                    if (!b.image_url) return '—';
+                    const src = b.image_url.startsWith('http') || b.image_url.startsWith('/') ? b.image_url : `/${b.image_url}`;
+                    return (
+                      <img
+                        className="thumb"
+                        src={src}
+                        alt="Diesel Bill"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    );
+                  },
                 },
                 { header: 'Date', render: (b: any) => dateLabel(b.date) },
                 { header: 'Driver', render: (b: any) => b.driver_name },
