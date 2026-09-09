@@ -74,8 +74,16 @@ export const adminController = {
   deleteSite: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+      // Safely unlink or clean up child table references so foreign keys don't block deletion
+      try { await db.query('UPDATE ledger SET site_id = NULL WHERE site_id = ?', [id]); } catch {}
+      try { await db.query('UPDATE attendance SET site_id = NULL WHERE site_id = ?', [id]); } catch {}
+      try { await db.query('UPDATE supervisor_attendance SET site_id = NULL WHERE site_id = ?', [id]); } catch {}
+      try { await db.query('UPDATE site_photos SET site_id = NULL WHERE site_id = ?', [id]); } catch {}
+      try { await db.query('DELETE FROM site_allocations WHERE site_id = ?', [id]); } catch {}
+      try { await db.query('DELETE FROM daily_sheets WHERE site_id = ?', [id]); } catch {}
+
       await db.query('DELETE FROM sites WHERE id = ?', [id]);
-      res.status(200).json({ success: true, message: 'Site deleted successfully.' });
+      res.status(200).json({ success: true, message: 'Project site deleted successfully.' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }

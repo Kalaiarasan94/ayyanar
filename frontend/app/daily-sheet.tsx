@@ -382,30 +382,6 @@ export default function DailySheetScreen() {
             )}
           </View>
 
-          {/* MONEY */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardIconWrap}>
-                <MaterialIcons name="payments" size={20} color={COLORS.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Amount Received</Text>
-                <Text style={styles.cardSubtitle}>Cash given to you for today</Text>
-              </View>
-            </View>
-            <View style={styles.inputWrap}>
-              <MaterialIcons name="currency-rupee" size={18} color={COLORS.textLight} style={styles.inputIcon} />
-              <TextInput
-                style={styles.inputField}
-                placeholder="0.00"
-                keyboardType="numeric"
-                value={amountReceived}
-                onChangeText={setAmountReceived}
-                placeholderTextColor={COLORS.textLight}
-              />
-            </View>
-          </View>
-
           {/* BILLS */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>

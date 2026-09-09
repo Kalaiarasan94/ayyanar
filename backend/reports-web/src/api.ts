@@ -47,7 +47,15 @@ export const adminApi = {
   getAnalytics: () => request<any>('/analytics/dashboard'),
   getAttendanceOverview: (date?: string) => request<any>(`/attendance/overview${qs({ date })}`),
   getSites: () => request<any[]>('/sites'),
+  createSite: (data: { name: string; location?: string }) =>
+    request<{ success: boolean; message?: string }>('/sites', { method: 'POST', body: JSON.stringify(data) }),
+  updateSite: (id: string | number, data: { name: string; location?: string }) =>
+    request<{ success: boolean; message?: string }>(`/sites/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSite: (id: string | number) =>
+    request<{ success: boolean; message?: string }>(`/sites/${id}`, { method: 'DELETE' }),
   getStaff: () => request<any[]>('/staff'),
+  deleteStaff: (id: string | number) =>
+    request<{ success: boolean; message?: string }>(`/staff/${id}`, { method: 'DELETE' }),
   getLeads: () => request<any[]>('/leads'),
   getAllDailySheets: (params?: string | { date?: string; from?: string; to?: string }) => {
     const q = typeof params === 'string' ? { date: params } : params;

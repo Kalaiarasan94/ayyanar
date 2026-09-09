@@ -603,7 +603,7 @@ export const fieldController = {
     try {
       const {
         siteId, userId, date, workDescription,
-        attendance, amountReceived, billsNormal, billsGst, billsCredit, vehicleRental,
+        attendance, billsNormal, billsGst, billsCredit, vehicleRental,
         labourSalary,
       } = req.body;
 
@@ -637,7 +637,7 @@ export const fieldController = {
           date,
           workDescription || null,
           JSON.stringify(attendance || []),
-          parseFloat(amountReceived) || 0,
+          0,
           parseFloat(billsNormal) || 0,
           parseFloat(billsGst) || 0,
           parseFloat(billsCredit) || 0,
@@ -648,7 +648,35 @@ export const fieldController = {
         ]
       );
 
-      res.status(201).json({ success: true, message: 'Daily sheet saved.' });
+      // Automatically post OUT transaction into that particular supervisor's accounts output!
+      if (totalAmount > 0) {
+        let siteName = 'Site';
+        let supervisorName: string | null = null;
+        try {
+          const siteRes = await db.query('SELECT name FROM sites WHERE id = ?', [cleanSiteId]);
+          if (siteRes.rows?.[0]?.name) siteName = siteRes.rows[0].name;
+        } catch {}
+        try {
+          const userRes = await db.query('SELECT name FROM users WHERE id = ?', [cleanUserId]);
+          if (userRes.rows?.[0]?.name) supervisorName = userRes.rows[0].name;
+        } catch {}
+
+        await db.query(
+          `INSERT INTO account_transactions 
+            (role, user_id, entered_by_name, flow, category, party_name, payment_method, description, amount, date)
+           VALUES ('Supervisor', ?, ?, 'OUT', 'Daily Sheet', ?, 'Cash', ?, ?, ?)`,
+          [
+            cleanUserId,
+            supervisorName,
+            siteName,
+            workDescription ? `Daily Sheet (${siteName}) - ${workDescription}` : `Daily Sheet (${siteName})`,
+            totalAmount,
+            date,
+          ]
+        );
+      }
+
+      res.status(201).json({ success: true, message: 'Daily sheet saved and added to supervisor account statement.' });
     } catch (error: any) {
       console.error('submitDailySheet Error:', error);
       res.status(500).json({ success: false, error: error.message });
