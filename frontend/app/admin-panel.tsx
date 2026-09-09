@@ -26,7 +26,7 @@ import { csvCell, downloadImage, exportCsv, shareImageOnWhatsApp } from '../serv
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
-type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
+type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'DAILY_SHEET' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
 type StaffRole = 'Owner' | 'Supervisor' | 'Driver' | 'Accounts' | 'TotalAccounts';
 
 interface Staff {
@@ -57,6 +57,7 @@ interface Lead {
 const adminTabs: { id: AdminTab; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
   { id: 'DASHBOARD', label: 'Overview', icon: 'space-dashboard' },
   { id: 'ATTENDANCE', label: 'Attendance', icon: 'fact-check' },
+  { id: 'DAILY_SHEET', label: 'Daily Sheet', icon: 'description' },
   { id: 'PROJECTS', label: 'Projects', icon: 'business' },
   { id: 'TEAM', label: 'Team', icon: 'badge' },
   { id: 'LEADS', label: 'Leads', icon: 'groups' },
@@ -97,6 +98,12 @@ export default function AdminPanelScreen() {
   const [ioTo, setIoTo] = useState('');
   const [ioReport, setIoReport] = useState<any>(null);
   const [attendanceDetail, setAttendanceDetail] = useState<any>(null);
+
+  // Daily Sheet — supervisor-submitted daily reports, reviewed here supervisor-wise
+  const [dailySheets, setDailySheets] = useState<any[]>([]);
+  const [dailySheetDate, setDailySheetDate] = useState(todayIso());
+  const [dailySheetSupervisor, setDailySheetSupervisor] = useState<string | null>(null);
+  const [dailySheetDetail, setDailySheetDetail] = useState<any>(null);
 
   // Bill (ledger entry) edit modal
   const [billEditVisible, setBillEditVisible] = useState(false);
@@ -176,6 +183,10 @@ export default function AdminPanelScreen() {
     setTodayOverview(isToday ? (selectedData || { workers: [], categories: [], supervisors: [] }) : (todayData || { workers: [], categories: [], supervisors: [] }));
   };
 
+  const fetchDailySheets = async (date = dailySheetDate) => {
+    setDailySheets(await adminService.getAllDailySheets(date));
+  };
+
   const fetchSitesAndStaff = async () => {
     const [sitesData, staffData] = await Promise.all([adminService.getSites(), adminService.getStaff()]);
     setSitesList(sitesData);
@@ -193,6 +204,7 @@ export default function AdminPanelScreen() {
     try {
       if (tab === 'DASHBOARD') await fetchDashboard();
       if (tab === 'ATTENDANCE') await fetchAttendance();
+      if (tab === 'DAILY_SHEET') await fetchDailySheets();
       if (tab === 'PROJECTS') await fetchSitesAndStaff();
       if (tab === 'TEAM') setStaffList(await adminService.getStaff());
       if (tab === 'LEADS') setLeadsList(await adminService.getLeads());
@@ -1203,6 +1215,74 @@ export default function AdminPanelScreen() {
     return renderAttendanceDashboard();
   };
 
+  const renderDailySheet = () => {
+    const supervisorNames = Array.from(new Set(dailySheets.map((s: any) => s.supervisor_name))).sort();
+    const filtered = dailySheetSupervisor ? dailySheets.filter((s: any) => s.supervisor_name === dailySheetSupervisor) : dailySheets;
+    const grandTotal = filtered.reduce((sum: number, s: any) => sum + Number(s.total_amount || 0), 0);
+
+    return (
+      <View>
+        <Text style={styles.screenTitle}>Daily Sheet</Text>
+        <Text style={styles.screenSubtitle}>Supervisor-submitted daily reports — filter by date and supervisor.</Text>
+
+        <View style={styles.card}>
+          <Text style={styles.formTitle}>Date</Text>
+          <DatePickerField
+            value={dailySheetDate}
+            onChange={(v) => { setDailySheetDate(v); fetchDailySheets(v); }}
+            placeholder="Select date"
+          />
+        </View>
+
+        {supervisorNames.length > 0 && (
+          <View style={styles.card}>
+            <Text style={styles.formTitle}>Supervisor</Text>
+            <View style={styles.chipRow}>
+              <TouchableOpacity style={[styles.chip, !dailySheetSupervisor && styles.chipActive]} onPress={() => setDailySheetSupervisor(null)}>
+                <Text style={[styles.chipText, !dailySheetSupervisor && styles.chipTextActive]}>All ({dailySheets.length})</Text>
+              </TouchableOpacity>
+              {supervisorNames.map((name) => (
+                <TouchableOpacity
+                  key={name}
+                  style={[styles.chip, dailySheetSupervisor === name && styles.chipActive]}
+                  onPress={() => setDailySheetSupervisor(name)}
+                >
+                  <Text style={[styles.chipText, dailySheetSupervisor === name && styles.chipTextActive]}>
+                    {name} ({dailySheets.filter((s: any) => s.supervisor_name === name).length})
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
+        <SectionTitle title={`Submitted for ${dailySheetDate} (${filtered.length})`} />
+
+        {filtered.length > 0 && (
+          <View style={[styles.card, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
+            <Text style={styles.rowMeta}>Grand Total{dailySheetSupervisor ? ` — ${dailySheetSupervisor}` : ''}</Text>
+            <Text style={{ fontWeight: '900', fontSize: 16, color: COLORS.primary }}>{rupeesText(grandTotal)}</Text>
+          </View>
+        )}
+
+        {filtered.map((sheet: any) => (
+          <TouchableOpacity key={sheet.id} style={styles.listCard} onPress={() => setDailySheetDetail(sheet)}>
+            <View style={styles.listIcon}>
+              <MaterialIcons name="description" size={22} color={COLORS.primary} />
+            </View>
+            <View style={styles.listContent}>
+              <Text style={styles.rowTitle}>{sheet.supervisor_name} — {sheet.site_name}</Text>
+              <Text style={styles.rowMeta}>{sheet.work_description || 'No work description'}</Text>
+              <Text style={styles.assignmentText}>Received {rupeesText(sheet.amount_received)} • Total {rupeesText(sheet.total_amount)}</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={COLORS.textLight} />
+          </TouchableOpacity>
+        ))}
+        {filtered.length === 0 && <EmptyState text="No daily sheets submitted for this date." />}
+      </View>
+    );
+  };
+
   const renderProjects = () => (
     <View>
       <Text style={styles.screenTitle}>Projects</Text>
@@ -1747,6 +1827,7 @@ export default function AdminPanelScreen() {
   const renderActiveTab = () => {
     if (activeTab === 'DASHBOARD') return renderDashboard();
     if (activeTab === 'ATTENDANCE') return renderAttendance();
+    if (activeTab === 'DAILY_SHEET') return renderDailySheet();
     if (activeTab === 'PROJECTS') return renderProjects();
     if (activeTab === 'TEAM') return renderTeam();
     if (activeTab === 'LEADS') return renderLeads();
@@ -1893,6 +1974,88 @@ export default function AdminPanelScreen() {
               </>
             )}
           </View>
+        </View>
+      </Modal>
+
+      {/* Daily Sheet detail — full breakdown of one supervisor's submitted daily report */}
+      <Modal visible={!!dailySheetDetail} transparent animationType="slide" onRequestClose={() => setDailySheetDetail(null)}>
+        <View style={styles.detailBackdrop}>
+          <ScrollView style={[styles.detailSheet, { maxHeight: '88%' }]}>
+            <View style={styles.detailHandle} />
+            {dailySheetDetail && (
+              <>
+                <View style={styles.detailHeader}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailName}>{dailySheetDetail.supervisor_name}</Text>
+                    <Text style={styles.detailMeta}>
+                      {dailySheetDetail.site_name} • {new Date(dailySheetDetail.date).toLocaleDateString('en-IN')}
+                    </Text>
+                  </View>
+                </View>
+
+                {dailySheetDetail.work_description ? (
+                  <Text style={[styles.detailMeta, { marginBottom: SPACING.md }]}>Work: {dailySheetDetail.work_description}</Text>
+                ) : null}
+
+                <Text style={styles.formTitle}>Attendance</Text>
+                {(dailySheetDetail.attendance || []).length > 0 ? (
+                  (dailySheetDetail.attendance || []).map((a: any, i: number) => (
+                    <View key={i} style={styles.detailLocationRow}>
+                      <MaterialIcons name="groups" size={18} color={COLORS.success} />
+                      <Text style={styles.detailLocationText}>{a.category}{a.name ? ` — ${a.name}` : ''}: {a.count} present</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.detailMeta}>No attendance recorded.</Text>
+                )}
+
+                <Text style={[styles.formTitle, { marginTop: SPACING.md }]}>Money</Text>
+                <View style={styles.detailLocationRow}>
+                  <MaterialIcons name="south-west" size={18} color={COLORS.success} />
+                  <Text style={styles.detailLocationText}>Amount Received: {rupeesText(dailySheetDetail.amount_received)}</Text>
+                </View>
+                <View style={styles.detailLocationRow}>
+                  <MaterialIcons name="receipt" size={18} color={COLORS.primary} />
+                  <Text style={styles.detailLocationText}>Bills — Normal: {rupeesText(dailySheetDetail.bills_normal)}</Text>
+                </View>
+                <View style={styles.detailLocationRow}>
+                  <MaterialIcons name="receipt-long" size={18} color={COLORS.primary} />
+                  <Text style={styles.detailLocationText}>Bills — GST: {rupeesText(dailySheetDetail.bills_gst)}</Text>
+                </View>
+                <View style={styles.detailLocationRow}>
+                  <MaterialIcons name="credit-card" size={18} color={COLORS.primary} />
+                  <Text style={styles.detailLocationText}>Bills — Under GST / Credit: {rupeesText(dailySheetDetail.bills_credit)}</Text>
+                </View>
+                <View style={styles.detailLocationRow}>
+                  <MaterialIcons name="local-shipping" size={18} color={COLORS.primary} />
+                  <Text style={styles.detailLocationText}>Vehicle & Rental: {rupeesText(dailySheetDetail.vehicle_rental)}</Text>
+                </View>
+
+                <Text style={[styles.formTitle, { marginTop: SPACING.md }]}>Labour Salary</Text>
+                {(dailySheetDetail.labourSalary || []).length > 0 ? (
+                  (dailySheetDetail.labourSalary || []).map((l: any, i: number) => (
+                    <View key={i} style={styles.detailLocationRow}>
+                      <MaterialIcons name="badge" size={18} color={COLORS.success} />
+                      <Text style={styles.detailLocationText}>{l.name}: {rupeesText(l.amount)}</Text>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.detailMeta}>No labour salary recorded.</Text>
+                )}
+
+                <View style={[styles.detailLocationRow, { marginTop: SPACING.md }]}>
+                  <MaterialIcons name="account-balance-wallet" size={20} color={COLORS.primary} />
+                  <Text style={[styles.detailLocationText, { fontWeight: '900', fontSize: 15 }]}>
+                    TOTAL AMOUNT: {rupeesText(dailySheetDetail.total_amount)}
+                  </Text>
+                </View>
+
+                <TouchableOpacity style={styles.detailCloseButton} onPress={() => setDailySheetDetail(null)}>
+                  <Text style={styles.detailCloseButtonText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </ScrollView>
         </View>
       </Modal>
 
