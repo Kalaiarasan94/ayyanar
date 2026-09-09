@@ -182,6 +182,31 @@ CREATE TABLE IF NOT EXISTS attendance_categories (
     UNIQUE KEY (site_id, date, category)
 );
 
+-- One combined daily site report per supervisor (mirrors the paper "Daily Sheet":
+-- attendance, amount received, the 4 bill categories, and labour salary, all in one
+-- submission). Attendance and labour-salary line items are stored as JSON text —
+-- this is intentionally its own isolated record, not wired into the
+-- attendance/accounts/bills tables.
+CREATE TABLE IF NOT EXISTS daily_sheets (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    site_id INT NOT NULL,
+    user_id INT NOT NULL,
+    date DATE NOT NULL,
+    work_description VARCHAR(255) NULL,
+    attendance_json TEXT NULL,
+    amount_received DECIMAL(12, 2) DEFAULT 0,
+    bills_normal DECIMAL(12, 2) DEFAULT 0,
+    bills_gst DECIMAL(12, 2) DEFAULT 0,
+    bills_credit DECIMAL(12, 2) DEFAULT 0,
+    vehicle_rental DECIMAL(12, 2) DEFAULT 0,
+    labour_salary_json TEXT NULL,
+    labour_salary_total DECIMAL(12, 2) DEFAULT 0,
+    total_amount DECIMAL(12, 2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- Insert some initial data
 INSERT INTO sites (name, location) VALUES 
 ('Alpha (Madurai)', 'Madurai'),

@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { ScrollView, Text, View, ActivityIndicator, useWindowDimensions, StyleSheet, TouchableOpacity, RefreshControl, Image, Alert, Linking, Platform } from 'react-native';
+import { ScrollView, Text, View, ActivityIndicator, useWindowDimensions, StyleSheet, TouchableOpacity, RefreshControl, Image, Alert, Linking, Platform, Modal } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -13,6 +13,12 @@ import AppBackground from '../components/AppBackground';
 
 // The web shell caps the app at 1180px on desktop
 const MAX_CONTENT_WIDTH = 1180;
+
+// Local calendar date (Indian day, not UTC)
+const todayLocal = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 // Simple Pie Chart Component
 const SimplePieChart = ({ data }: { data: { label: string, value: number, color: string }[] }) => {
@@ -119,6 +125,41 @@ export default function DashboardScreen() {
   const [locationData, setLocationData] = useState<{ latitude: number, longitude: number, locationName: string } | null>(null);
   const [locating, setLocating] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+
+  // Tapping a site on the Supervisor dashboard opens this detail sheet
+  const [siteDetail, setSiteDetail] = useState<any>(null);
+  const [siteDetailLoading, setSiteDetailLoading] = useState(false);
+  const [siteDetailData, setSiteDetailData] = useState<{
+    todayPresent: number;
+    todayAbsent: number;
+    totalExpenses: number;
+    todayExpenses: number;
+    categories: any[];
+  } | null>(null);
+
+  const openSiteDetail = async (site: any) => {
+    setSiteDetail(site);
+    setSiteDetailLoading(true);
+    setSiteDetailData(null);
+    try {
+      const today = todayLocal();
+      const [categories, allLedger] = await Promise.all([
+        fieldService.getAttendanceCategoryBySite(site.id, today),
+        fieldService.getLedgerBySite(site.id),
+      ]);
+      const todayPresent = categories.reduce((s: number, c: any) => s + Number(c.present_count || 0), 0);
+      const todayAbsent = categories.reduce((s: number, c: any) => s + Number(c.absent_count || 0), 0);
+      const totalExpenses = allLedger.reduce((s: number, l: any) => s + Number(l.amount || 0), 0);
+      const todayExpenses = allLedger
+        .filter((l: any) => (l.date || '').toString().split('T')[0] === today)
+        .reduce((s: number, l: any) => s + Number(l.amount || 0), 0);
+      setSiteDetailData({ todayPresent, todayAbsent, totalExpenses, todayExpenses, categories });
+    } catch (error) {
+      console.error('Failed to load site detail:', error);
+    } finally {
+      setSiteDetailLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -500,22 +541,24 @@ export default function DashboardScreen() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Active Sites</Text>
+          <Text style={styles.sectionHint}>Tap a site for today's attendance and expenses</Text>
           <View style={styles.activeSitesContainer}>
             {activeSites.map((site) => (
-              <View key={site.id} style={styles.activeSiteCard}>
+              <TouchableOpacity key={site.id} style={styles.activeSiteCard} onPress={() => openSiteDetail(site)} activeOpacity={0.7}>
                 <View style={styles.siteHeader}>
                   <MaterialIcons name="location-city" size={18} color={COLORS.primary} />
                   <View style={{ marginLeft: 6, flex: 1 }}>
                     <Text style={styles.siteItemName} numberOfLines={1}>{site.name}</Text>
                     <Text style={styles.siteItemLocation} numberOfLines={1}>{site.location}</Text>
                   </View>
+                  <MaterialIcons name="chevron-right" size={20} color={COLORS.textLight} />
                 </View>
                 <View style={styles.badgeRow}>
                   <View style={styles.activeBadge}>
                     <Text style={styles.badgeText}>Active</Text>
                   </View>
                 </View>
-              </View>
+              </TouchableOpacity>
             ))}
             {activeSites.length === 0 && (
               <View style={styles.emptyColumnState}>
@@ -525,6 +568,65 @@ export default function DashboardScreen() {
             )}
           </View>
         </View>
+
+        {/* Site detail — today's attendance + expenses for the tapped site */}
+        <Modal visible={!!siteDetail} transparent animationType="slide" onRequestClose={() => setSiteDetail(null)}>
+          <View style={styles.siteDetailBackdrop}>
+            <View style={styles.siteDetailSheet}>
+              <View style={styles.siteDetailHandle} />
+              <Text style={styles.siteDetailTitle}>{siteDetail?.name}</Text>
+              <Text style={styles.siteDetailSubtitle}>{siteDetail?.location}</Text>
+
+              {siteDetailLoading ? (
+                <ActivityIndicator color={COLORS.primary} style={{ marginVertical: SPACING.lg }} />
+              ) : siteDetailData ? (
+                <>
+                  <Text style={styles.siteDetailSectionLabel}>TODAY'S WORKER ATTENDANCE</Text>
+                  <View style={styles.siteDetailStatRow}>
+                    <View style={[styles.siteDetailStat, { backgroundColor: 'rgba(21, 128, 61, 0.08)' }]}>
+                      <Text style={[styles.siteDetailStatValue, { color: COLORS.success }]}>{siteDetailData.todayPresent}</Text>
+                      <Text style={styles.siteDetailStatLabel}>Present</Text>
+                    </View>
+                    <View style={[styles.siteDetailStat, { backgroundColor: 'rgba(226, 26, 18, 0.06)' }]}>
+                      <Text style={[styles.siteDetailStatValue, { color: COLORS.primary }]}>{siteDetailData.todayAbsent}</Text>
+                      <Text style={styles.siteDetailStatLabel}>Absent</Text>
+                    </View>
+                  </View>
+                  {siteDetailData.categories.length > 0 && (
+                    <View style={styles.siteDetailCategoryList}>
+                      {siteDetailData.categories.map((c: any) => (
+                        <View key={c.id} style={styles.siteDetailCategoryRow}>
+                          <Text style={styles.siteDetailCategoryName}>{c.category}</Text>
+                          <Text style={styles.siteDetailCategoryCount}>
+                            {c.present_count || 0} present{Number(c.absent_count || 0) > 0 ? ` / ${c.absent_count} absent` : ''}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  <Text style={[styles.siteDetailSectionLabel, { marginTop: SPACING.md }]}>EXPENSES</Text>
+                  <View style={styles.siteDetailStatRow}>
+                    <View style={[styles.siteDetailStat, { backgroundColor: 'rgba(226, 26, 18, 0.06)' }]}>
+                      <Text style={[styles.siteDetailStatValue, { color: COLORS.primary }]}>₹{siteDetailData.todayExpenses.toLocaleString('en-IN')}</Text>
+                      <Text style={styles.siteDetailStatLabel}>Today</Text>
+                    </View>
+                    <View style={[styles.siteDetailStat, { backgroundColor: 'rgba(140, 15, 22, 0.08)' }]}>
+                      <Text style={[styles.siteDetailStatValue, { color: '#8C0F16' }]}>₹{siteDetailData.totalExpenses.toLocaleString('en-IN')}</Text>
+                      <Text style={styles.siteDetailStatLabel}>Total (All-Time)</Text>
+                    </View>
+                  </View>
+                </>
+              ) : (
+                <Text style={styles.emptyColumnText}>Unable to load this site's details.</Text>
+              )}
+
+              <TouchableOpacity style={styles.siteDetailCloseButton} onPress={() => setSiteDetail(null)}>
+                <Text style={styles.siteDetailCloseButtonText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </>
     );
   };
@@ -624,6 +726,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.text,
+    marginBottom: SPACING.md,
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    fontWeight: '600',
+    marginTop: -SPACING.sm,
     marginBottom: SPACING.md,
   },
   card: {
@@ -800,6 +909,100 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.glassBorder,
     marginBottom: SPACING.sm,
+  },
+  siteDetailBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(11, 13, 16, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  siteDetailSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    maxHeight: '85%',
+  },
+  siteDetailHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: SPACING.md,
+  },
+  siteDetailTitle: {
+    fontSize: 19,
+    fontWeight: '900',
+    color: COLORS.text,
+  },
+  siteDetailSubtitle: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    fontWeight: '600',
+    marginTop: 2,
+    marginBottom: SPACING.md,
+  },
+  siteDetailSectionLabel: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: COLORS.textLight,
+    letterSpacing: 0.5,
+    marginBottom: SPACING.sm,
+  },
+  siteDetailStatRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  siteDetailStat: {
+    flex: 1,
+    borderRadius: BORDER_RADIUS.lg,
+    padding: SPACING.md,
+    gap: 3,
+  },
+  siteDetailStatValue: {
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  siteDetailStatLabel: {
+    color: COLORS.textLight,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  siteDetailCategoryList: {
+    backgroundColor: COLORS.steel,
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  siteDetailCategoryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+  },
+  siteDetailCategoryName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  siteDetailCategoryCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textLight,
+  },
+  siteDetailCloseButton: {
+    backgroundColor: COLORS.steel,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: SPACING.md,
+  },
+  siteDetailCloseButtonText: {
+    color: COLORS.text,
+    fontWeight: '900',
+    fontSize: 14,
   },
   emptyColumnState: {
     flex: 1,

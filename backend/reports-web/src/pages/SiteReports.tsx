@@ -8,6 +8,16 @@ import { buildPdfReport, downloadPdfReport } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
+const dateInputValue = (iso: string) => (iso ? iso.toString().split('T')[0] : '');
+
+type EditForm = {
+  id: string | number;
+  category: string;
+  description: string;
+  amount: string;
+  paymentMode: 'Direct' | 'Indirect';
+  date: string;
+};
 
 export default function SiteReports() {
   const [sites, setSites] = useState<any[]>([]);
@@ -17,6 +27,10 @@ export default function SiteReports() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
+  const [editingBill, setEditingBill] = useState<EditForm | null>(null);
+  const [savingBill, setSavingBill] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | number | null>(null);
+
   useEffect(() => {
     adminApi.getSites().then((s) => {
       setSites(s);
@@ -25,14 +39,16 @@ export default function SiteReports() {
     adminApi.getAnalytics().then((a) => setAllSitesBreakdown(a?.siteWiseExpenseBreakdown || []));
   }, []);
 
-  useEffect(() => {
+  const loadRows = () => {
     if (!siteId) return;
     setLoading(true);
     fieldApi
       .getLedgerBySite(siteId)
       .then(setRows)
       .finally(() => setLoading(false));
-  }, [siteId]);
+  };
+
+  useEffect(loadRows, [siteId]);
 
   const site = sites.find((s) => s.id.toString() === siteId);
   const direct = rows.filter((r) => r.payment_mode === 'Direct');
@@ -52,6 +68,54 @@ export default function SiteReports() {
     { name: 'Direct', value: directTotal },
     { name: 'Indirect', value: indirectTotal },
   ].filter((d) => d.value > 0);
+
+  const openEdit = (r: any) => {
+    setEditingBill({
+      id: r.id,
+      category: r.category || '',
+      description: r.description || '',
+      amount: String(r.amount ?? ''),
+      paymentMode: r.payment_mode === 'Direct' ? 'Direct' : 'Indirect',
+      date: dateInputValue(r.date),
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingBill) return;
+    if (!editingBill.category.trim() || !editingBill.amount || !editingBill.date) {
+      alert('Category, amount and date are required.');
+      return;
+    }
+    setSavingBill(true);
+    try {
+      await fieldApi.updateExpense(editingBill.id, {
+        category: editingBill.category.trim(),
+        description: editingBill.description.trim(),
+        amount: Number(editingBill.amount),
+        paymentMode: editingBill.paymentMode,
+        date: editingBill.date,
+      });
+      setEditingBill(null);
+      loadRows();
+    } catch (err: any) {
+      alert(err?.message || 'Failed to save changes.');
+    } finally {
+      setSavingBill(false);
+    }
+  };
+
+  const handleDelete = async (r: any) => {
+    if (!confirm(`Delete this ${r.payment_mode === 'Direct' ? 'direct' : 'indirect'} bill (${rupees(r.amount)})? This cannot be undone.`)) return;
+    setDeletingId(r.id);
+    try {
+      await fieldApi.deleteExpense(r.id);
+      loadRows();
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete this bill.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -84,6 +148,21 @@ export default function SiteReports() {
     } finally {
       setDownloading(false);
     }
+  };
+
+  const actionsColumn = {
+    header: '',
+    align: 'right' as const,
+    render: (r: any) => (
+      <div className="row-actions">
+        <button className="icon-btn" onClick={() => openEdit(r)}>
+          Edit
+        </button>
+        <button className="icon-btn danger" onClick={() => handleDelete(r)} disabled={deletingId === r.id}>
+          {deletingId === r.id ? '…' : 'Delete'}
+        </button>
+      </div>
+    ),
   };
 
   return (
@@ -161,6 +240,7 @@ export default function SiteReports() {
                 { header: 'Category', render: (r: any) => r.category || '—' },
                 { header: 'Description', render: (r: any) => r.description || '—' },
                 { header: 'Amount', align: 'right', render: (r: any) => rupees(r.amount) },
+                actionsColumn,
               ]}
             />
           </div>
@@ -177,10 +257,73 @@ export default function SiteReports() {
                 { header: 'Category', render: (r: any) => r.category || '—' },
                 { header: 'Description', render: (r: any) => r.description || '—' },
                 { header: 'Amount', align: 'right', render: (r: any) => rupees(r.amount) },
+                actionsColumn,
               ]}
             />
           </div>
         </>
+      )}
+
+      {editingBill && (
+        <div className="modal-backdrop" onClick={() => !savingBill && setEditingBill(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <h3>Edit Bill</h3>
+            <div className="sub">{site?.name}</div>
+
+            <div className="field-label">Category</div>
+            <input
+              className="input"
+              value={editingBill.category}
+              onChange={(e) => setEditingBill({ ...editingBill, category: e.target.value })}
+            />
+
+            <div className="field-label">Description</div>
+            <input
+              className="input"
+              value={editingBill.description}
+              onChange={(e) => setEditingBill({ ...editingBill, description: e.target.value })}
+            />
+
+            <div className="field-label">Amount (Rs)</div>
+            <input
+              className="input"
+              type="number"
+              value={editingBill.amount}
+              onChange={(e) => setEditingBill({ ...editingBill, amount: e.target.value })}
+            />
+
+            <div className="field-label">Payment Mode</div>
+            <div className="chip-row">
+              {(['Direct', 'Indirect'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`chip${editingBill.paymentMode === mode ? ' active' : ''}`}
+                  onClick={() => setEditingBill({ ...editingBill, paymentMode: mode })}
+                >
+                  {mode === 'Direct' ? 'Direct (Cash)' : 'Indirect (Credit)'}
+                </button>
+              ))}
+            </div>
+
+            <div className="field-label">Date</div>
+            <input
+              className="input"
+              type="date"
+              value={editingBill.date}
+              onChange={(e) => setEditingBill({ ...editingBill, date: e.target.value })}
+            />
+
+            <div className="modal-actions">
+              <button className="btn secondary" onClick={() => setEditingBill(null)} disabled={savingBill}>
+                Cancel
+              </button>
+              <button className="btn" onClick={handleSaveEdit} disabled={savingBill}>
+                {savingBill ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

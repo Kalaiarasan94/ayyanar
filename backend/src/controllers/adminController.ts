@@ -290,5 +290,38 @@ export const adminController = {
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
+  },
+
+  // All submitted Daily Sheets across every site, newest first — used by the
+  // Admin panel to review supervisor-wise daily reports. Optional ?date= filter.
+  getAllDailySheets: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { date } = req.query;
+      let queryText = `
+        SELECT ds.*, s.name as site_name, u.name as supervisor_name
+        FROM daily_sheets ds
+        JOIN sites s ON ds.site_id = s.id
+        JOIN users u ON ds.user_id = u.id
+      `;
+      const params: any[] = [];
+      if (date) {
+        queryText += ' WHERE ds.date = ?';
+        params.push(date);
+      }
+      queryText += ' ORDER BY ds.date DESC, u.name ASC, ds.id DESC';
+      const result = await db.query(queryText, params);
+      const rows = (result.rows || []).map((r: any) => ({
+        ...r,
+        attendance: (() => {
+          try { return JSON.parse(r.attendance_json || '[]'); } catch { return []; }
+        })(),
+        labourSalary: (() => {
+          try { return JSON.parse(r.labour_salary_json || '[]'); } catch { return []; }
+        })(),
+      }));
+      res.status(200).json(rows);
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
 };

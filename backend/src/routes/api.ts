@@ -23,6 +23,8 @@ router.get('/attendance/category/site/:siteId', fieldController.getAttendanceCat
 router.post('/supervisor-attendance', fieldController.submitSupervisorAttendance);
 router.post('/site-photos', fieldController.uploadSitePhoto);
 router.get('/site-photos/recent', fieldController.getRecentSitePhotos);
+router.post('/daily-sheet', fieldController.submitDailySheet);
+router.get('/daily-sheet/site/:siteId', fieldController.getDailySheetsBySite);
 router.post('/driver-records', fieldController.saveDriverRecord);
 router.get('/driver-records', fieldController.getDriverRecords);
 router.put('/driver-records/:id', fieldController.updateDriverRecord);
@@ -49,6 +51,7 @@ router.get('/staff', adminController.getStaff);
 router.delete('/staff/:id', adminController.deleteStaff);
 router.put('/staff/:id', adminController.updateStaff);
 router.get('/attendance/overview', adminController.getAttendanceOverview);
+router.get('/daily-sheets', adminController.getAllDailySheets);
 router.get('/sites', adminController.getSites);
 router.post('/sites', adminController.createSite);
 router.put('/sites/:id', adminController.updateSite);

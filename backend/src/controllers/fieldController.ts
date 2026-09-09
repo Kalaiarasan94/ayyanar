@@ -593,5 +593,101 @@ export const fieldController = {
       console.error('getRecentSitePhotos Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
+  },
+
+  // Saves one combined "Daily Sheet" — attendance, amount received, the 4 bill
+  // categories, and labour salary for a site on a given day, submitted by a
+  // supervisor. Kept as its own isolated record (not wired into the
+  // attendance/accounts/bills tables) — it mirrors the paper daily sheet as-is.
+  submitDailySheet: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const {
+        siteId, userId, date, workDescription,
+        attendance, amountReceived, billsNormal, billsGst, billsCredit, vehicleRental,
+        labourSalary,
+      } = req.body;
+
+      const cleanSiteId = siteId ? parseInt(siteId.toString()) : null;
+      const cleanUserId = userId ? parseInt(userId.toString()) : null;
+      if (!cleanSiteId || !cleanUserId || !date) {
+        res.status(400).json({ success: false, error: 'Site, supervisor and date are required.' });
+        return;
+      }
+
+      const labourSalaryTotal = (labourSalary || []).reduce(
+        (sum: number, l: any) => sum + (parseFloat(l.amount) || 0),
+        0
+      );
+      const totalAmount =
+        (parseFloat(billsNormal) || 0) +
+        (parseFloat(billsGst) || 0) +
+        (parseFloat(billsCredit) || 0) +
+        (parseFloat(vehicleRental) || 0) +
+        labourSalaryTotal;
+
+      await db.query(
+        `INSERT INTO daily_sheets
+          (site_id, user_id, date, work_description, attendance_json, amount_received,
+           bills_normal, bills_gst, bills_credit, vehicle_rental, labour_salary_json,
+           labour_salary_total, total_amount)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          cleanSiteId,
+          cleanUserId,
+          date,
+          workDescription || null,
+          JSON.stringify(attendance || []),
+          parseFloat(amountReceived) || 0,
+          parseFloat(billsNormal) || 0,
+          parseFloat(billsGst) || 0,
+          parseFloat(billsCredit) || 0,
+          parseFloat(vehicleRental) || 0,
+          JSON.stringify(labourSalary || []),
+          labourSalaryTotal,
+          totalAmount,
+        ]
+      );
+
+      res.status(201).json({ success: true, message: 'Daily sheet saved.' });
+    } catch (error: any) {
+      console.error('submitDailySheet Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  // Fetches submitted daily sheets for a site, optionally filtered by date, with
+  // the attendance/labour-salary JSON parsed back into arrays for the client.
+  getDailySheetsBySite: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { siteId } = req.params;
+      const { date } = req.query;
+      let queryText = `
+        SELECT ds.*, s.name as site_name, u.name as supervisor_name
+        FROM daily_sheets ds
+        JOIN sites s ON ds.site_id = s.id
+        JOIN users u ON ds.user_id = u.id
+        WHERE ds.site_id = ?
+      `;
+      const params: any[] = [siteId];
+      if (date) {
+        queryText += ' AND ds.date = ?';
+        params.push(date);
+      }
+      queryText += ' ORDER BY ds.date DESC, ds.id DESC';
+      const result = await db.query(queryText, params);
+      const rows = (result.rows || []).map((r: any) => ({
+        ...r,
+        attendance: (() => {
+          try { return JSON.parse(r.attendance_json || '[]'); } catch { return []; }
+        })(),
+        labourSalary: (() => {
+          try { return JSON.parse(r.labour_salary_json || '[]'); } catch { return []; }
+        })(),
+      }));
+      res.status(200).json(rows);
+    } catch (error: any) {
+      console.error('getDailySheetsBySite Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
 };

@@ -65,6 +65,14 @@ const upload = multer({
 app.use('/images', express.static(imagesDir));
 app.use('/uploads', express.static(uploadsDir));
 
+// ---------- Public landing site (backend/public) ----------
+// The marketing/landing page for the app, plus the Privacy Policy and Terms
+// of Service pages required by Google Play Console and App Store Connect.
+// `extensions: ['html']` lets /privacy and /terms resolve to privacy.html /
+// terms.html without the extension in the URL.
+const publicDir = path.join(__dirname, '..', 'public');
+app.use(express.static(publicDir, { extensions: ['html'] }));
+
 app.post('/api/upload', upload.single('photo'), (req, res) => {
   if (!req.file) {
     logError('POST /api/upload', new Error('No image file received'));
@@ -97,7 +105,8 @@ const EXPECTED_TABLES = [
 ];
 
 // Deployment status page: backend health, DB connection, imported tables, error logs
-app.get('/', async (req, res) => {
+// (moved from / to /status so / can serve the public landing page instead)
+app.get('/status', async (req, res) => {
   let dbConnected = false;
   let dbError = '';
   let tables: string[] = [];

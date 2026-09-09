@@ -235,6 +235,33 @@ export const initDb = async () => {
       console.log('Added worker_name and image_url columns to attendance_categories.');
     }
 
+    // Create daily_sheets table if not exists — one combined daily site report per
+    // supervisor (mirrors the paper "Daily Sheet": attendance, amount received, the
+    // 4 bill categories, and labour salary, all in one submission). Attendance and
+    // labour-salary line items are stored as JSON text — this is intentionally its
+    // own isolated record, not wired into the attendance/accounts/bills tables.
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS daily_sheets (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          site_id INT NOT NULL,
+          user_id INT NOT NULL,
+          date DATE NOT NULL,
+          work_description VARCHAR(255) NULL,
+          attendance_json TEXT NULL,
+          amount_received DECIMAL(12, 2) DEFAULT 0,
+          bills_normal DECIMAL(12, 2) DEFAULT 0,
+          bills_gst DECIMAL(12, 2) DEFAULT 0,
+          bills_credit DECIMAL(12, 2) DEFAULT 0,
+          vehicle_rental DECIMAL(12, 2) DEFAULT 0,
+          labour_salary_json TEXT NULL,
+          labour_salary_total DECIMAL(12, 2) DEFAULT 0,
+          total_amount DECIMAL(12, 2) DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `);
+
     console.log('MySQL Database initialized successfully.');
   } catch (error) {
     console.error('Failed to initialize database schema:', error);

@@ -105,6 +105,16 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="daily-sheet"
+        options={{
+          title: 'Daily Sheet',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialIcons name="fact-check" size={size} color={color} />
+          ),
+          href: (role === 'Supervisor' || role === 'Site Engineer') ? '/daily-sheet' : null,
+        }}
+      />
+      <Tabs.Screen
         name="actions"
         options={{
           title: 'Actions',

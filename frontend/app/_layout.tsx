@@ -37,6 +37,7 @@ export default function RootLayout() {
         <Stack.Screen name="driver" options={{ headerShown: false }} />
         <Stack.Screen name="upload-bill" options={{ title: 'Log Material Bill' }} />
         <Stack.Screen name="attendance" options={{ title: 'Daily Attendance' }} />
+        <Stack.Screen name="daily-sheet" options={{ title: 'Daily Sheet' }} />
         <Stack.Screen name="cash-expense" options={{ title: 'Log Daily Expense' }} />
         <Stack.Screen name="accounts-ledger" options={{ title: 'Accounts' }} />
         <Stack.Screen name="owner-accounts" options={{ title: 'Owner Accounts' }} />

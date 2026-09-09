@@ -190,6 +190,8 @@ export const adminService = {
     const qs = params.toString();
     return request<any>(`/attendance/overview${qs ? `?${qs}` : ''}`);
   },
+  getAllDailySheets: (date?: string) =>
+    request<any[]>(`/daily-sheets${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   getStaff: () => request<any[]>('/staff'),
   addStaff: (staff: Record<string, any>) =>
     request<ApiResponse>('/staff', {
@@ -366,6 +368,13 @@ export const fieldService = {
     }),
   getAttendanceCategoryBySite: (siteId: string | number, date: string) =>
     request<any[]>(`/attendance/category/site/${siteId}?date=${encodeURIComponent(date)}`),
+  submitDailySheet: (payload: Record<string, any>) =>
+    request<ApiResponse>('/daily-sheet', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  getDailySheetsBySite: (siteId: string | number, date?: string) =>
+    request<any[]>(`/daily-sheet/site/${siteId}${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   submitSupervisorAttendance: (attendance: Record<string, any>) =>
     request<ApiResponse>('/supervisor-attendance', {
       method: 'POST',

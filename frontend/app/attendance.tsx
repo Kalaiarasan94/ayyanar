@@ -46,6 +46,7 @@ export default function AttendanceScreen() {
   // (Worker or Supervisor) switches into that form, picked via the top-right button
   const [activeTab, setActiveTab] = useState<'dashboard' | 'worker' | 'supervisor' | 'submitted'>('dashboard');
   const [entryPickerVisible, setEntryPickerVisible] = useState(false);
+  const [submittedSubTab, setSubmittedSubTab] = useState<'supervisor' | 'worker'>('supervisor');
   const [monthlyStats, setMonthlyStats] = useState({ present: 0, absent: 0, markedDays: 0, percentage: 0 });
   const [loadingMonthlyStats, setLoadingMonthlyStats] = useState(false);
 
@@ -670,9 +671,107 @@ export default function AttendanceScreen() {
             </TouchableOpacity>
           </View>
         )}
+      </ScrollView>
+    );
+  };
 
-        {/* Attendance already stored for the selected date — date-wise view */}
+  const renderSubmittedAttendance = () => (
+    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <View style={styles.subTabRow}>
+        <TouchableOpacity
+          style={[styles.subTabButton, submittedSubTab === 'supervisor' && styles.subTabButtonActive]}
+          onPress={() => setSubmittedSubTab('supervisor')}
+        >
+          <MaterialIcons name="camera-front" size={18} color={submittedSubTab === 'supervisor' ? '#FFF' : COLORS.textLight} />
+          <Text style={[styles.subTabButtonText, submittedSubTab === 'supervisor' && styles.subTabButtonTextActive]}>Supervisor Attendance</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.subTabButton, submittedSubTab === 'worker' && styles.subTabButtonActive]}
+          onPress={() => setSubmittedSubTab('worker')}
+        >
+          <MaterialIcons name="engineering" size={18} color={submittedSubTab === 'worker' ? '#FFF' : COLORS.textLight} />
+          <Text style={[styles.subTabButtonText, submittedSubTab === 'worker' && styles.subTabButtonTextActive]}>Worker Attendance</Text>
+        </TouchableOpacity>
+      </View>
+
+      {submittedSubTab === 'supervisor' ? (
         <View style={styles.rosterSection}>
+          <Text style={styles.rosterTitle}>PICK A DATE</Text>
+          <View style={[styles.cardGlass, { marginTop: 0, marginBottom: 15, padding: SPACING.md }]}>
+            <TouchableOpacity style={{ marginBottom: 10 }} onPress={() => setSupAttendanceDate(todayLocal())}>
+              <Text style={{ color: COLORS.primary, fontWeight: '800', fontSize: 12 }}>TODAY</Text>
+            </TouchableOpacity>
+            <DatePickerField value={supAttendanceDate} onChange={setSupAttendanceDate} placeholder="Select date" />
+          </View>
+
+          <Text style={styles.rosterTitle}>
+            SUBMITTED FOR {supAttendanceDate} ({supSubmittedList.length})
+          </Text>
+
+          {supSubmittedList.map((item: any) => (
+            <View key={item.id} style={styles.rosterCard}>
+              <View style={[styles.avatarContainer, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
+                <MaterialIcons name={item.status === 'Present' ? 'check' : 'close'} size={20} color={item.status === 'Present' ? '#8C0F16' : '#E23744'} />
+              </View>
+
+              <View style={styles.workerInfo}>
+                <Text style={styles.workerName}>{item.supervisor_name || 'Supervisor'}</Text>
+                <Text style={styles.workerRole}>Site: {item.site_name || 'N/A'}</Text>
+                {item.status === 'Present' && item.location_name && (
+                  <Text style={styles.locationText} numberOfLines={1}>
+                    📍 {item.location_name}
+                  </Text>
+                )}
+              </View>
+
+              {item.status === 'Present' && item.selfie_url ? (
+                <Image source={{ uri: item.selfie_url }} style={styles.selfieThumbnail} resizeMode="cover" />
+              ) : null}
+
+              <View style={[styles.submittedPill, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
+                <Text style={[styles.submittedPillText, { color: item.status === 'Present' ? '#8C0F16' : '#CB202D' }]}>{item.status}</Text>
+              </View>
+            </View>
+          ))}
+
+          {supSubmittedList.length === 0 && (
+            <View style={styles.rosterCard}>
+              <MaterialIcons name="event-note" size={20} color={COLORS.textLight} />
+              <Text style={[styles.workerRole, { marginLeft: 10 }]}>No supervisor clock-in records for this date.</Text>
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={styles.rosterSection}>
+          {sites.length > 1 && (
+            <>
+              <Text style={styles.rosterTitle}>SITE</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }}>
+                <View style={styles.chipRow}>
+                  {sites.map((site) => (
+                    <TouchableOpacity
+                      key={site.id}
+                      style={[styles.chip, selectedSiteId === site.id.toString() && styles.chipActive]}
+                      onPress={() => handleSiteChange(site.id.toString())}
+                    >
+                      <Text style={[styles.chipText, selectedSiteId === site.id.toString() && styles.chipTextActive]}>
+                        {site.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </ScrollView>
+            </>
+          )}
+
+          <Text style={styles.rosterTitle}>PICK A DATE</Text>
+          <View style={[styles.cardGlass, { marginTop: 0, marginBottom: 15, padding: SPACING.md }]}>
+            <TouchableOpacity style={{ marginBottom: 10 }} onPress={() => setAttendanceDate(todayLocal())}>
+              <Text style={{ color: COLORS.primary, fontWeight: '800', fontSize: 12 }}>TODAY</Text>
+            </TouchableOpacity>
+            <DatePickerField value={attendanceDate} onChange={setAttendanceDate} placeholder="Select date" />
+          </View>
+
           <Text style={styles.rosterTitle}>
             SUBMITTED FOR {attendanceDate} ({submittedList.length})
           </Text>
@@ -698,58 +797,7 @@ export default function AttendanceScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
-    );
-  };
-
-  const renderSubmittedAttendance = () => (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
-      <View style={styles.rosterSection}>
-        <Text style={styles.rosterTitle}>PICK A DATE</Text>
-        <View style={[styles.cardGlass, { marginTop: 0, marginBottom: 15, padding: SPACING.md }]}>
-          <TouchableOpacity style={{ marginBottom: 10 }} onPress={() => setSupAttendanceDate(todayLocal())}>
-            <Text style={{ color: COLORS.primary, fontWeight: '800', fontSize: 12 }}>TODAY</Text>
-          </TouchableOpacity>
-          <DatePickerField value={supAttendanceDate} onChange={setSupAttendanceDate} placeholder="Select date" />
-        </View>
-
-        <Text style={styles.rosterTitle}>
-          SUBMITTED FOR {supAttendanceDate} ({supSubmittedList.length})
-        </Text>
-
-        {supSubmittedList.map((item: any) => (
-          <View key={item.id} style={styles.rosterCard}>
-            <View style={[styles.avatarContainer, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
-              <MaterialIcons name={item.status === 'Present' ? 'check' : 'close'} size={20} color={item.status === 'Present' ? '#8C0F16' : '#E23744'} />
-            </View>
-
-            <View style={styles.workerInfo}>
-              <Text style={styles.workerName}>{item.supervisor_name || 'Supervisor'}</Text>
-              <Text style={styles.workerRole}>Site: {item.site_name || 'N/A'}</Text>
-              {item.status === 'Present' && item.location_name && (
-                <Text style={styles.locationText} numberOfLines={1}>
-                  📍 {item.location_name}
-                </Text>
-              )}
-            </View>
-
-            {item.status === 'Present' && item.selfie_url ? (
-              <Image source={{ uri: item.selfie_url }} style={styles.selfieThumbnail} resizeMode="cover" />
-            ) : null}
-
-            <View style={[styles.submittedPill, { backgroundColor: item.status === 'Present' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(226, 26, 18, 0.08)' }]}>
-              <Text style={[styles.submittedPillText, { color: item.status === 'Present' ? '#8C0F16' : '#CB202D' }]}>{item.status}</Text>
-            </View>
-          </View>
-        ))}
-
-        {supSubmittedList.length === 0 && (
-          <View style={styles.rosterCard}>
-            <MaterialIcons name="event-note" size={20} color={COLORS.textLight} />
-            <Text style={[styles.workerRole, { marginLeft: 10 }]}>No supervisor clock-in records for this date.</Text>
-          </View>
-        )}
-      </View>
+      )}
     </ScrollView>
   );
 
@@ -981,6 +1029,35 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     height: 15,
+  },
+  subTabRow: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    borderRadius: BORDER_RADIUS.xl,
+    padding: 4,
+    marginBottom: SPACING.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.65)',
+  },
+  subTabButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  subTabButtonActive: {
+    backgroundColor: '#E23744',
+  },
+  subTabButtonText: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: COLORS.textLight,
+  },
+  subTabButtonTextActive: {
+    color: '#FFF',
   },
   pageHeaderRow: {
     flexDirection: 'row',

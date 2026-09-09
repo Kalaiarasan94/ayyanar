@@ -53,6 +53,10 @@ export const adminApi = {
 
 export const fieldApi = {
   getLedgerBySite: (siteId: string | number, date?: string) => request<any[]>(`/expenses/site/${siteId}${qs({ date })}`),
+  updateExpense: (id: string | number, expense: Record<string, any>) =>
+    request<{ success: boolean; message?: string }>(`/expenses/${id}`, { method: 'PUT', body: JSON.stringify(expense) }),
+  deleteExpense: (id: string | number) =>
+    request<{ success: boolean; message?: string }>(`/expenses/${id}`, { method: 'DELETE' }),
   getDriverRecords: (from?: string, to?: string) => request<any[]>(`/driver-records${qs({ from, to })}`),
   getDriverBills: (from?: string, to?: string) => request<any[]>(`/driver-bills${qs({ from, to })}`),
 };
