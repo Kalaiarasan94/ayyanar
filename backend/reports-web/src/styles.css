@@ -28,6 +28,7 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background: var(--background);
   color: var(--text);
+  -webkit-tap-highlight-color: transparent;
 }
 
 a {
@@ -38,6 +39,20 @@ a {
 button {
   font-family: inherit;
   cursor: pointer;
+}
+
+/* ---------- Mobile Topbar (Hidden on desktop) ---------- */
+
+.mobile-topbar {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+.sidebar-close-btn {
+  display: none;
 }
 
 /* ---------- Layout ---------- */
@@ -56,6 +71,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  z-index: 50;
 }
 
 .sidebar-brand {
@@ -76,6 +92,12 @@ button {
   justify-content: center;
   font-weight: 900;
   font-size: 15px;
+  flex-shrink: 0;
+}
+
+.sidebar-brand-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .sidebar-brand-title {
@@ -90,6 +112,14 @@ button {
   font-weight: 600;
 }
 
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+}
+
 .sidebar-link {
   display: flex;
   align-items: center;
@@ -99,6 +129,7 @@ button {
   font-size: 13.5px;
   font-weight: 700;
   color: var(--text-light);
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .sidebar-link:hover {
@@ -125,6 +156,10 @@ button {
   color: var(--primary);
   font-weight: 800;
   font-size: 13px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .main-content {
@@ -189,6 +224,7 @@ button {
 
 .kpi-body {
   min-width: 0;
+  flex: 1;
 }
 
 .kpi-label {
@@ -201,9 +237,10 @@ button {
 }
 
 .kpi-value {
-  font-size: 22px;
+  font-size: clamp(16px, 3.5vw, 22px);
   font-weight: 900;
   line-height: 1.1;
+  word-break: break-word;
 }
 
 .kpi-sub {
@@ -246,9 +283,10 @@ button {
 }
 
 .hero-value {
-  font-size: 28px;
+  font-size: clamp(22px, 5vw, 28px);
   font-weight: 900;
   margin-top: 4px;
+  word-break: break-word;
 }
 
 /* ---------- Controls ---------- */
@@ -261,6 +299,25 @@ button {
   margin-bottom: 18px;
 }
 
+.date-range-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.date-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date-action-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .select,
 .input {
   padding: 9px 12px;
@@ -270,6 +327,13 @@ button {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
+  outline: none;
+  min-height: 40px;
+}
+
+.select:focus,
+.input:focus {
+  border-color: var(--primary);
 }
 
 .chip-row {
@@ -286,6 +350,10 @@ button {
   font-size: 12.5px;
   font-weight: 800;
   color: var(--text-light);
+  transition: all 0.15s ease;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .chip.active {
@@ -297,6 +365,7 @@ button {
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   padding: 9px 16px;
   border-radius: 10px;
@@ -305,6 +374,8 @@ button {
   font-weight: 800;
   background: var(--primary);
   color: #fff;
+  min-height: 40px;
+  white-space: nowrap;
 }
 
 .btn.secondary {
@@ -333,6 +404,9 @@ button {
   font-weight: 800;
   color: var(--text-light);
   cursor: pointer;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .icon-btn:hover {
@@ -354,21 +428,23 @@ button {
   position: fixed;
   inset: 0;
   background: rgba(11, 13, 16, 0.55);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  z-index: 50;
+  z-index: 100;
 }
 
 .modal-card {
   background: var(--surface);
   border-radius: 16px;
-  padding: 26px;
+  padding: 24px;
   width: 100%;
   max-width: 440px;
   max-height: 90vh;
   overflow-y: auto;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
 }
 
 .modal-card h3 {
@@ -412,6 +488,9 @@ button {
 
 .table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -2px;
+  border-radius: 10px;
 }
 
 table.data-table {
@@ -427,9 +506,10 @@ table.data-table th {
   letter-spacing: 0.4px;
   color: var(--text-light);
   font-weight: 800;
-  padding: 8px 10px;
+  padding: 9px 10px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  background: var(--surface);
 }
 
 table.data-table td {
@@ -482,6 +562,7 @@ table.data-table tr.total-row td {
   align-items: center;
   justify-content: center;
   background: var(--background);
+  padding: 16px;
 }
 
 .login-card {
@@ -535,6 +616,7 @@ table.data-table tr.total-row td {
   border: 1px solid var(--border);
   margin-bottom: 16px;
   font-size: 14px;
+  min-height: 44px;
 }
 
 .login-submit {
@@ -546,4 +628,293 @@ table.data-table tr.total-row td {
   color: #fff;
   font-weight: 800;
   font-size: 14px;
+  min-height: 46px;
 }
+
+/* ==========================================================================
+   MOBILE & RESPONSIVE BREAKPOINTS (max-width: 768px)
+   ========================================================================== */
+
+@media (max-width: 768px) {
+  /* Layout changes */
+  .app-shell {
+    flex-direction: column;
+  }
+
+  /* Sticky Top Header */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    padding: 0 16px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  .hamburger-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .hamburger-btn:active {
+    background: var(--tint);
+  }
+
+  .mobile-topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-topbar-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--header-bg);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 13px;
+  }
+
+  .mobile-topbar-title {
+    font-weight: 900;
+    font-size: 16px;
+    color: var(--text);
+  }
+
+  /* Mobile Sidebar Off-canvas Drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: 84vw;
+    height: 100vh;
+    padding: 16px 14px;
+    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.18);
+    transform: translateX(-100%);
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-brand {
+    padding: 4px 6px 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 10px;
+  }
+
+  .sidebar-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--tint);
+    color: var(--primary);
+    padding: 0;
+    margin-left: auto;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(11, 13, 16, 0.55);
+    backdrop-filter: blur(2px);
+    z-index: 45;
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Main Content Padding */
+  .main-content {
+    padding: 16px 14px 48px;
+    width: 100%;
+  }
+
+  .page-title {
+    font-size: 19px;
+  }
+
+  .page-subtitle {
+    font-size: 12.5px;
+    margin-bottom: 16px;
+  }
+
+  /* Summary Row & KPI Cards */
+  .summary-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .kpi-card {
+    padding: 12px 10px;
+    gap: 8px;
+  }
+
+  .kpi-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+
+  .kpi-icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .kpi-label {
+    font-size: 10px;
+    margin-bottom: 3px;
+  }
+
+  .kpi-value {
+    font-size: 16px;
+  }
+
+  /* Hero Card */
+  .hero-card {
+    padding: 14px 16px;
+    border-radius: 14px;
+    margin-bottom: 14px;
+  }
+
+  .hero-value {
+    font-size: 22px;
+  }
+
+  /* Toolbar & Date Range Picker */
+  .toolbar {
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .date-range-picker {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .date-input-group {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .date-input-group .input {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+  }
+
+  .date-action-group {
+    width: 100%;
+  }
+
+  .date-action-group .btn {
+    flex: 1;
+  }
+
+  .toolbar .btn,
+  .toolbar .select,
+  .toolbar .input {
+    width: 100%;
+  }
+
+  /* Filter Chips horizontal scrollable container */
+  .chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+    scrollbar-width: none;
+  }
+
+  .chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chip {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .modal-card .chip-row {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+
+  /* Data Table Mobile Optimizations */
+  .card {
+    padding: 14px 12px;
+    border-radius: 12px;
+    margin-bottom: 14px;
+  }
+
+  table.data-table {
+    font-size: 12px;
+    min-width: 520px; /* Enables clean horizontal scroll */
+  }
+
+  table.data-table th {
+    font-size: 10px;
+    padding: 8px 6px;
+  }
+
+  table.data-table td {
+    padding: 8px 6px;
+  }
+
+  /* Modals on Mobile */
+  .modal-backdrop {
+    padding: 12px;
+  }
+
+  .modal-card {
+    padding: 18px 14px;
+    border-radius: 14px;
+    max-height: 88vh;
+  }
+
+  /* Charts on Mobile */
+  .recharts-responsive-container {
+    max-height: 230px !important;
+  }
+}
+
+/* Extra small devices (phones < 380px) */
+@media (max-width: 380px) {
+  .summary-row {
+    grid-template-columns: 1fr;
+  }
+}
+

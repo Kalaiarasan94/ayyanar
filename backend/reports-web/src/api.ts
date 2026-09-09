@@ -49,7 +49,10 @@ export const adminApi = {
   getSites: () => request<any[]>('/sites'),
   getStaff: () => request<any[]>('/staff'),
   getLeads: () => request<any[]>('/leads'),
-  getAllDailySheets: (date?: string) => request<any[]>(`/daily-sheets${qs({ date })}`),
+  getAllDailySheets: (params?: string | { date?: string; from?: string; to?: string }) => {
+    const q = typeof params === 'string' ? { date: params } : params;
+    return request<any[]>(`/daily-sheets${qs(q || {})}`);
+  },
 };
 
 export const fieldApi = {

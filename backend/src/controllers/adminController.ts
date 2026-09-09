@@ -293,10 +293,10 @@ export const adminController = {
   },
 
   // All submitted Daily Sheets across every site, newest first — used by the
-  // Admin panel to review supervisor-wise daily reports. Optional ?date= filter.
+  // Admin panel to review supervisor-wise daily reports. Optional ?date=, ?from=, ?to= filters.
   getAllDailySheets: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { date } = req.query;
+      const { date, from, to } = req.query;
       let queryText = `
         SELECT ds.*, s.name as site_name, u.name as supervisor_name
         FROM daily_sheets ds
@@ -304,10 +304,26 @@ export const adminController = {
         JOIN users u ON ds.user_id = u.id
       `;
       const params: any[] = [];
+      const conditions: string[] = [];
+
       if (date) {
-        queryText += ' WHERE ds.date = ?';
+        conditions.push('ds.date = ?');
         params.push(date);
+      } else {
+        if (from) {
+          conditions.push('ds.date >= ?');
+          params.push(from);
+        }
+        if (to) {
+          conditions.push('ds.date <= ?');
+          params.push(to);
+        }
       }
+
+      if (conditions.length > 0) {
+        queryText += ' WHERE ' + conditions.join(' AND ');
+      }
+
       queryText += ' ORDER BY ds.date DESC, u.name ASC, ds.id DESC';
       const result = await db.query(queryText, params);
       const rows = (result.rows || []).map((r: any) => ({

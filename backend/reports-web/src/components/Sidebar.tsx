@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { clearSession, getSession } from '../auth';
 
 const LINKS = [
@@ -21,6 +22,7 @@ export default function Sidebar({ isOpen, onNavigate }: { isOpen?: boolean; onNa
 
   const handleLogout = () => {
     clearSession();
+    if (onNavigate) onNavigate();
     navigate('/login');
   };
 
@@ -28,23 +30,30 @@ export default function Sidebar({ isOpen, onNavigate }: { isOpen?: boolean; onNa
     <aside className={`sidebar${isOpen ? ' open' : ''}`}>
       <div className="sidebar-brand">
         <div className="sidebar-brand-badge">AC</div>
-        <div>
+        <div className="sidebar-brand-info">
           <div className="sidebar-brand-title">Ayyanar Reports</div>
           <div className="sidebar-brand-subtitle">Admin analytics</div>
         </div>
+        {onNavigate && (
+          <button className="sidebar-close-btn" onClick={onNavigate} aria-label="Close menu">
+            <X size={20} />
+          </button>
+        )}
       </div>
 
-      {LINKS.map((link) => (
-        <NavLink
-          key={link.to}
-          to={link.to}
-          end={link.end}
-          onClick={onNavigate}
-          className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
-        >
-          {link.label}
-        </NavLink>
-      ))}
+      <nav className="sidebar-nav">
+        {LINKS.map((link) => (
+          <NavLink
+            key={link.to}
+            to={link.to}
+            end={link.end}
+            onClick={onNavigate}
+            className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
+          >
+            {link.label}
+          </NavLink>
+        ))}
+      </nav>
 
       <div className="sidebar-footer">
         {session && <div className="sidebar-brand-subtitle" style={{ padding: '0 10px 8px' }}>{session.name}</div>}
@@ -55,3 +64,4 @@ export default function Sidebar({ isOpen, onNavigate }: { isOpen?: boolean; onNa
     </aside>
   );
 }
+

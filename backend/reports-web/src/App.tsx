@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { Menu } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import { getSession } from './auth';
 import Login from './pages/Login';
@@ -18,17 +19,47 @@ import Directory from './pages/Directory';
 function RequireAuth({ children }: { children: ReactNode }) {
   const session = getSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const location = useLocation();
+
+  // Auto-close sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  // Lock body scroll when mobile drawer is open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [sidebarOpen]);
+
+  // Close drawer on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSidebarOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   if (!session) return <Navigate to="/login" replace />;
+
   return (
     <div className="app-shell">
-      <div className="mobile-topbar">
-        <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">
-          <span />
-          <span />
-          <span />
+      <header className="mobile-topbar">
+        <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open navigation menu">
+          <Menu size={22} />
         </button>
-        <div className="mobile-topbar-title">Ayyanar Reports</div>
-      </div>
+        <div className="mobile-topbar-brand">
+          <span className="mobile-topbar-badge">AC</span>
+          <span className="mobile-topbar-title">Ayyanar Reports</span>
+        </div>
+      </header>
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
       <Sidebar isOpen={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
       <main className="main-content">{children}</main>
@@ -55,3 +86,4 @@ export default function App() {
     </Routes>
   );
 }
+
