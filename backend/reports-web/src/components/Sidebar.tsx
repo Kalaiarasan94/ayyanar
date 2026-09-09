@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { X } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import { clearSession, getSession } from '../auth';
 
 const LINKS = [
@@ -16,7 +16,14 @@ const LINKS = [
   { to: '/directory', label: 'Staff & Sites Directory' },
 ];
 
-export default function Sidebar({ isOpen, onNavigate }: { isOpen?: boolean; onNavigate?: () => void }) {
+type SidebarProps = {
+  isOpen?: boolean;
+  isCollapsed?: boolean;
+  onNavigate?: () => void;
+  onToggleCollapse?: () => void;
+};
+
+export default function Sidebar({ isOpen, isCollapsed, onNavigate, onToggleCollapse }: SidebarProps) {
   const navigate = useNavigate();
   const session = getSession();
 
@@ -26,19 +33,23 @@ export default function Sidebar({ isOpen, onNavigate }: { isOpen?: boolean; onNa
     navigate('/login');
   };
 
+  const handleClose = () => {
+    if (onNavigate) onNavigate();
+    if (onToggleCollapse) onToggleCollapse();
+  };
+
   return (
-    <aside className={`sidebar${isOpen ? ' open' : ''}`}>
+    <aside className={`sidebar${isOpen ? ' open' : ''}${isCollapsed ? ' collapsed' : ''}`}>
       <div className="sidebar-brand">
         <div className="sidebar-brand-badge">AC</div>
         <div className="sidebar-brand-info">
           <div className="sidebar-brand-title">Ayyanar Reports</div>
           <div className="sidebar-brand-subtitle">Admin analytics</div>
         </div>
-        {onNavigate && (
-          <button className="sidebar-close-btn" onClick={onNavigate} aria-label="Close menu">
-            <X size={20} />
-          </button>
-        )}
+        <button className="sidebar-close-btn" onClick={handleClose} aria-label="Close sidebar" title="Close sidebar">
+          <ChevronLeft size={18} className="desktop-only-icon" />
+          <X size={18} className="mobile-only-icon" />
+        </button>
       </div>
 
       <nav className="sidebar-nav">
@@ -64,4 +75,5 @@ export default function Sidebar({ isOpen, onNavigate }: { isOpen?: boolean; onNa
     </aside>
   );
 }
+
 

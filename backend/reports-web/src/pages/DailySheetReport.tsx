@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Banknote, Download, FileSpreadsheet, FileText, Users, Wallet } from 'lucide-react';
+import { Banknote, Download, FileSpreadsheet, FileText, Share2, Users, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
-import { buildPdfReport, downloadPdfReport } from '../services/pdfReport';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
@@ -171,6 +171,57 @@ export default function DailySheetReport() {
     }
   };
 
+  const handleShareWhatsApp = async () => {
+    if (filtered.length === 0) return;
+    setDownloading(true);
+    try {
+      let rangeSubtitle = 'All Submitted Daily Sheets';
+      if (filterMode === 'single') rangeSubtitle = `Date: ${dateLabel(date)}`;
+      else if (filterMode === 'range') rangeSubtitle = `Range: ${dateLabel(from)} to ${dateLabel(to)}`;
+
+      const pdf = await buildPdfReport({
+        filename: `daily-sheets-${filterMode === 'single' ? date : 'report'}.pdf`,
+        title: 'Daily Sheet Reports',
+        subtitle: rangeSubtitle,
+        orientation: 'landscape',
+        summaryBoxes: [
+          { label: 'Sheets Submitted', value: filtered.length.toString() },
+          { label: 'Amount Received', value: rupees(totalReceived), color: '#15803d' },
+          { label: 'Total Spent', value: rupees(totalSpent), color: '#e23744' },
+          { label: 'Workers Logged', value: totalWorkers.toString() },
+        ],
+        tables: [
+          {
+            title: `Submitted Daily Sheets (${filtered.length})`,
+            head: ['#', 'Date', 'Supervisor', 'Site', 'Work Description', 'Received (Rs)', 'Total Spent (Rs)'],
+            body: filtered.map((r, i) => [
+              i + 1,
+              dateLabel(r.date),
+              r.supervisor_name || '-',
+              r.site_name || '-',
+              r.work_description || '-',
+              Number(r.amount_received || 0).toLocaleString('en-IN'),
+              Number(r.total_amount || 0).toLocaleString('en-IN'),
+            ]),
+            foot: [
+              'TOTAL',
+              '',
+              '',
+              '',
+              '',
+              totalReceived.toLocaleString('en-IN'),
+              totalSpent.toLocaleString('en-IN'),
+            ],
+          },
+        ],
+      });
+      const text = `Daily Sheet Report (${rangeSubtitle})\nSubmitted Sheets: ${filtered.length}\nReceived: ${rupees(totalReceived)}\nTotal Spent: ${rupees(totalSpent)}`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const handleExportCsv = () => {
     if (filtered.length === 0) return;
     const header = [
@@ -288,6 +339,10 @@ export default function DailySheetReport() {
             <button className="btn" onClick={handleDownloadPdf} disabled={downloading || filtered.length === 0}>
               <Download size={16} />
               {downloading ? 'Generating PDF…' : 'Download PDF'}
+            </button>
+            <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading || filtered.length === 0}>
+              <Share2 size={16} />
+              Share on WhatsApp
             </button>
             <button className="btn secondary" onClick={handleExportCsv} disabled={filtered.length === 0}>
               <FileSpreadsheet size={16} />

@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Download, Share2, Wallet } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateRangePicker from '../components/DateRangePicker';
 import SummaryCard from '../components/SummaryCard';
-import { buildPdfReport, downloadPdfReport } from '../services/pdfReport';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
@@ -70,6 +70,44 @@ export default function IoReport() {
     }
   };
 
+  const handleShareWhatsApp = async () => {
+    if (!report) return;
+    setDownloading(true);
+    try {
+      const rangeTitle = from && to ? `${dateLabel(from)} to ${dateLabel(to)}` : from ? `From ${dateLabel(from)}` : 'All Time';
+      const pdf = await buildPdfReport({
+        filename: `${role}-io-report.pdf`,
+        title: `${role} I/O Report`,
+        subtitle: rangeTitle,
+        summaryBoxes: [
+          { label: 'Total Input', value: rupees(report.totals.input), color: '#15803d' },
+          { label: 'Total Output', value: rupees(report.totals.output), color: '#e23744' },
+          { label: 'Closing Balance', value: rupees(report.totals.closing) },
+        ],
+        tables: [
+          {
+            title: 'Date-wise Statement',
+            head: ['Date', 'Input (Rs)', 'Output (Rs)', 'Balance (Rs)'],
+            body: [
+              ...(from ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
+              ...report.rows.map((r: any) => [
+                dateLabel(r.date),
+                Number(r.input).toLocaleString('en-IN'),
+                Number(r.output).toLocaleString('en-IN'),
+                Number(r.balance).toLocaleString('en-IN'),
+              ]),
+            ],
+            foot: ['TOTAL', Number(report.totals.input).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN'), Number(report.totals.closing).toLocaleString('en-IN')],
+          },
+        ],
+      });
+      const text = `${role} I/O Report (${rangeTitle})\nInput: ${rupees(report.totals.input)}\nOutput: ${rupees(report.totals.output)}\nClosing Balance: ${rupees(report.totals.closing)}`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="page-title">Role I/O Statement</h1>
@@ -113,9 +151,14 @@ export default function IoReport() {
             <SummaryCard label="Closing Balance" value={rupees(report.totals.closing)} icon={Wallet} />
           </div>
 
-          <div className="toolbar">
+          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownload} disabled={downloading}>
+              <Download size={16} />
               {downloading ? 'Building PDF…' : 'Download PDF'}
+            </button>
+            <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading}>
+              <Share2 size={16} />
+              Share on WhatsApp
             </button>
           </div>
 

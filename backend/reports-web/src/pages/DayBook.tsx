@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, Download, FileSpreadsheet, Share2 } from 'lucide-react';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateRangePicker from '../components/DateRangePicker';
 import SummaryCard from '../components/SummaryCard';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
+const dateLabel = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-IN') : '—');
 const todayIso = () => new Date().toISOString().split('T')[0];
 
 export default function DayBook() {
@@ -14,6 +16,7 @@ export default function DayBook() {
   const [to, setTo] = useState(todayIso());
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   const load = (f = from, t = to) => {
     setLoading(true);
@@ -30,6 +33,84 @@ export default function DayBook() {
 
   const totalIn = rows.filter((r) => r.flow === 'IN').reduce((s, r) => s + Number(r.amount), 0);
   const totalOut = rows.filter((r) => r.flow === 'OUT').reduce((s, r) => s + Number(r.amount), 0);
+
+  const handleDownloadPdf = async () => {
+    if (rows.length === 0) return;
+    setDownloading(true);
+    try {
+      const { doc, filename } = await buildPdfReport({
+        filename: `daybook-${from}-to-${to}.pdf`,
+        title: 'Day Book Statement',
+        subtitle: `Transactions from ${dateLabel(from)} to ${dateLabel(to)}`,
+        orientation: 'landscape',
+        summaryBoxes: [
+          { label: 'Total Received', value: rupees(totalIn), color: '#15803d' },
+          { label: 'Total Paid', value: rupees(totalOut), color: '#e23744' },
+          { label: 'Net Position', value: rupees(totalIn - totalOut) },
+        ],
+        tables: [
+          {
+            title: `Transactions (${rows.length})`,
+            head: ['#', 'Date', 'Role', 'Flow', 'Category', 'Party', 'Payment Method', 'Description', 'Amount (Rs)'],
+            body: rows.map((r, i) => [
+              i + 1,
+              dateLabel(r.date),
+              r.role,
+              r.flow,
+              r.category,
+              r.party_name || '-',
+              r.payment_method || 'Cash',
+              r.description || '-',
+              Number(r.amount).toLocaleString('en-IN'),
+            ]),
+            foot: ['', '', '', '', '', '', '', 'TOTAL', (totalIn - totalOut).toLocaleString('en-IN')],
+          },
+        ],
+      });
+      await downloadPdfReport({ doc, filename });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    if (rows.length === 0) return;
+    setDownloading(true);
+    try {
+      const pdf = await buildPdfReport({
+        filename: `daybook-${from}-to-${to}.pdf`,
+        title: 'Day Book Statement',
+        subtitle: `Transactions from ${dateLabel(from)} to ${dateLabel(to)}`,
+        orientation: 'landscape',
+        summaryBoxes: [
+          { label: 'Total Received', value: rupees(totalIn), color: '#15803d' },
+          { label: 'Total Paid', value: rupees(totalOut), color: '#e23744' },
+          { label: 'Net Position', value: rupees(totalIn - totalOut) },
+        ],
+        tables: [
+          {
+            title: `Transactions (${rows.length})`,
+            head: ['#', 'Date', 'Role', 'Flow', 'Category', 'Party', 'Payment Method', 'Description', 'Amount (Rs)'],
+            body: rows.map((r, i) => [
+              i + 1,
+              dateLabel(r.date),
+              r.role,
+              r.flow,
+              r.category,
+              r.party_name || '-',
+              r.payment_method || 'Cash',
+              r.description || '-',
+              Number(r.amount).toLocaleString('en-IN'),
+            ]),
+          },
+        ],
+      });
+      const text = `Day Book Statement (${dateLabel(from)} to ${dateLabel(to)})\nReceived: ${rupees(totalIn)}\nPaid: ${rupees(totalOut)}\nNet Position: ${rupees(totalIn - totalOut)}`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const handleExport = () => {
     const header = ['Date', 'Role', 'Flow', 'Category', 'Party', 'Payment Method', 'Description', 'Amount'];
@@ -53,8 +134,17 @@ export default function DayBook() {
         <SummaryCard label="Total Paid" value={rupees(totalOut)} color="#e23744" icon={ArrowUpCircle} />
       </div>
 
-      <div className="toolbar">
+      <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+        <button className="btn" onClick={handleDownloadPdf} disabled={downloading || rows.length === 0}>
+          <Download size={16} />
+          {downloading ? 'Building PDF…' : 'Download PDF'}
+        </button>
+        <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading || rows.length === 0}>
+          <Share2 size={16} />
+          Share on WhatsApp
+        </button>
         <button className="btn secondary" onClick={handleExport} disabled={rows.length === 0}>
+          <FileSpreadsheet size={16} />
           Download CSV
         </button>
       </div>

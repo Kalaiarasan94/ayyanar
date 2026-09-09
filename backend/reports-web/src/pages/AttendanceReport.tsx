@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
-import { UserCheck, UserMinus, UserX, Users } from 'lucide-react';
+import { Download, Share2, UserCheck, UserMinus, UserX, Users } from 'lucide-react';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { downloadImage } from '../services/printReport';
 
 const todayIso = () => new Date().toISOString().split('T')[0];
+const dateLabel = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-IN') : '—');
 
 export default function AttendanceReport() {
   const [date, setDate] = useState(todayIso());
   const [data, setData] = useState<any>({ supervisors: [], categories: [] });
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -34,6 +37,86 @@ export default function AttendanceReport() {
     grouped.get(key)!.push(c);
   });
 
+  const handleDownloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const { doc, filename } = await buildPdfReport({
+        filename: `attendance-report-${date}.pdf`,
+        title: 'Attendance Overview Report',
+        subtitle: `Date: ${dateLabel(date)}`,
+        summaryBoxes: [
+          { label: 'Supervisors Present', value: present.toString(), color: '#15803d' },
+          { label: 'Supervisors Absent', value: absent.toString(), color: '#e23744' },
+          { label: 'Workers Present', value: workerPresent.toString(), color: '#15803d' },
+          { label: 'Workers Absent', value: workerAbsent.toString(), color: '#e23744' },
+        ],
+        tables: [
+          {
+            title: `Supervisor Attendance (${supervisors.length})`,
+            head: ['#', 'Supervisor', 'Site', 'Status', 'Time', 'Location'],
+            body: supervisors.map((s: any, i: number) => [
+              i + 1,
+              s.supervisor_name || 'Supervisor',
+              s.site_name || '-',
+              s.status || 'Absent',
+              s.created_at ? new Date(s.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-',
+              s.location_name || '-',
+            ]),
+          },
+          {
+            title: `Worker Categories (${categories.length})`,
+            head: ['Category', 'Supervisor', 'Site', 'Present Count', 'Absent Count'],
+            body: categories.map((c: any) => [
+              c.category,
+              c.site_supervisor_name || '-',
+              c.site_name || '-',
+              c.present_count || 0,
+              c.absent_count || 0,
+            ]),
+          },
+        ],
+      });
+      await downloadPdfReport({ doc, filename });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    setDownloading(true);
+    try {
+      const pdf = await buildPdfReport({
+        filename: `attendance-report-${date}.pdf`,
+        title: 'Attendance Overview Report',
+        subtitle: `Date: ${dateLabel(date)}`,
+        summaryBoxes: [
+          { label: 'Supervisors Present', value: present.toString(), color: '#15803d' },
+          { label: 'Supervisors Absent', value: absent.toString(), color: '#e23744' },
+          { label: 'Workers Present', value: workerPresent.toString(), color: '#15803d' },
+          { label: 'Workers Absent', value: workerAbsent.toString(), color: '#e23744' },
+        ],
+        tables: [
+          {
+            title: `Supervisor Attendance (${supervisors.length})`,
+            head: ['#', 'Supervisor', 'Site', 'Status', 'Time', 'Location'],
+            body: supervisors.map((s: any, i: number) => [
+              i + 1,
+              s.supervisor_name || 'Supervisor',
+              s.site_name || '-',
+              s.status || 'Absent',
+              s.created_at ? new Date(s.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '-',
+              s.location_name || '-',
+            ]),
+          },
+        ],
+      });
+      const text = `Attendance Report (${dateLabel(date)})\nSupervisors Present: ${present} / ${supervisors.length}\nWorkers Logged: ${workerPresent} present, ${workerAbsent} absent`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="page-title">Attendance Reports</h1>
@@ -51,6 +134,17 @@ export default function AttendanceReport() {
         <SummaryCard label="Supervisors Absent" value={absent.toString()} color="#e23744" icon={UserX} />
         <SummaryCard label="Workers Present" value={workerPresent.toString()} color="#15803d" icon={Users} />
         <SummaryCard label="Workers Absent" value={workerAbsent.toString()} color="#e23744" icon={UserMinus} />
+      </div>
+
+      <div className="toolbar" style={{ justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button className="btn" onClick={handleDownloadPdf} disabled={downloading}>
+          <Download size={16} />
+          {downloading ? 'Building PDF…' : 'Download PDF'}
+        </button>
+        <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading}>
+          <Share2 size={16} />
+          Share on WhatsApp
+        </button>
       </div>
 
       <div className="card">

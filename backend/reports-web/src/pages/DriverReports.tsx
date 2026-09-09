@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Fuel, Route, Truck } from 'lucide-react';
+import { Download, Fuel, Route, Share2, Truck } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fieldApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
-import { buildPdfReport, downloadPdfReport } from '../services/pdfReport';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
@@ -89,6 +89,40 @@ export default function DriverReports() {
     }
   };
 
+  const handleShareWhatsApp = async () => {
+    if (records.length === 0) return;
+    setDownloading(true);
+    try {
+      const pdf = await buildPdfReport({
+        filename: 'driver-trip-report.pdf',
+        title: 'Driver Trip Report',
+        subtitle: 'All recorded trips',
+        orientation: 'landscape',
+        summaryBoxes: [
+          { label: 'Total Trips', value: records.length.toString() },
+          { label: 'Total KM', value: totalKm.toLocaleString('en-IN') },
+          { label: 'Total Diesel Fare', value: rupees(totalDiesel), color: '#e23744' },
+        ],
+        tables: [
+          {
+            title: 'Vehicle-wise Summary',
+            head: ['Vehicle', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
+            body: byVehicle.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+          },
+          {
+            title: 'Driver-wise Summary',
+            head: ['Driver', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
+            body: byDriver.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+          },
+        ],
+      });
+      const text = `Driver Trip Report\nTotal Trips: ${records.length}\nTotal KM: ${totalKm.toLocaleString('en-IN')}\nTotal Diesel Fare: ${rupees(totalDiesel)}`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="page-title">Driver Reports</h1>
@@ -104,9 +138,14 @@ export default function DriverReports() {
             <SummaryCard label="Total Diesel Fare" value={rupees(totalDiesel)} color="#e23744" icon={Fuel} />
           </div>
 
-          <div className="toolbar">
+          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownload} disabled={downloading || records.length === 0}>
+              <Download size={16} />
               {downloading ? 'Building PDF…' : 'Download PDF'}
+            </button>
+            <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading || records.length === 0}>
+              <Share2 size={16} />
+              Share on WhatsApp
             </button>
           </div>
 

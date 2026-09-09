@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Banknote, CreditCard, Wallet } from 'lucide-react';
+import { Banknote, CreditCard, Download, Share2, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { adminApi, fieldApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
-import { buildPdfReport, downloadPdfReport } from '../services/pdfReport';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
@@ -150,6 +150,40 @@ export default function SiteReports() {
     }
   };
 
+  const handleShareWhatsApp = async () => {
+    setDownloading(true);
+    try {
+      const pdf = await buildPdfReport({
+        filename: `site-expenses-${site?.name || siteId}.pdf`,
+        title: 'Site Expenses Report',
+        subtitle: site?.name || 'Site',
+        summaryBoxes: [
+          { label: 'Direct', value: rupees(directTotal), color: '#e23744' },
+          { label: 'Indirect', value: rupees(indirectTotal) },
+          { label: 'Grand Total', value: rupees(directTotal + indirectTotal), color: '#15803d' },
+        ],
+        tables: [
+          {
+            title: `Direct Bills (${direct.length})`,
+            head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
+            body: direct.map((r, i) => [i + 1, dateLabel(r.date), r.supervisor_name || '-', r.category || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
+            foot: ['', '', '', '', 'TOTAL', directTotal.toLocaleString('en-IN')],
+          },
+          {
+            title: `Indirect / Credit Bills (${indirect.length})`,
+            head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
+            body: indirect.map((r, i) => [i + 1, dateLabel(r.date), r.supervisor_name || '-', r.category || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
+            foot: ['', '', '', '', 'TOTAL', indirectTotal.toLocaleString('en-IN')],
+          },
+        ],
+      });
+      const summaryText = `Site Expense Report: ${site?.name}\nDirect: ${rupees(directTotal)}\nIndirect: ${rupees(indirectTotal)}\nGrand Total: ${rupees(directTotal + indirectTotal)}`;
+      await sharePdfReportOnWhatsApp(pdf, summaryText);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const actionsColumn = {
     header: '',
     align: 'right' as const,
@@ -207,9 +241,14 @@ export default function SiteReports() {
             <SummaryCard label="Grand Total" value={rupees(directTotal + indirectTotal)} color="#15803d" icon={Wallet} />
           </div>
 
-          <div className="toolbar">
+          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownload} disabled={downloading || rows.length === 0}>
-              Download PDF
+              <Download size={16} />
+              {downloading ? 'Building PDF…' : 'Download PDF'}
+            </button>
+            <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading || rows.length === 0}>
+              <Share2 size={16} />
+              Share on WhatsApp
             </button>
           </div>
 

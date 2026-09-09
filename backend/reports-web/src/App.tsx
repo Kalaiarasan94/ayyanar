@@ -19,9 +19,10 @@ import Directory from './pages/Directory';
 function RequireAuth({ children }: { children: ReactNode }) {
   const session = getSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
 
-  // Auto-close sidebar on route change
+  // Auto-close mobile drawer on route change
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
@@ -41,27 +42,52 @@ function RequireAuth({ children }: { children: ReactNode }) {
   // Close drawer on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSidebarOpen(false);
+      if (e.key === 'Escape') {
+        setSidebarOpen(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  const toggleSidebar = () => {
+    // On mobile screens (< 768px), toggle drawer open/close
+    if (window.innerWidth <= 768) {
+      setSidebarOpen((prev) => !prev);
+    } else {
+      // On desktop, toggle collapse
+      setSidebarCollapsed((prev) => !prev);
+    }
+  };
+
   if (!session) return <Navigate to="/login" replace />;
 
   return (
-    <div className="app-shell">
-      <header className="mobile-topbar">
-        <button className="hamburger-btn" onClick={() => setSidebarOpen(true)} aria-label="Open navigation menu">
+    <div className={`app-shell${sidebarCollapsed ? ' sidebar-is-collapsed' : ''}`}>
+      <header className="app-header">
+        <button
+          className="header-toggle-btn"
+          onClick={toggleSidebar}
+          aria-label="Toggle navigation menu"
+          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
           <Menu size={22} />
         </button>
-        <div className="mobile-topbar-brand">
-          <span className="mobile-topbar-badge">AC</span>
-          <span className="mobile-topbar-title">Ayyanar Reports</span>
+        <div className="header-brand">
+          <span className="header-brand-badge">AC</span>
+          <span className="header-brand-title">Ayyanar Reports</span>
         </div>
       </header>
+
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
-      <Sidebar isOpen={sidebarOpen} onNavigate={() => setSidebarOpen(false)} />
+      
+      <Sidebar
+        isOpen={sidebarOpen}
+        isCollapsed={sidebarCollapsed}
+        onNavigate={() => setSidebarOpen(false)}
+        onToggleCollapse={() => setSidebarCollapsed(true)}
+      />
+
       <main className="main-content">{children}</main>
     </div>
   );

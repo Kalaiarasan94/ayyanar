@@ -41,10 +41,18 @@ button {
   cursor: pointer;
 }
 
-/* ---------- Mobile Topbar (Hidden on desktop) ---------- */
+/* ---------- App Header ---------- */
 
-.mobile-topbar {
+.app-header {
   display: none;
+}
+
+.mobile-only-icon {
+  display: none;
+}
+
+.desktop-only-icon {
+  display: inline-block;
 }
 
 .sidebar-backdrop {
@@ -52,7 +60,22 @@ button {
 }
 
 .sidebar-close-btn {
-  display: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--tint);
+  color: var(--primary);
+  padding: 0;
+  margin-left: auto;
+  transition: background 0.15s ease;
+}
+
+.sidebar-close-btn:hover {
+  background: var(--tint-border);
 }
 
 /* ---------- Layout ---------- */
@@ -72,6 +95,19 @@ button {
   flex-direction: column;
   gap: 2px;
   z-index: 50;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, padding 0.3s ease;
+}
+
+.sidebar.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  opacity: 0 !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
 }
 
 .sidebar-brand {
@@ -378,10 +414,14 @@ button {
   white-space: nowrap;
 }
 
-.btn.secondary {
-  background: var(--tint);
-  color: var(--primary);
-  border: 1px solid var(--tint-border);
+.btn.whatsapp {
+  background: #25D366;
+  color: #fff;
+  border: none;
+}
+
+.btn.whatsapp:hover {
+  background: #1da851;
 }
 
 .btn:disabled {
@@ -641,8 +681,16 @@ table.data-table tr.total-row td {
     flex-direction: column;
   }
 
+  .desktop-only-icon {
+    display: none !important;
+  }
+
+  .mobile-only-icon {
+    display: inline-block !important;
+  }
+
   /* Sticky Top Header */
-  .mobile-topbar {
+  .app-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -657,7 +705,7 @@ table.data-table tr.total-row td {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   }
 
-  .hamburger-btn {
+  .header-toggle-btn {
     width: 40px;
     height: 40px;
     border-radius: 10px;
@@ -670,17 +718,17 @@ table.data-table tr.total-row td {
     padding: 0;
   }
 
-  .hamburger-btn:active {
+  .header-toggle-btn:active {
     background: var(--tint);
   }
 
-  .mobile-topbar-brand {
+  .header-brand {
     display: flex;
     align-items: center;
     gap: 8px;
   }
 
-  .mobile-topbar-badge {
+  .header-brand-badge {
     width: 28px;
     height: 28px;
     border-radius: 8px;
@@ -693,7 +741,7 @@ table.data-table tr.total-row td {
     font-size: 13px;
   }
 
-  .mobile-topbar-title {
+  .header-brand-title {
     font-weight: 900;
     font-size: 16px;
     color: var(--text);

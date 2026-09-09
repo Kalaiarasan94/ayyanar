@@ -1,14 +1,17 @@
 import { useEffect, useState } from 'react';
+import { Download, FileSpreadsheet, Share2 } from 'lucide-react';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
 
-const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
+const dateLabel = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-IN') : '—');
 
 export default function LeadsReport() {
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     adminApi
@@ -19,6 +22,7 @@ export default function LeadsReport() {
 
   const total = leads.length;
   const converted = leads.filter((l) => l.status === 'Converted').length;
+  const conversionRate = total > 0 ? `${Math.round((converted / total) * 100)}%` : '0%';
   const bySource = new Map<string, { total: number; converted: number }>();
   leads.forEach((l) => {
     const key = l.source || 'Unknown';
@@ -28,6 +32,84 @@ export default function LeadsReport() {
     bySource.set(key, e);
   });
   const sourceRows = Array.from(bySource.entries()).map(([source, v]) => ({ source, ...v }));
+
+  const handleDownloadPdf = async () => {
+    if (leads.length === 0) return;
+    setDownloading(true);
+    try {
+      const { doc, filename } = await buildPdfReport({
+        filename: 'leads-report.pdf',
+        title: 'Leads & Marketing Pipeline Report',
+        subtitle: `Generated on ${new Date().toLocaleDateString('en-IN')}`,
+        summaryBoxes: [
+          { label: 'Total Leads', value: total.toString() },
+          { label: 'Converted', value: converted.toString(), color: '#15803d' },
+          { label: 'Conversion Rate', value: conversionRate },
+        ],
+        tables: [
+          {
+            title: 'Leads by Channel',
+            head: ['Channel / Source', 'Total Leads', 'Converted', 'Conversion %'],
+            body: sourceRows.map((r) => [
+              r.source,
+              r.total,
+              r.converted,
+              r.total > 0 ? `${Math.round((r.converted / r.total) * 100)}%` : '0%',
+            ]),
+          },
+          {
+            title: `All Leads (${leads.length})`,
+            head: ['#', 'Name', 'Phone', 'Project Needed', 'Source', 'Status', 'Created'],
+            body: leads.map((l, i) => [
+              i + 1,
+              l.name || '-',
+              l.phone || '-',
+              l.project_needed || '-',
+              l.source || '-',
+              l.status || 'New',
+              dateLabel(l.created_at),
+            ]),
+          },
+        ],
+      });
+      await downloadPdfReport({ doc, filename });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    if (leads.length === 0) return;
+    setDownloading(true);
+    try {
+      const pdf = await buildPdfReport({
+        filename: 'leads-report.pdf',
+        title: 'Leads & Marketing Pipeline Report',
+        subtitle: `Generated on ${new Date().toLocaleDateString('en-IN')}`,
+        summaryBoxes: [
+          { label: 'Total Leads', value: total.toString() },
+          { label: 'Converted', value: converted.toString(), color: '#15803d' },
+          { label: 'Conversion Rate', value: conversionRate },
+        ],
+        tables: [
+          {
+            title: 'Leads by Channel',
+            head: ['Channel / Source', 'Total Leads', 'Converted', 'Conversion %'],
+            body: sourceRows.map((r) => [
+              r.source,
+              r.total,
+              r.converted,
+              r.total > 0 ? `${Math.round((r.converted / r.total) * 100)}%` : '0%',
+            ]),
+          },
+        ],
+      });
+      const text = `Leads Pipeline Report\nTotal Leads: ${total}\nConverted: ${converted}\nConversion Rate: ${conversionRate}`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const handleExport = () => {
     const header = ['Name', 'Phone', 'Project Needed', 'Source', 'Status', 'Created'];
@@ -47,11 +129,20 @@ export default function LeadsReport() {
           <div className="summary-row">
             <SummaryCard label="Total Leads" value={total.toString()} />
             <SummaryCard label="Converted" value={converted.toString()} color="#15803d" />
-            <SummaryCard label="Conversion Rate" value={total > 0 ? `${Math.round((converted / total) * 100)}%` : '0%'} />
+            <SummaryCard label="Conversion Rate" value={conversionRate} />
           </div>
 
-          <div className="toolbar">
+          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn" onClick={handleDownloadPdf} disabled={downloading || leads.length === 0}>
+              <Download size={16} />
+              {downloading ? 'Building PDF…' : 'Download PDF'}
+            </button>
+            <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading || leads.length === 0}>
+              <Share2 size={16} />
+              Share on WhatsApp
+            </button>
             <button className="btn secondary" onClick={handleExport} disabled={leads.length === 0}>
+              <FileSpreadsheet size={16} />
               Download CSV
             </button>
           </div>

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import { TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { Download, Share2, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
 import SummaryCard from '../components/SummaryCard';
-import { buildPdfReport, downloadPdfReport } from '../services/pdfReport';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -95,6 +95,52 @@ export default function PeriodReport() {
     }
   };
 
+  const handleShareWhatsApp = async () => {
+    if (!report) return;
+    setDownloading(true);
+    try {
+      const periodTitle = type === 'monthly' ? monthLabel(report.period) : report.period;
+      const pdf = await buildPdfReport({
+        filename: `${type}-report-${report.period}.pdf`,
+        title: `${type === 'monthly' ? 'Monthly' : 'Yearly'} Report`,
+        subtitle: periodTitle,
+        summaryBoxes: [
+          { label: 'Revenue', value: rupees(report.revenue), color: '#15803d' },
+          { label: 'Expenses', value: rupees(report.expenses), color: '#e23744' },
+          { label: report.profit >= 0 ? 'Profit' : 'Loss', value: rupees(Math.abs(report.profit)) },
+        ],
+        tables: [
+          {
+            title: 'Received From',
+            head: ['Category', 'Amount (Rs)'],
+            body: report.receivedBreakdown.map((b: any) => [b.category, Number(b.total).toLocaleString('en-IN')]),
+          },
+          {
+            title: 'Paid To',
+            head: ['Category', 'Amount (Rs)'],
+            body: report.paidBreakdown.map((b: any) => [b.category, Number(b.total).toLocaleString('en-IN')]),
+          },
+          {
+            title: `Vouchers (${report.transactions.length})`,
+            head: ['Date', 'Role', 'Flow', 'Category', 'Party', 'Amount (Rs)'],
+            body: report.transactions.map((t: any) => [
+              dateLabel(t.date),
+              t.role,
+              t.flow,
+              t.category,
+              t.party_name || '-',
+              Number(t.amount).toLocaleString('en-IN'),
+            ]),
+          },
+        ],
+      });
+      const text = `${type === 'monthly' ? 'Monthly' : 'Yearly'} Report: ${periodTitle}\nRevenue: ${rupees(report.revenue)}\nExpenses: ${rupees(report.expenses)}\n${report.profit >= 0 ? 'Profit' : 'Loss'}: ${rupees(Math.abs(report.profit))}`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const availablePeriods = type === 'monthly' ? periods.months : periods.years;
 
   return (
@@ -132,9 +178,14 @@ export default function PeriodReport() {
             Internal transfers this period: {rupees(report.transfers)} (not counted in revenue or expenses)
           </p>
 
-          <div className="toolbar">
+          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownload} disabled={downloading}>
+              <Download size={16} />
               {downloading ? 'Building PDF…' : 'Download PDF'}
+            </button>
+            <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading}>
+              <Share2 size={16} />
+              Share on WhatsApp
             </button>
           </div>
 

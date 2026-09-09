@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { TrendingDown, TrendingUp, Wallet } from 'lucide-react';
+import { Download, Share2, TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -16,6 +16,7 @@ import {
 import { accountsApi, adminApi } from '../api';
 import SummaryCard from '../components/SummaryCard';
 import DataTable from '../components/DataTable';
+import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const monthLabel = (period: string) => {
@@ -31,6 +32,7 @@ export default function Overview() {
   const [summary, setSummary] = useState<any>(null);
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     Promise.all([accountsApi.getTotalSummary(), adminApi.getAnalytics()])
@@ -54,10 +56,106 @@ export default function Overview() {
     .map((s: any) => ({ name: s.site_name, value: Number(s.total_expenses) }));
   const leadsChannel = analytics?.leadsChannelPerformance || [];
 
+  const handleDownloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const { doc, filename } = await buildPdfReport({
+        filename: `company-overview-${new Date().toISOString().split('T')[0]}.pdf`,
+        title: 'Company Financial Overview',
+        subtitle: 'Company-wide financial picture — Owner, Admin and Supervisor books combined',
+        summaryBoxes: [
+          { label: 'Revenue', value: rupees(summary?.revenue), color: '#15803d' },
+          { label: 'Expenses', value: rupees(summary?.expenses), color: '#e23744' },
+          { label: profitPositive ? 'Profit' : 'Loss', value: rupees(Math.abs(Number(summary?.profit || 0))) },
+        ],
+        tables: [
+          {
+            title: 'Cash in Hand (By Role)',
+            head: ['Role', 'Received (Rs)', 'Paid (Rs)', 'Balance (Rs)'],
+            body: (summary?.roleBalances || []).map((r: any) => [
+              r.role,
+              Number(r.totalIn).toLocaleString('en-IN'),
+              Number(r.totalOut).toLocaleString('en-IN'),
+              Number(r.balance).toLocaleString('en-IN'),
+            ]),
+          },
+          {
+            title: 'Site-wise Expenses Breakdown',
+            head: ['Site', 'Material', 'Fuel', 'Petty Cash', 'Total Expenses (Rs)'],
+            body: (analytics?.siteWiseExpenseBreakdown || []).map((s: any) => [
+              s.site_name,
+              Number(s.material_costs || 0).toLocaleString('en-IN'),
+              Number(s.fuel_costs || 0).toLocaleString('en-IN'),
+              Number(s.petty_cash_costs || 0).toLocaleString('en-IN'),
+              Number(s.total_expenses || 0).toLocaleString('en-IN'),
+            ]),
+          },
+        ],
+      });
+      await downloadPdfReport({ doc, filename });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleShareWhatsApp = async () => {
+    setDownloading(true);
+    try {
+      const pdf = await buildPdfReport({
+        filename: `company-overview-${new Date().toISOString().split('T')[0]}.pdf`,
+        title: 'Company Financial Overview',
+        subtitle: 'Company-wide financial picture — Owner, Admin and Supervisor books combined',
+        summaryBoxes: [
+          { label: 'Revenue', value: rupees(summary?.revenue), color: '#15803d' },
+          { label: 'Expenses', value: rupees(summary?.expenses), color: '#e23744' },
+          { label: profitPositive ? 'Profit' : 'Loss', value: rupees(Math.abs(Number(summary?.profit || 0))) },
+        ],
+        tables: [
+          {
+            title: 'Cash in Hand (By Role)',
+            head: ['Role', 'Received (Rs)', 'Paid (Rs)', 'Balance (Rs)'],
+            body: (summary?.roleBalances || []).map((r: any) => [
+              r.role,
+              Number(r.totalIn).toLocaleString('en-IN'),
+              Number(r.totalOut).toLocaleString('en-IN'),
+              Number(r.balance).toLocaleString('en-IN'),
+            ]),
+          },
+          {
+            title: 'Site-wise Expenses Breakdown',
+            head: ['Site', 'Material', 'Fuel', 'Petty Cash', 'Total Expenses (Rs)'],
+            body: (analytics?.siteWiseExpenseBreakdown || []).map((s: any) => [
+              s.site_name,
+              Number(s.material_costs || 0).toLocaleString('en-IN'),
+              Number(s.fuel_costs || 0).toLocaleString('en-IN'),
+              Number(s.petty_cash_costs || 0).toLocaleString('en-IN'),
+              Number(s.total_expenses || 0).toLocaleString('en-IN'),
+            ]),
+          },
+        ],
+      });
+      const text = `Ayyanar Construction — Overview Report\nRevenue: ${rupees(summary?.revenue)}\nExpenses: ${rupees(summary?.expenses)}\n${profitPositive ? 'Profit' : 'Loss'}: ${rupees(Math.abs(Number(summary?.profit || 0)))}`;
+      await sharePdfReportOnWhatsApp(pdf, text);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div>
       <h1 className="page-title">Overview</h1>
       <p className="page-subtitle">Company-wide financial picture — Owner, Admin and Supervisor books combined.</p>
+
+      <div className="toolbar" style={{ justifyContent: 'flex-end', marginBottom: 14 }}>
+        <button className="btn" onClick={handleDownloadPdf} disabled={downloading}>
+          <Download size={16} />
+          {downloading ? 'Building PDF…' : 'Download PDF'}
+        </button>
+        <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading}>
+          <Share2 size={16} />
+          Share on WhatsApp
+        </button>
+      </div>
 
       <div className="summary-row">
         <SummaryCard label="Revenue (Lifetime)" value={rupees(summary?.revenue)} color="#15803d" icon={TrendingUp} />
