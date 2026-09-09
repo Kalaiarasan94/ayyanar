@@ -10,11 +10,12 @@ const LINKS = [
   { to: '/sites', label: 'Site Expense Reports' },
   { to: '/drivers', label: 'Driver Reports' },
   { to: '/attendance', label: 'Attendance Reports' },
+  { to: '/daily-sheet', label: 'Daily Sheet Reports' },
   { to: '/leads', label: 'Leads Report' },
   { to: '/directory', label: 'Staff & Sites Directory' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, onNavigate }: { isOpen?: boolean; onNavigate?: () => void }) {
   const navigate = useNavigate();
   const session = getSession();
 
@@ -24,7 +25,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${isOpen ? ' open' : ''}`}>
       <div className="sidebar-brand">
         <div className="sidebar-brand-badge">AC</div>
         <div>
@@ -38,6 +39,7 @@ export default function Sidebar() {
           key={link.to}
           to={link.to}
           end={link.end}
+          onClick={onNavigate}
           className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}
         >
           {link.label}

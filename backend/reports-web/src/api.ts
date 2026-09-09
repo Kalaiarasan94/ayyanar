@@ -49,6 +49,7 @@ export const adminApi = {
   getSites: () => request<any[]>('/sites'),
   getStaff: () => request<any[]>('/staff'),
   getLeads: () => request<any[]>('/leads'),
+  getAllDailySheets: (date?: string) => request<any[]>(`/daily-sheets${qs({ date })}`),
 };
 
 export const fieldApi = {

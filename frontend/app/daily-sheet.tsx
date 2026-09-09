@@ -15,6 +15,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fieldService, adminService } from '../services/api';
 import DatePickerField from '../components/DatePickerField';
+import { buildDailySheetPdfDoc, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
 const todayLocal = () => {
@@ -23,12 +24,20 @@ const todayLocal = () => {
 };
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
+const dateLabel = (iso: string) => {
+  const parts = (iso || '').toString().split('T')[0].split('-');
+  if (parts.length < 3) return iso || '-';
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${parts[2]} ${MONTHS[parseInt(parts[1]) - 1] || ''} ${parts[0]}`;
+};
+
 
 type AttendanceRow = { id: string; name: string; category: string; count: string };
 type SalaryRow = { id: string; name: string; amount: string };
 
 export default function DailySheetScreen() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>('Supervisor');
 
   const [sites, setSites] = useState<any[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
@@ -57,12 +66,16 @@ export default function DailySheetScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [submittedList, setSubmittedList] = useState<any[]>([]);
   const [loadingSubmitted, setLoadingSubmitted] = useState(false);
+  const [view, setView] = useState<'entry' | 'submitted'>('entry');
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
     const init = async () => {
       const id = await AsyncStorage.getItem('userId');
       const role = await AsyncStorage.getItem('userRole');
+      const name = await AsyncStorage.getItem('userName');
       setUserId(id);
+      if (name) setUserName(name);
       try {
         let sitesData: any[] = [];
         if (role === 'Admin' || role === 'Accounts') {
@@ -155,6 +168,48 @@ export default function DailySheetScreen() {
     setSalary([]);
   };
 
+  // Normalizes a backend daily_sheets row into buildDailySheetPdfDoc's input shape
+  const toSheetInput = (row: any) => ({
+    siteName: row.site_name,
+    supervisorName: row.supervisor_name,
+    date: row.date,
+    workDescription: row.work_description || '',
+    attendance: (row.attendance || []).map((a: any) => ({ name: a.name, category: a.category, count: Number(a.count) || 0 })),
+    amountReceived: Number(row.amount_received) || 0,
+    billsNormal: Number(row.bills_normal) || 0,
+    billsGst: Number(row.bills_gst) || 0,
+    billsCredit: Number(row.bills_credit) || 0,
+    vehicleRental: Number(row.vehicle_rental) || 0,
+    labourSalary: (row.labourSalary || []).map((l: any) => ({ name: l.name, amount: Number(l.amount) || 0 })),
+    totalAmount: Number(row.total_amount) || 0,
+  });
+
+  const handleDownloadSheet = async (sheetInput: ReturnType<typeof toSheetInput>) => {
+    setGeneratingPdf(true);
+    try {
+      await downloadPdfReport(await buildDailySheetPdfDoc(sheetInput));
+    } catch (error: any) {
+      Alert.alert('PDF Error', error?.message || 'Unable to generate the report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const handleShareSheet = async (sheetInput: ReturnType<typeof toSheetInput>) => {
+    setGeneratingPdf(true);
+    try {
+      const summary =
+        `*Ayyanar Construction - Daily Sheet*\n` +
+        `Site: ${sheetInput.siteName}\nDate: ${dateLabel(sheetInput.date)}\nSupervisor: ${sheetInput.supervisorName}\n` +
+        `Amount Received: ${rupees(sheetInput.amountReceived)}\nTotal Amount: ${rupees(sheetInput.totalAmount)}`;
+      await sharePdfReportOnWhatsApp(await buildDailySheetPdfDoc(sheetInput), summary);
+    } catch (error: any) {
+      Alert.alert('Share Error', error?.message || 'Unable to share the report.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedSiteId) {
       Alert.alert('Select Site', 'Please select a project site first.');
@@ -175,9 +230,34 @@ export default function DailySheetScreen() {
         vehicleRental: parseFloat(vehicleRental) || 0,
         labourSalary: salary.map((s) => ({ name: s.name, amount: parseFloat(s.amount) || 0 })),
       });
-      Alert.alert('Saved', `Daily sheet for ${selectedSiteName} on ${date} has been recorded.`);
+
+      const savedSnapshot = {
+        siteName: selectedSiteName || 'Site',
+        supervisorName: userName,
+        date,
+        workDescription: workDescription.trim(),
+        attendance: attendance.map((a) => ({ name: a.name, category: a.category, count: parseInt(a.count) || 0 })),
+        amountReceived: parseFloat(amountReceived) || 0,
+        billsNormal: parseFloat(billsNormal) || 0,
+        billsGst: parseFloat(billsGst) || 0,
+        billsCredit: parseFloat(billsCredit) || 0,
+        vehicleRental: parseFloat(vehicleRental) || 0,
+        labourSalary: salary.map((s) => ({ name: s.name, amount: parseFloat(s.amount) || 0 })),
+        totalAmount,
+      };
+
       resetForm();
       loadSubmitted();
+
+      Alert.alert(
+        'Saved',
+        `Daily sheet for ${savedSnapshot.siteName} on ${date} has been recorded.`,
+        [
+          { text: 'Download PDF', onPress: () => handleDownloadSheet(savedSnapshot) },
+          { text: 'Share on WhatsApp', onPress: () => handleShareSheet(savedSnapshot) },
+          { text: 'OK' },
+        ]
+      );
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to save the daily sheet.');
     } finally {
@@ -185,24 +265,21 @@ export default function DailySheetScreen() {
     }
   };
 
-  return (
-    <View style={styles.screen}>
-      <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView style={styles.body} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+  const renderEntry = () => (
+    <>
+      {/* SITE & DATE */}
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardIconWrap}>
+            <MaterialIcons name="fact-check" size={20} color={COLORS.primary} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>Daily Sheet</Text>
+            <Text style={styles.cardSubtitle}>One combined report for today's site work</Text>
+          </View>
+        </View>
 
-          {/* SITE & DATE */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardIconWrap}>
-                <MaterialIcons name="fact-check" size={20} color={COLORS.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Daily Sheet</Text>
-                <Text style={styles.cardSubtitle}>One combined report for today's site work</Text>
-              </View>
-            </View>
-
-            <Text style={styles.sectionLabel}>SITE</Text>
+        <Text style={styles.sectionLabel}>SITE</Text>
             {sites.length > 0 ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.md }}>
                 <View style={styles.chipRow}>
@@ -425,27 +502,107 @@ export default function DailySheetScreen() {
               )}
             </TouchableOpacity>
           </View>
+    </>
+  );
 
-          {/* SUBMITTED HISTORY */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Submitted for {date} ({submittedList.length})</Text>
-            {loadingSubmitted ? (
-              <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.md }} />
-            ) : submittedList.length === 0 ? (
-              <Text style={styles.emptyText}>No daily sheet submitted for this date yet.</Text>
-            ) : (
-              submittedList.map((s: any) => (
-                <View key={s.id} style={styles.submittedRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.rowItemTitle}>{s.work_description || 'Daily Sheet'}</Text>
-                    <Text style={styles.rowItemMeta}>
-                      {s.supervisor_name} • Received {rupees(s.amount_received)} • Total {rupees(s.total_amount)}
-                    </Text>
-                  </View>
-                </View>
-              ))
-            )}
+  const renderSubmitted = () => (
+    <>
+      <View style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.cardIconWrap}>
+            <MaterialIcons name="history" size={20} color={COLORS.primary} />
           </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>Submitted Daily Sheets</Text>
+            <Text style={styles.cardSubtitle}>Everything sent in for the selected site & date</Text>
+          </View>
+        </View>
+
+        {sites.length > 1 && (
+          <>
+            <Text style={styles.sectionLabel}>SITE</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: SPACING.md }}>
+              <View style={styles.chipRow}>
+                {sites.map((site) => (
+                  <TouchableOpacity
+                    key={site.id}
+                    style={[styles.chip, selectedSiteId === site.id.toString() && styles.chipActive]}
+                    onPress={() => handleSiteChange(site.id.toString())}
+                  >
+                    <Text style={[styles.chipText, selectedSiteId === site.id.toString() && styles.chipTextActive]}>{site.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </>
+        )}
+
+        <Text style={styles.sectionLabel}>DATE</Text>
+        <TouchableOpacity style={{ marginBottom: 10 }} onPress={() => setDate(todayLocal())}>
+          <Text style={{ color: COLORS.primary, fontWeight: '800', fontSize: 12 }}>TODAY</Text>
+        </TouchableOpacity>
+        <DatePickerField value={date} onChange={setDate} placeholder="Select date" style={styles.fieldSpacing} />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Submitted for {date} ({submittedList.length})</Text>
+        {loadingSubmitted ? (
+          <ActivityIndicator color={COLORS.primary} style={{ marginTop: SPACING.md }} />
+        ) : submittedList.length === 0 ? (
+          <Text style={styles.emptyText}>No daily sheet submitted for this date yet.</Text>
+        ) : (
+          submittedList.map((s: any) => (
+            <View key={s.id} style={styles.submittedRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.rowItemTitle}>{s.work_description || 'Daily Sheet'}</Text>
+                <Text style={styles.rowItemMeta}>
+                  {s.supervisor_name} • Received {rupees(s.amount_received)} • Total {rupees(s.total_amount)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.pdfIconButton}
+                onPress={() => handleDownloadSheet(toSheetInput(s))}
+                disabled={generatingPdf}
+              >
+                {generatingPdf ? <ActivityIndicator color={COLORS.primary} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.primary} />}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.pdfIconButton}
+                onPress={() => handleShareSheet(toSheetInput(s))}
+                disabled={generatingPdf}
+              >
+                <MaterialIcons name="share" size={18} color={COLORS.primary} />
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
+      </View>
+    </>
+  );
+
+  return (
+    <View style={styles.screen}>
+      <View style={styles.headerRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>{view === 'entry' ? 'Daily Sheet' : 'Submitted Sheets'}</Text>
+          <Text style={styles.headerSubtitle}>{view === 'entry' ? "Today's combined site report" : 'Review what has been sent in'}</Text>
+        </View>
+        {view === 'entry' ? (
+          <TouchableOpacity style={styles.headerButton} onPress={() => setView('submitted')}>
+            <MaterialIcons name="history" size={17} color={COLORS.white} />
+            <Text style={styles.headerButtonText}>Submitted</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.headerButtonOutline} onPress={() => setView('entry')}>
+            <MaterialIcons name="arrow-back" size={16} color={COLORS.primary} />
+            <Text style={styles.headerButtonOutlineText}>Entry</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView style={styles.body} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          {view === 'entry' ? renderEntry() : renderSubmitted()}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -454,6 +611,43 @@ export default function DailySheetScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: COLORS.background },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  headerTitle: { fontSize: 19, fontWeight: '900', color: COLORS.text },
+  headerSubtitle: { fontSize: 12, fontWeight: '600', color: COLORS.textLight, marginTop: 2 },
+  headerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: BORDER_RADIUS.lg,
+    elevation: 3,
+    shadowColor: COLORS.shadowColor,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+  },
+  headerButtonText: { color: COLORS.white, fontWeight: '900', fontSize: 13 },
+  headerButtonOutline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.tint,
+    borderWidth: 1,
+    borderColor: COLORS.tintBorder,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: BORDER_RADIUS.lg,
+  },
+  headerButtonOutlineText: { color: COLORS.primary, fontWeight: '900', fontSize: 13 },
   body: { flex: 1 },
   content: { padding: SPACING.md, paddingBottom: SPACING.xl },
   card: {
@@ -554,9 +748,20 @@ const styles = StyleSheet.create({
   submittedRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
     paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: COLORS.steel,
+  },
+  pdfIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.tint,
+    borderWidth: 1,
+    borderColor: COLORS.tintBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   totalRow: {
     flexDirection: 'row',

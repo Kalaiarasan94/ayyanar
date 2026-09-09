@@ -105,6 +105,73 @@ export const buildPdfReport = async (opts: {
   return { doc, filename: opts.filename };
 };
 
+const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
+const dailySheetDateLabel = (iso: string) => {
+  const parts = (iso || '').toString().split('T')[0].split('-');
+  if (parts.length < 3) return iso || '-';
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${parts[2]} ${MONTHS[parseInt(parts[1]) - 1] || ''} ${parts[0]}`;
+};
+
+export type DailySheetInput = {
+  siteName: string;
+  supervisorName: string;
+  date: string;
+  workDescription: string;
+  attendance: { name?: string; category: string; count: number }[];
+  amountReceived: number;
+  billsNormal: number;
+  billsGst: number;
+  billsCredit: number;
+  vehicleRental: number;
+  labourSalary: { name: string; amount: number }[];
+  totalAmount: number;
+};
+
+// Builds a real vector PDF for one Daily Sheet — used both from the Supervisor's
+// own Daily Sheet screen (fresh submit + Submitted list) and from the Admin
+// panel's Daily Sheet review, so both sides get an identical professional printout.
+export const buildDailySheetPdfDoc = async (sheet: DailySheetInput): Promise<ReportDoc> => {
+  const labourTotal = sheet.labourSalary.reduce((s, l) => s + Number(l.amount || 0), 0);
+  return buildPdfReport({
+    filename: `daily-sheet-${sheet.siteName}-${sheet.date}.pdf`,
+    title: 'Daily Sheet',
+    subtitle: `${sheet.siteName} • ${dailySheetDateLabel(sheet.date)} • Supervisor: ${sheet.supervisorName}${sheet.workDescription ? ` • Work: ${sheet.workDescription}` : ''}`,
+    summaryBoxes: [
+      { label: 'Amount Received', value: rupees(sheet.amountReceived), color: '#15803d' },
+      { label: 'Total Amount Spent', value: rupees(sheet.totalAmount), color: '#e23744' },
+    ],
+    tables: [
+      {
+        title: `Attendance (${sheet.attendance.length})`,
+        head: ['Category', 'Name', 'Present'],
+        body: sheet.attendance.length
+          ? sheet.attendance.map((a) => [a.category, a.name || '-', a.count])
+          : [['No attendance recorded', '', '']],
+      },
+      {
+        title: 'Bills & Expenses',
+        head: ['Type', 'Amount (Rs)'],
+        body: [
+          ['Bills Spent — Normal', Number(sheet.billsNormal).toLocaleString('en-IN')],
+          ['Bills Spent — GST', Number(sheet.billsGst).toLocaleString('en-IN')],
+          ['Bills Under GST / No GST — In Credit', Number(sheet.billsCredit).toLocaleString('en-IN')],
+          ['Vehicle & Rental Use', Number(sheet.vehicleRental).toLocaleString('en-IN')],
+        ],
+        foot: ['TOTAL BILLS & EXPENSES', (Number(sheet.billsNormal) + Number(sheet.billsGst) + Number(sheet.billsCredit) + Number(sheet.vehicleRental)).toLocaleString('en-IN')],
+      },
+      {
+        title: `Labour Salary (${sheet.labourSalary.length})`,
+        head: ['Worker Name', 'Amount (Rs)'],
+        body: sheet.labourSalary.length
+          ? sheet.labourSalary.map((l) => [l.name, Number(l.amount).toLocaleString('en-IN')])
+          : [['No labour salary recorded', '']],
+        foot: ['TOTAL LABOUR SALARY', labourTotal.toLocaleString('en-IN')],
+      },
+    ],
+  });
+};
+
 const hexToRgb = (hex?: string): [number, number, number] | null => {
   if (!hex) return null;
   const m = hex.replace('#', '');

@@ -23,7 +23,7 @@ import LogoutButton from '../components/LogoutButton';
 import DatePickerField from '../components/DatePickerField';
 import { accountsService, adminService, fieldService } from '../services/api';
 import { csvCell, downloadImage, exportCsv, shareImageOnWhatsApp } from '../services/printReport';
-import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
+import { buildDailySheetPdfDoc, buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
 
 type AdminTab = 'DASHBOARD' | 'ATTENDANCE' | 'DAILY_SHEET' | 'PROJECTS' | 'TEAM' | 'LEADS' | 'REPORTS';
@@ -104,6 +104,7 @@ export default function AdminPanelScreen() {
   const [dailySheetDate, setDailySheetDate] = useState(todayIso());
   const [dailySheetSupervisor, setDailySheetSupervisor] = useState<string | null>(null);
   const [dailySheetDetail, setDailySheetDetail] = useState<any>(null);
+  const [generatingDailySheetPdf, setGeneratingDailySheetPdf] = useState(false);
 
   // Bill (ledger entry) edit modal
   const [billEditVisible, setBillEditVisible] = useState(false);
@@ -185,6 +186,48 @@ export default function AdminPanelScreen() {
 
   const fetchDailySheets = async (date = dailySheetDate) => {
     setDailySheets(await adminService.getAllDailySheets(date));
+  };
+
+  const toDailySheetPdfInput = (row: any) => ({
+    siteName: row.site_name,
+    supervisorName: row.supervisor_name,
+    date: row.date,
+    workDescription: row.work_description || '',
+    attendance: (row.attendance || []).map((a: any) => ({ name: a.name, category: a.category, count: Number(a.count) || 0 })),
+    amountReceived: Number(row.amount_received) || 0,
+    billsNormal: Number(row.bills_normal) || 0,
+    billsGst: Number(row.bills_gst) || 0,
+    billsCredit: Number(row.bills_credit) || 0,
+    vehicleRental: Number(row.vehicle_rental) || 0,
+    labourSalary: (row.labourSalary || []).map((l: any) => ({ name: l.name, amount: Number(l.amount) || 0 })),
+    totalAmount: Number(row.total_amount) || 0,
+  });
+
+  const handleDownloadDailySheet = async (row: any) => {
+    setGeneratingDailySheetPdf(true);
+    try {
+      await downloadPdfReport(await buildDailySheetPdfDoc(toDailySheetPdfInput(row)));
+    } catch (error: any) {
+      Alert.alert('PDF Error', error?.message || 'Unable to generate the report.');
+    } finally {
+      setGeneratingDailySheetPdf(false);
+    }
+  };
+
+  const handleShareDailySheet = async (row: any) => {
+    setGeneratingDailySheetPdf(true);
+    try {
+      const input = toDailySheetPdfInput(row);
+      const summary =
+        `*Ayyanar Construction - Daily Sheet*\n` +
+        `Site: ${input.siteName}\nSupervisor: ${input.supervisorName}\nDate: ${new Date(input.date).toLocaleDateString('en-IN')}\n` +
+        `Amount Received: ${rupeesText(input.amountReceived)}\nTotal Amount: ${rupeesText(input.totalAmount)}`;
+      await sharePdfReportOnWhatsApp(await buildDailySheetPdfDoc(input), summary);
+    } catch (error: any) {
+      Alert.alert('Share Error', error?.message || 'Unable to share the report.');
+    } finally {
+      setGeneratingDailySheetPdf(false);
+    }
   };
 
   const fetchSitesAndStaff = async () => {
@@ -2048,6 +2091,25 @@ export default function AdminPanelScreen() {
                   <Text style={[styles.detailLocationText, { fontWeight: '900', fontSize: 15 }]}>
                     TOTAL AMOUNT: {rupeesText(dailySheetDetail.total_amount)}
                   </Text>
+                </View>
+
+                <View style={styles.pdfActionsRow}>
+                  <TouchableOpacity
+                    style={[styles.pdfButton, generatingDailySheetPdf && { opacity: 0.6 }]}
+                    onPress={() => handleDownloadDailySheet(dailySheetDetail)}
+                    disabled={generatingDailySheetPdf}
+                  >
+                    {generatingDailySheetPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
+                    <Text style={styles.pdfButtonText}>Download PDF</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.pdfButton, styles.whatsappButton, generatingDailySheetPdf && { opacity: 0.6 }]}
+                    onPress={() => handleShareDailySheet(dailySheetDetail)}
+                    disabled={generatingDailySheetPdf}
+                  >
+                    <MaterialIcons name="share" size={18} color={COLORS.white} />
+                    <Text style={styles.pdfButtonText}>Share on WhatsApp</Text>
+                  </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity style={styles.detailCloseButton} onPress={() => setDailySheetDetail(null)}>
