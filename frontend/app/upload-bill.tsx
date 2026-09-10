@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ScrollView, Text, View, TextInput, TouchableOpacity, Alert, Linking, Image, Platform, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -37,16 +37,9 @@ export default function UploadBill() {
   const [imageUris, setImageUris] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Submitted bills history
   const todayStr = new Date().toISOString().split('T')[0];
   const [billDate, setBillDate] = useState(todayStr);
   const [billsList, setBillsList] = useState<BillItem[]>([]);
-  const [historyDate, setHistoryDate] = useState(todayStr);
-  const [submittedBills, setSubmittedBills] = useState<any[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-  // Submitted-bills history is revealed step by step: first the date, then the list
-  const [showHistoryDate, setShowHistoryDate] = useState(false);
-  const [showSubmittedBills, setShowSubmittedBills] = useState(false);
 
   useEffect(() => {
     const loadSites = async () => {
@@ -67,26 +60,6 @@ export default function UploadBill() {
     };
     loadSites();
   }, [userId]);
-
-  const loadSubmittedBills = useCallback(async (siteId: string | null, date: string) => {
-    if (!siteId) return;
-    setLoadingHistory(true);
-    try {
-      const data = await fieldService.getLedgerBySite(siteId, date);
-      setSubmittedBills(data || []);
-    } catch {
-      setSubmittedBills([]);
-    } finally {
-      setLoadingHistory(false);
-    }
-  }, []);
-
-  // Keep the list in sync once it has been revealed (e.g. supervisor changes the date or site)
-  useEffect(() => {
-    if (showSubmittedBills) {
-      loadSubmittedBills(selectedSiteId, historyDate);
-    }
-  }, [selectedSiteId, historyDate, showSubmittedBills, loadSubmittedBills]);
 
   const handleSiteChange = (val: string) => {
     setSelectedSiteId(val);
@@ -246,8 +219,6 @@ export default function UploadBill() {
 
       // Clear list so screen resets and same bills can't be re-submitted
       setBillsList([]);
-      // Refresh history to include the just-submitted bills (only if it's on screen)
-      if (showSubmittedBills) loadSubmittedBills(selectedSiteId, historyDate);
       setLoading(false);
       Alert.alert('Batch Submitted', `Logged ${billsList.length} bills totaling ₹${totalAmount.toLocaleString()} to Database.`, [
         { text: 'Send WhatsApp Report', onPress: () => {
@@ -428,106 +399,33 @@ export default function UploadBill() {
           </View>
         )}
 
-        {/* ─── SUBMITTED BILLS HISTORY ─── */}
+        {/* ─── SUBMITTED BILLS ─── */}
         <View style={styles.historyCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, gap: 8 }}>
             <MaterialIcons name="receipt-long" size={20} color="#E23744" />
             <Text style={styles.sectionTitle}>SUBMITTED BILLS</Text>
           </View>
+          <Text style={styles.historyHint}>
+            Open the submitted-bills page to review every bill for a site — it opens on today and you can filter by date.
+          </Text>
 
-          {!showHistoryDate ? (
-            <TouchableOpacity style={styles.historyToggleBtn} onPress={() => setShowHistoryDate(true)}>
-              <MaterialIcons name="event" size={18} color="#E23744" />
-              <Text style={styles.historyToggleBtnText}>Show Date</Text>
-            </TouchableOpacity>
-          ) : (
-            <>
-              <DatePickerField
-                value={historyDate}
-                onChange={setHistoryDate}
-                placeholder="Select date to view bills"
-              />
-
-              <TouchableOpacity
-                style={[styles.historyToggleBtn, { marginTop: 12 }]}
-                onPress={() => {
-                  setShowSubmittedBills(true);
-                  loadSubmittedBills(selectedSiteId, historyDate);
-                }}
-              >
-                <MaterialIcons name="receipt-long" size={18} color="#E23744" />
-                <Text style={styles.historyToggleBtnText}>
-                  {showSubmittedBills ? 'Refresh Submitted Bills' : 'Show Submitted Bills'}
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {showSubmittedBills && (loadingHistory ? (
-            <ActivityIndicator color="#E23744" style={{ marginTop: 16 }} />
-          ) : submittedBills.length === 0 ? (
-            <View style={styles.emptyHistory}>
-              <MaterialIcons name="inbox" size={32} color="#C4A8AE" />
-              <Text style={styles.emptyHistoryText}>No bills submitted on {historyDate}</Text>
-            </View>
-          ) : (
-            <View>
-              {/* Summary row */}
-              <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12, marginTop: 8 }}>
-                <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 10, padding: 10 }}>
-                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#8C0F16' }}>DIRECT (CASH)</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#8C0F16', marginTop: 2 }}>
-                    ₹{submittedBills.filter(b => b.payment_mode === 'Direct').reduce((s: number, b: any) => s + Number(b.amount || 0), 0).toLocaleString()}
-                  </Text>
-                </View>
-                <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 10, padding: 10 }}>
-                  <Text style={{ fontSize: 9, fontWeight: '800', color: '#CB202D' }}>INDIRECT (CREDIT)</Text>
-                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#CB202D', marginTop: 2 }}>
-                    ₹{submittedBills.filter(b => b.payment_mode !== 'Direct').reduce((s: number, b: any) => s + Number(b.amount || 0), 0).toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-
-              {submittedBills.map((bill: any) => {
-                const isDirect = bill.payment_mode === 'Direct';
-                const imageUris: string[] = bill.image_url ? bill.image_url.split('||').filter(Boolean) : [];
-                return (
-                  <View key={bill.id} style={styles.historyBillCard}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-                      {imageUris.length > 0 && (
-                        <Image source={{ uri: imageUris[0] }} style={styles.historyThumb} />
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                          <View style={[styles.modeBadge, { backgroundColor: isDirect ? '#FCE9E9' : '#FCE9E9' }]}>
-                            <Text style={[styles.modeBadgeText, { color: isDirect ? '#8C0F16' : '#CB202D' }]}>
-                              {isDirect ? '💵 Direct' : '💳 Indirect'}
-                            </Text>
-                          </View>
-                          {bill.is_gst ? (
-                            <View style={[styles.modeBadge, { backgroundColor: '#FCE9E9' }]}>
-                              <Text style={[styles.modeBadgeText, { color: '#CB202D' }]}>GST</Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        <Text style={styles.historyCategory}>{bill.category || 'Expense'}</Text>
-                        <Text style={styles.historyDesc} numberOfLines={2}>{bill.description || '-'}</Text>
-                        <Text style={styles.historyDate}>{new Date(bill.date).toLocaleDateString('en-IN')}</Text>
-                      </View>
-                      <Text style={styles.historyAmount}>₹{Number(bill.amount || 0).toLocaleString()}</Text>
-                    </View>
-                    {imageUris.length > 1 && (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                        {imageUris.slice(1).map((uri: string) => (
-                          <Image key={uri} source={{ uri }} style={[styles.historyThumb, { marginRight: 6 }]} />
-                        ))}
-                      </ScrollView>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-          ))}
+          <TouchableOpacity
+            style={styles.historyToggleBtn}
+            onPress={() =>
+              router.push({
+                pathname: '/submitted-bills',
+                params: {
+                  siteId: selectedSiteId ?? '',
+                  siteName: selectedSiteName ?? '',
+                  userId: (Array.isArray(userId) ? userId[0] : userId) ?? '',
+                },
+              })
+            }
+          >
+            <MaterialIcons name="event-note" size={18} color="#E23744" />
+            <Text style={styles.historyToggleBtnText}>View Submitted Bills</Text>
+            <MaterialIcons name="chevron-right" size={18} color="#E23744" />
+          </TouchableOpacity>
         </View>
 
       </ScrollView>
@@ -897,60 +795,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     letterSpacing: 0.3,
   },
-  historyBillCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
-  },
-  historyThumb: {
-    width: 56,
-    height: 56,
-    borderRadius: 10,
-    backgroundColor: '#F1F5F9',
-  },
-  modeBadge: {
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  modeBadgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  historyCategory: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginTop: 2,
-  },
-  historyDesc: {
-    fontSize: 11,
-    color: '#64748B',
-    marginTop: 2,
-  },
-  historyDate: {
-    fontSize: 10,
-    color: '#94A3B8',
-    marginTop: 4,
-    fontWeight: '600',
-  },
-  historyAmount: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#E23744',
-  },
-  emptyHistory: {
-    alignItems: 'center',
-    paddingVertical: 24,
-    gap: 8,
-  },
-  emptyHistoryText: {
+  historyHint: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: COLORS.textLight,
     fontWeight: '600',
+    marginBottom: 14,
+    lineHeight: 17,
   },
 });
 
