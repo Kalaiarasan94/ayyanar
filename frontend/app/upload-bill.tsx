@@ -44,6 +44,9 @@ export default function UploadBill() {
   const [historyDate, setHistoryDate] = useState(todayStr);
   const [submittedBills, setSubmittedBills] = useState<any[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  // Submitted-bills history is revealed step by step: first the date, then the list
+  const [showHistoryDate, setShowHistoryDate] = useState(false);
+  const [showSubmittedBills, setShowSubmittedBills] = useState(false);
 
   useEffect(() => {
     const loadSites = async () => {
@@ -78,9 +81,12 @@ export default function UploadBill() {
     }
   }, []);
 
+  // Keep the list in sync once it has been revealed (e.g. supervisor changes the date or site)
   useEffect(() => {
-    loadSubmittedBills(selectedSiteId, historyDate);
-  }, [selectedSiteId, historyDate, loadSubmittedBills]);
+    if (showSubmittedBills) {
+      loadSubmittedBills(selectedSiteId, historyDate);
+    }
+  }, [selectedSiteId, historyDate, showSubmittedBills, loadSubmittedBills]);
 
   const handleSiteChange = (val: string) => {
     setSelectedSiteId(val);
@@ -240,8 +246,8 @@ export default function UploadBill() {
 
       // Clear list so screen resets and same bills can't be re-submitted
       setBillsList([]);
-      // Refresh history to include the just-submitted bills
-      loadSubmittedBills(selectedSiteId, historyDate);
+      // Refresh history to include the just-submitted bills (only if it's on screen)
+      if (showSubmittedBills) loadSubmittedBills(selectedSiteId, historyDate);
       setLoading(false);
       Alert.alert('Batch Submitted', `Logged ${billsList.length} bills totaling ₹${totalAmount.toLocaleString()} to Database.`, [
         { text: 'Send WhatsApp Report', onPress: () => {
@@ -429,13 +435,35 @@ export default function UploadBill() {
             <Text style={styles.sectionTitle}>SUBMITTED BILLS</Text>
           </View>
 
-          <DatePickerField
-            value={historyDate}
-            onChange={setHistoryDate}
-            placeholder="Select date to view bills"
-          />
+          {!showHistoryDate ? (
+            <TouchableOpacity style={styles.historyToggleBtn} onPress={() => setShowHistoryDate(true)}>
+              <MaterialIcons name="event" size={18} color="#E23744" />
+              <Text style={styles.historyToggleBtnText}>Show Date</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <DatePickerField
+                value={historyDate}
+                onChange={setHistoryDate}
+                placeholder="Select date to view bills"
+              />
 
-          {loadingHistory ? (
+              <TouchableOpacity
+                style={[styles.historyToggleBtn, { marginTop: 12 }]}
+                onPress={() => {
+                  setShowSubmittedBills(true);
+                  loadSubmittedBills(selectedSiteId, historyDate);
+                }}
+              >
+                <MaterialIcons name="receipt-long" size={18} color="#E23744" />
+                <Text style={styles.historyToggleBtnText}>
+                  {showSubmittedBills ? 'Refresh Submitted Bills' : 'Show Submitted Bills'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+
+          {showSubmittedBills && (loadingHistory ? (
             <ActivityIndicator color="#E23744" style={{ marginTop: 16 }} />
           ) : submittedBills.length === 0 ? (
             <View style={styles.emptyHistory}>
@@ -499,7 +527,7 @@ export default function UploadBill() {
                 );
               })}
             </View>
-          )}
+          ))}
         </View>
 
       </ScrollView>
@@ -851,6 +879,23 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 16,
     marginBottom: 40,
+  },
+  historyToggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 26, 18, 0.25)',
+    paddingVertical: 12,
+    borderRadius: BORDER_RADIUS.md,
+  },
+  historyToggleBtnText: {
+    color: '#E23744',
+    fontWeight: '800',
+    fontSize: 13,
+    letterSpacing: 0.3,
   },
   historyBillCard: {
     backgroundColor: 'rgba(255, 255, 255, 0.45)',
