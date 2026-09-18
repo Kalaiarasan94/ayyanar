@@ -58,6 +58,11 @@ export default function IoReport() {
   const supervisorName = supervisorId ? supervisors.find((s) => s.id.toString() === supervisorId)?.name : null;
   const rangeTitle = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
 
+  // All Inputs, then all Outputs, then the Input/Output/Balance summary —
+  // each date only appears in the side(s) it actually had money move on.
+  const inputRows = (report?.rows || []).filter((r: any) => Number(r.input) > 0);
+  const outputRows = (report?.rows || []).filter((r: any) => Number(r.output) > 0);
+
   const handleDownload = async () => {
     if (!report) return;
     setDownloading(true);
@@ -73,19 +78,21 @@ export default function IoReport() {
         ],
         tables: [
           {
-            title: 'Date-wise Statement',
-            head: ['Date', 'Input (Rs)', 'Output (Rs)', 'Balance (Rs)'],
+            title: `All Inputs (${inputRows.length})`,
+            head: ['Date', 'Input (Rs)'],
             body: [
-              ...(mode !== 'all' ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
-              ...report.rows.map((r: any) => [
-                dateLabel(r.date),
-                Number(r.input).toLocaleString('en-IN'),
-                Number(r.output).toLocaleString('en-IN'),
-                Number(r.balance).toLocaleString('en-IN'),
-              ]),
+              ...(mode !== 'all' ? [['Opening Balance', Number(report.opening).toLocaleString('en-IN')]] : []),
+              ...inputRows.map((r: any) => [dateLabel(r.date), Number(r.input).toLocaleString('en-IN')]),
             ],
-            foot: ['TOTAL', Number(report.totals.input).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN'), Number(report.totals.closing).toLocaleString('en-IN')],
-            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+            foot: ['TOTAL INPUT', Number(report.totals.input).toLocaleString('en-IN')],
+            columnStyles: { 1: { halign: 'right' as const } },
+          },
+          {
+            title: `All Outputs (${outputRows.length})`,
+            head: ['Date', 'Output (Rs)'],
+            body: outputRows.map((r: any) => [dateLabel(r.date), Number(r.output).toLocaleString('en-IN')]),
+            foot: ['TOTAL OUTPUT', Number(report.totals.output).toLocaleString('en-IN')],
+            columnStyles: { 1: { halign: 'right' as const } },
           },
           ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
             ? [
@@ -98,6 +105,17 @@ export default function IoReport() {
                 },
               ]
             : []),
+          {
+            title: 'Input / Output / Balance',
+            head: ['', 'Amount (Rs)'],
+            body: [
+              ...(mode !== 'all' ? [['Opening Balance', Number(report.opening).toLocaleString('en-IN')]] : []),
+              ['Total Input', Number(report.totals.input).toLocaleString('en-IN')],
+              ['Total Output', Number(report.totals.output).toLocaleString('en-IN')],
+            ],
+            foot: ['Closing Balance', Number(report.totals.closing).toLocaleString('en-IN')],
+            columnStyles: { 1: { halign: 'right' as const } },
+          },
         ],
       });
       await downloadPdfReport({ doc, filename });
@@ -121,19 +139,21 @@ export default function IoReport() {
         ],
         tables: [
           {
-            title: 'Date-wise Statement',
-            head: ['Date', 'Input (Rs)', 'Output (Rs)', 'Balance (Rs)'],
+            title: `All Inputs (${inputRows.length})`,
+            head: ['Date', 'Input (Rs)'],
             body: [
-              ...(mode !== 'all' ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
-              ...report.rows.map((r: any) => [
-                dateLabel(r.date),
-                Number(r.input).toLocaleString('en-IN'),
-                Number(r.output).toLocaleString('en-IN'),
-                Number(r.balance).toLocaleString('en-IN'),
-              ]),
+              ...(mode !== 'all' ? [['Opening Balance', Number(report.opening).toLocaleString('en-IN')]] : []),
+              ...inputRows.map((r: any) => [dateLabel(r.date), Number(r.input).toLocaleString('en-IN')]),
             ],
-            foot: ['TOTAL', Number(report.totals.input).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN'), Number(report.totals.closing).toLocaleString('en-IN')],
-            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+            foot: ['TOTAL INPUT', Number(report.totals.input).toLocaleString('en-IN')],
+            columnStyles: { 1: { halign: 'right' as const } },
+          },
+          {
+            title: `All Outputs (${outputRows.length})`,
+            head: ['Date', 'Output (Rs)'],
+            body: outputRows.map((r: any) => [dateLabel(r.date), Number(r.output).toLocaleString('en-IN')]),
+            foot: ['TOTAL OUTPUT', Number(report.totals.output).toLocaleString('en-IN')],
+            columnStyles: { 1: { halign: 'right' as const } },
           },
           ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
             ? [
@@ -146,6 +166,17 @@ export default function IoReport() {
                 },
               ]
             : []),
+          {
+            title: 'Input / Output / Balance',
+            head: ['', 'Amount (Rs)'],
+            body: [
+              ...(mode !== 'all' ? [['Opening Balance', Number(report.opening).toLocaleString('en-IN')]] : []),
+              ['Total Input', Number(report.totals.input).toLocaleString('en-IN')],
+              ['Total Output', Number(report.totals.output).toLocaleString('en-IN')],
+            ],
+            foot: ['Closing Balance', Number(report.totals.closing).toLocaleString('en-IN')],
+            columnStyles: { 1: { halign: 'right' as const } },
+          },
         ],
       });
       const text = `${supervisorName || role} I/O Report (${rangeTitle})\nInput: ${rupees(report.totals.input)}\nOutput: ${rupees(report.totals.output)}\nClosing Balance: ${rupees(report.totals.closing)}`;
@@ -196,12 +227,6 @@ export default function IoReport() {
         <div className="empty-note">Loading…</div>
       ) : report ? (
         <>
-          <div className="summary-row">
-            <SummaryCard label="Total Input" value={rupees(report.totals.input)} color="#15803d" icon={ArrowDownCircle} />
-            <SummaryCard label="Total Output" value={rupees(report.totals.output)} color="#e23744" icon={ArrowUpCircle} />
-            <SummaryCard label="Closing Balance" value={rupees(report.totals.closing)} icon={Wallet} />
-          </div>
-
           <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownload} disabled={downloading}>
               <Download size={16} />
@@ -214,32 +239,37 @@ export default function IoReport() {
             <PrintButton />
           </div>
 
-          {report.rows.length > 1 && (
-            <div className="card">
-              <h3 className="section-heading">Balance Trend</h3>
-              <ResponsiveContainer width="100%" height={240}>
-                <LineChart data={report.rows.map((r: any) => ({ name: dateLabel(r.date), Balance: Number(r.balance) }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1dede" />
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip formatter={(v: any) => rupees(v)} />
-                  <Line type="monotone" dataKey="Balance" stroke="#e23744" strokeWidth={2.5} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
+          {/* 1. All Inputs */}
           <div className="card">
+            <h3 className="section-heading">All Inputs ({inputRows.length})</h3>
+            {mode !== 'all' && (
+              <p className="text-muted" style={{ fontSize: 12.5, marginTop: -6, marginBottom: 10 }}>
+                Opening Balance: <b>{rupees(report.opening)}</b>
+              </p>
+            )}
             <DataTable<any>
-              rowKey={(r, i) => `${r.date}-${i}`}
-              rows={report.rows}
-              emptyText="No activity in this range."
-              totalRow={['TOTAL', rupees(report.totals.input), rupees(report.totals.output), rupees(report.totals.closing)]}
+              rowKey={(r, i) => `in-${r.date}-${i}`}
+              rows={inputRows}
+              emptyText="No money received in this range."
+              totalRow={['TOTAL INPUT', rupees(report.totals.input)]}
               columns={[
                 { header: 'Date', render: (r: any) => dateLabel(r.date) },
                 { header: 'Input', align: 'right', render: (r: any) => <span className="text-success">{rupees(r.input)}</span> },
+              ]}
+            />
+          </div>
+
+          {/* 2. All Outputs */}
+          <div className="card">
+            <h3 className="section-heading">All Outputs ({outputRows.length})</h3>
+            <DataTable<any>
+              rowKey={(r, i) => `out-${r.date}-${i}`}
+              rows={outputRows}
+              emptyText="No money paid in this range."
+              totalRow={['TOTAL OUTPUT', rupees(report.totals.output)]}
+              columns={[
+                { header: 'Date', render: (r: any) => dateLabel(r.date) },
                 { header: 'Output', align: 'right', render: (r: any) => <span className="text-primary">{rupees(r.output)}</span> },
-                { header: 'Balance', align: 'right', render: (r: any) => rupees(r.balance) },
               ]}
             />
           </div>
@@ -262,6 +292,32 @@ export default function IoReport() {
                   { header: 'Amount', align: 'right', render: (r: any) => <span className="text-primary">{rupees(r.amount)}</span> },
                 ]}
               />
+            </div>
+          )}
+
+          {/* 3. Input / Output / Balance */}
+          <div className="card">
+            <h3 className="section-heading">Input / Output / Balance</h3>
+            <div className="summary-row" style={{ marginBottom: 0 }}>
+              {mode !== 'all' && <SummaryCard label="Opening Balance" value={rupees(report.opening)} icon={Wallet} />}
+              <SummaryCard label="Total Input" value={rupees(report.totals.input)} color="#15803d" icon={ArrowDownCircle} />
+              <SummaryCard label="Total Output" value={rupees(report.totals.output)} color="#e23744" icon={ArrowUpCircle} />
+              <SummaryCard label="Closing Balance" value={rupees(report.totals.closing)} icon={Wallet} />
+            </div>
+          </div>
+
+          {report.rows.length > 1 && (
+            <div className="card">
+              <h3 className="section-heading">Balance Trend</h3>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={report.rows.map((r: any) => ({ name: dateLabel(r.date), Balance: Number(r.balance) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1dede" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip formatter={(v: any) => rupees(v)} />
+                  <Line type="monotone" dataKey="Balance" stroke="#e23744" strokeWidth={2.5} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           )}
         </>
