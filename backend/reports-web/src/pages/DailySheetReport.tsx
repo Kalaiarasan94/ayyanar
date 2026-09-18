@@ -5,6 +5,7 @@ import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
+import SelectField from '../components/SelectField';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, buildSingleDailySheetPdfDoc, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
@@ -274,15 +275,14 @@ export default function DailySheetReport() {
       />
 
       {supervisors.length > 0 && (
-        <div className="chip-row" style={{ marginBottom: 18 }}>
-          <button className={`chip${!supervisor ? ' active' : ''}`} onClick={() => setSupervisor(null)}>
-            All Supervisors ({sheets.length})
-          </button>
-          {supervisors.map((name) => (
-            <button key={name} className={`chip${supervisor === name ? ' active' : ''}`} onClick={() => setSupervisor(name)}>
-              {name} ({sheets.filter((s) => s.supervisor_name === name).length})
-            </button>
-          ))}
+        <div className="filter-row">
+          <SelectField
+            label="SUPERVISOR"
+            value={supervisor || ''}
+            placeholder={`All Supervisors (${sheets.length})`}
+            onChange={(v) => setSupervisor(v || null)}
+            options={supervisors.map((name) => ({ value: name, label: `${name} (${sheets.filter((s) => s.supervisor_name === name).length})` }))}
+          />
         </div>
       )}
 
