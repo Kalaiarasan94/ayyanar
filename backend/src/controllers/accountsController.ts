@@ -436,14 +436,21 @@ export const accountsController = {
   getLedger: async (req: Request, res: Response): Promise<void> => {
     try {
       const { from, to } = req.query;
+      // Per-flow entries/lastDate (in addition to the combined ones already
+      // returned) so a consumer can list "received" and "paid" parties as two
+      // separate, individually-accurate groups instead of one mixed table.
       let sql = `SELECT category, party_name,
            COALESCE(SUM(IF(flow = 'IN', amount, 0)), 0) AS receivedFrom,
            COALESCE(SUM(IF(flow = 'OUT', amount, 0)), 0) AS paidTo,
            COUNT(*) AS entries,
-           MAX(date) AS lastDate
+           SUM(IF(flow = 'IN', 1, 0)) AS receivedEntries,
+           SUM(IF(flow = 'OUT', 1, 0)) AS paidEntries,
+           MAX(date) AS lastDate,
+           MAX(IF(flow = 'IN', date, NULL)) AS receivedLastDate,
+           MAX(IF(flow = 'OUT', date, NULL)) AS paidLastDate
          FROM account_transactions
          WHERE ${singleEntryFilter}`;
-      
+
       const params: any[] = [...INTERNAL_PARTIES];
       if (from && to) {
         sql += ' AND date >= ? AND date <= ?';
@@ -467,7 +474,11 @@ export const accountsController = {
           paidTo: Number(r.paidTo),
           net: Number(r.receivedFrom) - Number(r.paidTo),
           entries: Number(r.entries),
+          receivedEntries: Number(r.receivedEntries || 0),
+          paidEntries: Number(r.paidEntries || 0),
           lastDate: r.lastDate,
+          receivedLastDate: r.receivedLastDate,
+          paidLastDate: r.paidLastDate,
         }))
       );
     } catch (error: any) {
