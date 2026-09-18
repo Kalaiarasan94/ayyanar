@@ -5,6 +5,7 @@ import { accountsApi, adminApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
+import SelectField from '../components/SelectField';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
@@ -168,15 +169,14 @@ export default function IoReport() {
       </div>
 
       {role === 'Supervisor' && supervisors.length > 0 && (
-        <div className="chip-row" style={{ marginBottom: 14 }}>
-          <button className={`chip${!supervisorId ? ' active' : ''}`} onClick={() => selectSupervisor(null)}>
-            All Supervisors (Combined)
-          </button>
-          {supervisors.map((s) => (
-            <button key={s.id} className={`chip${supervisorId === s.id.toString() ? ' active' : ''}`} onClick={() => selectSupervisor(s.id.toString())}>
-              {s.name}
-            </button>
-          ))}
+        <div className="filter-row">
+          <SelectField
+            label="SUPERVISOR"
+            value={supervisorId || ''}
+            placeholder="All Supervisors (Combined)"
+            onChange={(v) => selectSupervisor(v || null)}
+            options={supervisors.map((s) => ({ value: s.id.toString(), label: s.name }))}
+          />
         </div>
       )}
 

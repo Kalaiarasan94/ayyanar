@@ -433,6 +433,29 @@ button {
   border-color: var(--primary);
 }
 
+/* Filter dropdowns (Site / Supervisor / etc.) — replaces long chip rows once
+   a list can run into double digits, so picking one stays a single click
+   instead of hunting through a wrapped wall of buttons. */
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.select-field {
+  flex: 1 1 220px;
+  min-width: 160px;
+}
+
+.select-field .field-label {
+  margin: 0 0 6px;
+}
+
+.select-field .select {
+  width: 100%;
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;

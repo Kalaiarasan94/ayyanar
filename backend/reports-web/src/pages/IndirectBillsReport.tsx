@@ -4,6 +4,7 @@ import { adminApi, fieldApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
+import SelectField from '../components/SelectField';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
@@ -159,29 +160,26 @@ export default function IndirectBillsReport() {
         </button>
       </div>
 
-      {sites.length > 0 && (
-        <div className="chip-row" style={{ marginBottom: 14 }}>
-          <button className={`chip${!siteId ? ' active' : ''}`} onClick={() => { setSiteId(null); load(status, null); }}>
-            All Sites
-          </button>
-          {sites.map((s) => (
-            <button key={s.id} className={`chip${siteId === s.id.toString() ? ' active' : ''}`} onClick={() => { setSiteId(s.id.toString()); load(status, s.id.toString()); }}>
-              {s.name}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {supervisors.length > 0 && (
-        <div className="chip-row" style={{ marginBottom: 14 }}>
-          <button className={`chip${!supervisorId ? ' active' : ''}`} onClick={() => { setSupervisorId(null); load(status, siteId, null); }}>
-            All Supervisors
-          </button>
-          {supervisors.map((s) => (
-            <button key={s.id} className={`chip${supervisorId === s.id.toString() ? ' active' : ''}`} onClick={() => { setSupervisorId(s.id.toString()); load(status, siteId, s.id.toString()); }}>
-              {s.name}
-            </button>
-          ))}
+      {(sites.length > 0 || supervisors.length > 0) && (
+        <div className="filter-row">
+          {sites.length > 0 && (
+            <SelectField
+              label="SITE"
+              value={siteId || ''}
+              placeholder="All Sites"
+              onChange={(v) => { const next = v || null; setSiteId(next); load(status, next); }}
+              options={sites.map((s) => ({ value: s.id.toString(), label: s.name }))}
+            />
+          )}
+          {supervisors.length > 0 && (
+            <SelectField
+              label="SUPERVISOR"
+              value={supervisorId || ''}
+              placeholder="All Supervisors"
+              onChange={(v) => { const next = v || null; setSupervisorId(next); load(status, siteId, next); }}
+              options={supervisors.map((s) => ({ value: s.id.toString(), label: s.name }))}
+            />
+          )}
         </div>
       )}
 

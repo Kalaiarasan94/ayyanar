@@ -5,6 +5,7 @@ import { adminApi, fieldApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
+import SelectField from '../components/SelectField';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
@@ -240,12 +241,8 @@ export default function SiteReports() {
       )}
 
       <h3 className="section-heading" style={{ marginTop: 8 }}>Site Detail</h3>
-      <div className="chip-row" style={{ marginBottom: 14 }}>
-        {sites.map((s) => (
-          <button key={s.id} className={`chip${siteId === s.id.toString() ? ' active' : ''}`} onClick={() => setSiteId(s.id.toString())}>
-            {s.name}
-          </button>
-        ))}
+      <div className="filter-row">
+        <SelectField label="SITE" value={siteId || ''} onChange={(v) => setSiteId(v)} options={sites.map((s) => ({ value: s.id.toString(), label: s.name }))} />
       </div>
 
       <DateFilterBar
