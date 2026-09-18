@@ -204,7 +204,7 @@ export default function DailySheetReport() {
         .map(csvCell)
         .join(',');
     });
-    exportCsv(`daily-sheets-${date || 'report'}.csv`, [header.join(','), ...lines].join('\n'));
+    exportCsv(`daily-sheets-${filterMode === 'single' ? date : filterMode === 'range' ? `${from}-to-${to}` : 'all'}.csv`, [header.join(','), ...lines].join('\n'));
   };
 
   const handleDownloadSinglePdf = async (sheet: any) => {
@@ -259,53 +259,17 @@ export default function DailySheetReport() {
       <h1 className="page-title">Daily Sheet Reports</h1>
       <p className="page-subtitle">Supervisor daily submissions — work details, attendance, cash received, bills, and labour salary.</p>
 
-      {/* Date Filter Modes & Presets */}
-      <div className="chip-row" style={{ marginBottom: 12 }}>
-        <button className={`chip${filterMode === 'single' ? ' active' : ''}`} onClick={() => setFilterMode('single')}>
-          Single Date
-        </button>
-        <button className={`chip${filterMode === 'range' ? ' active' : ''}`} onClick={() => setFilterMode('range')}>
-          Date Range
-        </button>
-        <button className={`chip${filterMode === 'all' ? ' active' : ''}`} onClick={() => setFilterMode('all')}>
-          All Time
-        </button>
-      </div>
-
-      <div className="toolbar">
-        {filterMode === 'single' && (
-          <div className="date-input-group">
-            <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
-            <button className="btn secondary" onClick={setPresetToday}>
-              Today
-            </button>
-            <button className="btn secondary" onClick={setPresetYesterday}>
-              Yesterday
-            </button>
-          </div>
-        )}
-
-        {filterMode === 'range' && (
-          <div className="date-range-picker">
-            <div className="date-input-group">
-              <input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From Date" />
-              <span className="text-muted">to</span>
-              <input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To Date" />
-            </div>
-            <div className="date-action-group">
-              <button className="btn" onClick={fetchSheets}>
-                Apply
-              </button>
-              <button className="btn secondary" onClick={setPreset7Days}>
-                Last 7 Days
-              </button>
-              <button className="btn secondary" onClick={setPresetThisMonth}>
-                This Month
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <DateFilterBar
+        mode={filterMode}
+        onModeChange={(m) => { setFilterMode(m); fetchSheets(m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); fetchSheets('single', d, from, to); }}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); fetchSheets('range', date, f, t); }}
+      />
 
       {supervisors.length > 0 && (
         <div className="chip-row" style={{ marginBottom: 18 }}>

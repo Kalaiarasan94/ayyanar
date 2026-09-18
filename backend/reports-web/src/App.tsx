@@ -10,6 +10,7 @@ import Ledger from './pages/Ledger';
 import PeriodReport from './pages/PeriodReport';
 import IoReport from './pages/IoReport';
 import SiteReports from './pages/SiteReports';
+import IndirectBillsReport from './pages/IndirectBillsReport';
 import DriverReports from './pages/DriverReports';
 import AttendanceReport from './pages/AttendanceReport';
 import LeadsReport from './pages/LeadsReport';
@@ -115,6 +116,7 @@ export default function App() {
       <Route path="/period-report" element={<RequireAuth><PeriodReport /></RequireAuth>} />
       <Route path="/io-report" element={<RequireAuth><IoReport /></RequireAuth>} />
       <Route path="/sites" element={<RequireAuth><SiteReports /></RequireAuth>} />
+      <Route path="/indirect-bills" element={<RequireAuth><IndirectBillsReport /></RequireAuth>} />
       <Route path="/drivers" element={<RequireAuth><DriverReports /></RequireAuth>} />
       <Route path="/attendance" element={<RequireAuth><AttendanceReport /></RequireAuth>} />
       <Route path="/daily-sheet" element={<RequireAuth><DailySheetReport /></RequireAuth>} />

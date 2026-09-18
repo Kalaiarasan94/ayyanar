@@ -9,6 +9,7 @@ const LINKS = [
   { to: '/period-report', label: 'Monthly / Yearly Report' },
   { to: '/io-report', label: 'Role I/O Statement' },
   { to: '/sites', label: 'Site Expense Reports' },
+  { to: '/indirect-bills', label: 'Indirect Bills' },
   { to: '/drivers', label: 'Driver Reports' },
   { to: '/attendance', label: 'Attendance Reports' },
   { to: '/daily-sheet', label: 'Daily Sheet Reports' },
