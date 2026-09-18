@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Download, Share2, UserCheck, UserMinus, UserX, Users } from 'lucide-react';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
@@ -11,18 +12,29 @@ const todayIso = () => new Date().toISOString().split('T')[0];
 const dateLabel = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-IN') : '—');
 
 export default function AttendanceReport() {
+  const [mode, setMode] = useState<DateFilterMode>('single');
   const [date, setDate] = useState(todayIso());
+  const [from, setFrom] = useState(todayIso());
+  const [to, setTo] = useState(todayIso());
   const [data, setData] = useState<any>({ supervisors: [], categories: [] });
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
-  useEffect(() => {
+  const load = (m = mode, d = date, f = from, t = to) => {
     setLoading(true);
+    const params = m === 'single' ? { date: d } : m === 'range' ? { from: f, to: t } : { all: true };
     adminApi
-      .getAttendanceOverview(date)
+      .getAttendanceOverview(params)
       .then(setData)
       .finally(() => setLoading(false));
-  }, [date]);
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const rangeLabel = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
 
   const supervisors = data.supervisors || [];
   const categories = data.categories || [];
@@ -42,9 +54,9 @@ export default function AttendanceReport() {
     setDownloading(true);
     try {
       const { doc, filename } = await buildPdfReport({
-        filename: `attendance-report-${date}.pdf`,
+        filename: `attendance-report-${mode === 'single' ? date : mode === 'range' ? `${from}-to-${to}` : 'all'}.pdf`,
         title: 'Attendance Overview Report',
-        subtitle: `Date: ${dateLabel(date)}`,
+        subtitle: rangeLabel,
         summaryBoxes: [
           { label: 'Supervisors Present', value: present.toString(), color: '#15803d' },
           { label: 'Supervisors Absent', value: absent.toString(), color: '#e23744' },
@@ -54,9 +66,10 @@ export default function AttendanceReport() {
         tables: [
           {
             title: `Supervisor Attendance (${supervisors.length})`,
-            head: ['#', 'Supervisor', 'Site', 'Status', 'Time', 'Location'],
+            head: ['#', 'Date', 'Supervisor', 'Site', 'Status', 'Time', 'Location'],
             body: supervisors.map((s: any, i: number) => [
               i + 1,
+              dateLabel(s.date),
               s.supervisor_name || 'Supervisor',
               s.site_name || '-',
               s.status || 'Absent',
@@ -66,8 +79,9 @@ export default function AttendanceReport() {
           },
           {
             title: `Worker Categories (${categories.length})`,
-            head: ['Category', 'Supervisor', 'Site', 'Present Count', 'Absent Count'],
+            head: ['Date', 'Category', 'Supervisor', 'Site', 'Present Count', 'Absent Count'],
             body: categories.map((c: any) => [
+              dateLabel(c.date),
               c.category,
               c.site_supervisor_name || '-',
               c.site_name || '-',
@@ -87,9 +101,9 @@ export default function AttendanceReport() {
     setDownloading(true);
     try {
       const pdf = await buildPdfReport({
-        filename: `attendance-report-${date}.pdf`,
+        filename: `attendance-report-${mode === 'single' ? date : mode === 'range' ? `${from}-to-${to}` : 'all'}.pdf`,
         title: 'Attendance Overview Report',
-        subtitle: `Date: ${dateLabel(date)}`,
+        subtitle: rangeLabel,
         summaryBoxes: [
           { label: 'Supervisors Present', value: present.toString(), color: '#15803d' },
           { label: 'Supervisors Absent', value: absent.toString(), color: '#e23744' },
@@ -99,9 +113,10 @@ export default function AttendanceReport() {
         tables: [
           {
             title: `Supervisor Attendance (${supervisors.length})`,
-            head: ['#', 'Supervisor', 'Site', 'Status', 'Time', 'Location'],
+            head: ['#', 'Date', 'Supervisor', 'Site', 'Status', 'Time', 'Location'],
             body: supervisors.map((s: any, i: number) => [
               i + 1,
+              dateLabel(s.date),
               s.supervisor_name || 'Supervisor',
               s.site_name || '-',
               s.status || 'Absent',
@@ -111,7 +126,7 @@ export default function AttendanceReport() {
           },
         ],
       });
-      const text = `Attendance Report (${dateLabel(date)})\nSupervisors Present: ${present} / ${supervisors.length}\nWorkers Logged: ${workerPresent} present, ${workerAbsent} absent`;
+      const text = `Attendance Report (${rangeLabel})\nSupervisors Present: ${present} / ${supervisors.length}\nWorkers Logged: ${workerPresent} present, ${workerAbsent} absent`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -121,14 +136,19 @@ export default function AttendanceReport() {
   return (
     <div>
       <h1 className="page-title">Attendance Reports</h1>
-      <p className="page-subtitle">Supervisor check-ins and worker headcounts for a chosen date.</p>
+      <p className="page-subtitle">Supervisor check-ins and worker headcounts.</p>
 
-      <div className="toolbar">
-        <button className="btn secondary" onClick={() => setDate(todayIso())}>
-          Today
-        </button>
-        <input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} />
-      </div>
+      <DateFilterBar
+        mode={mode}
+        onModeChange={(m) => { setMode(m); load(m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); load('single', d, from, to); }}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); load('range', date, f, t); }}
+      />
 
       <div className="summary-row">
         <SummaryCard label="Supervisors Present" value={present.toString()} color="#15803d" icon={UserCheck} />
@@ -157,8 +177,9 @@ export default function AttendanceReport() {
           <DataTable<any>
             rowKey={(s) => s.id}
             rows={supervisors}
-            emptyText="No supervisor attendance for this date."
+            emptyText="No supervisor attendance for this selection."
             columns={[
+              { header: 'Date', render: (s: any) => dateLabel(s.date) },
               {
                 header: 'Photo',
                 render: (s: any) => {
@@ -187,7 +208,7 @@ export default function AttendanceReport() {
                   if (!s.selfie_url) return null;
                   const src = s.selfie_url.startsWith('http') || s.selfie_url.startsWith('/') ? s.selfie_url : `/${s.selfie_url}`;
                   return (
-                    <button className="btn secondary no-print" onClick={() => downloadImage(src, `${s.supervisor_name}-${date}.jpg`)}>
+                    <button className="btn secondary no-print" onClick={() => downloadImage(src, `${s.supervisor_name}-${s.date}.jpg`)}>
                       Download
                     </button>
                   );
@@ -205,6 +226,7 @@ export default function AttendanceReport() {
             rowKey={(c) => c.id}
             rows={items}
             columns={[
+              { header: 'Date', render: (c: any) => dateLabel(c.date) },
               {
                 header: 'Photo',
                 render: (c: any) => (c.image_url?.startsWith('http') ? <img className="thumb" src={c.image_url} /> : '—'),
@@ -220,7 +242,7 @@ export default function AttendanceReport() {
       ))}
       {!loading && categories.length === 0 && (
         <div className="card">
-          <div className="empty-note">No worker attendance for this date.</div>
+          <div className="empty-note">No worker attendance for this selection.</div>
         </div>
       )}
     </div>

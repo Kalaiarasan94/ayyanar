@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDownCircle, ArrowUpCircle, Download, FileSpreadsheet, Share2 } from 'lucide-react';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
-import DateRangePicker from '../components/DateRangePicker';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
@@ -13,16 +13,19 @@ const dateLabel = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-I
 const todayIso = () => new Date().toISOString().split('T')[0];
 
 export default function DayBook() {
+  const [mode, setMode] = useState<DateFilterMode>('single');
+  const [date, setDate] = useState(todayIso());
   const [from, setFrom] = useState(todayIso());
   const [to, setTo] = useState(todayIso());
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
-  const load = (f = from, t = to) => {
+  const load = (m = mode, d = date, f = from, t = to) => {
     setLoading(true);
+    const [qFrom, qTo] = m === 'single' ? [d, d] : m === 'range' ? [f, t] : [undefined, undefined];
     accountsApi
-      .getDayBook(f || undefined, t || undefined)
+      .getDayBook(qFrom, qTo)
       .then(setRows)
       .finally(() => setLoading(false));
   };
@@ -32,6 +35,8 @@ export default function DayBook() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const rangeLabel = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
+
   const totalIn = rows.filter((r) => r.flow === 'IN').reduce((s, r) => s + Number(r.amount), 0);
   const totalOut = rows.filter((r) => r.flow === 'OUT').reduce((s, r) => s + Number(r.amount), 0);
 
@@ -40,9 +45,9 @@ export default function DayBook() {
     setDownloading(true);
     try {
       const { doc, filename } = await buildPdfReport({
-        filename: `daybook-${from}-to-${to}.pdf`,
+        filename: `daybook-${mode === 'single' ? date : mode === 'range' ? `${from}-to-${to}` : 'all'}.pdf`,
         title: 'Day Book Statement',
-        subtitle: `Transactions from ${dateLabel(from)} to ${dateLabel(to)}`,
+        subtitle: `Transactions — ${rangeLabel}`,
         orientation: 'landscape',
         summaryBoxes: [
           { label: 'Total Received', value: rupees(totalIn), color: '#15803d' },
@@ -79,9 +84,9 @@ export default function DayBook() {
     setDownloading(true);
     try {
       const pdf = await buildPdfReport({
-        filename: `daybook-${from}-to-${to}.pdf`,
+        filename: `daybook-${mode === 'single' ? date : mode === 'range' ? `${from}-to-${to}` : 'all'}.pdf`,
         title: 'Day Book Statement',
-        subtitle: `Transactions from ${dateLabel(from)} to ${dateLabel(to)}`,
+        subtitle: `Transactions — ${rangeLabel}`,
         orientation: 'landscape',
         summaryBoxes: [
           { label: 'Total Received', value: rupees(totalIn), color: '#15803d' },
@@ -106,7 +111,7 @@ export default function DayBook() {
           },
         ],
       });
-      const text = `Day Book Statement (${dateLabel(from)} to ${dateLabel(to)})\nReceived: ${rupees(totalIn)}\nPaid: ${rupees(totalOut)}\nNet Position: ${rupees(totalIn - totalOut)}`;
+      const text = `Day Book Statement (${rangeLabel})\nReceived: ${rupees(totalIn)}\nPaid: ${rupees(totalOut)}\nNet Position: ${rupees(totalIn - totalOut)}`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -120,15 +125,25 @@ export default function DayBook() {
         .map(csvCell)
         .join(',')
     );
-    exportCsv(`daybook-${from}-to-${to}.csv`, [header.join(','), ...lines].join('\n'));
+    exportCsv(`daybook-${mode === 'single' ? date : mode === 'range' ? `${from}-to-${to}` : 'all'}.csv`, [header.join(','), ...lines].join('\n'));
   };
 
   return (
     <div>
       <h1 className="page-title">Day Book</h1>
-      <p className="page-subtitle">Every real transaction across all role books for a date range.</p>
+      <p className="page-subtitle">Every real transaction across all role books.</p>
 
-      <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} onApply={() => load(from, to)} />
+      <DateFilterBar
+        mode={mode}
+        onModeChange={(m) => { setMode(m); load(m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); load('single', d, from, to); }}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); load('range', date, f, t); }}
+      />
 
       <div className="summary-row">
         <SummaryCard label="Total Received" value={rupees(totalIn)} color="#15803d" icon={ArrowDownCircle} />

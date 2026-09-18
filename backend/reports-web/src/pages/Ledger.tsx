@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowDownCircle, ArrowUpCircle, Download, FileSpreadsheet, Share2, Wallet } from 'lucide-react';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
-import DateRangePicker from '../components/DateRangePicker';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
@@ -10,18 +10,22 @@ import { csvCell, exportCsv } from '../services/printReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-IN') : '—');
+const todayIso = () => new Date().toISOString().split('T')[0];
 
 export default function Ledger() {
+  const [mode, setMode] = useState<DateFilterMode>('all');
+  const [date, setDate] = useState(todayIso());
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
-  const load = (f = from, t = to) => {
+  const load = (m = mode, d = date, f = from, t = to) => {
     setLoading(true);
+    const [qFrom, qTo] = m === 'single' ? [d, d] : m === 'range' ? [f, t] : [undefined, undefined];
     accountsApi
-      .getLedger(f || undefined, t || undefined)
+      .getLedger(qFrom, qTo)
       .then(setRows)
       .finally(() => setLoading(false));
   };
@@ -30,6 +34,8 @@ export default function Ledger() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const rangeLabel = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
 
   const totalReceived = rows.reduce((s, r) => s + Number(r.receivedFrom || 0), 0);
   const totalPaid = rows.reduce((s, r) => s + Number(r.paidTo || 0), 0);
@@ -50,9 +56,9 @@ export default function Ledger() {
     setDownloading(true);
     try {
       const { doc, filename } = await buildPdfReport({
-        filename: `ledger-${from || 'all'}-to-${to || 'all'}.pdf`,
+        filename: `ledger-${mode === 'single' ? date : mode === 'range' ? `${from}-to-${to}` : 'all'}.pdf`,
         title: 'Party Ledger Statement',
-        subtitle: from && to ? `From ${dateLabel(from)} to ${dateLabel(to)}` : 'All Activity',
+        subtitle: rangeLabel,
         summaryBoxes: [
           { label: 'Total Received', value: rupees(totalReceived), color: '#15803d' },
           { label: 'Total Paid', value: rupees(totalPaid), color: '#e23744' },
@@ -84,9 +90,9 @@ export default function Ledger() {
     setDownloading(true);
     try {
       const pdf = await buildPdfReport({
-        filename: `ledger-${from || 'all'}-to-${to || 'all'}.pdf`,
+        filename: `ledger-${mode === 'single' ? date : mode === 'range' ? `${from}-to-${to}` : 'all'}.pdf`,
         title: 'Party Ledger Statement',
-        subtitle: from && to ? `From ${dateLabel(from)} to ${dateLabel(to)}` : 'All Activity',
+        subtitle: rangeLabel,
         summaryBoxes: [
           { label: 'Total Received', value: rupees(totalReceived), color: '#15803d' },
           { label: 'Total Paid', value: rupees(totalPaid), color: '#e23744' },
@@ -105,7 +111,7 @@ export default function Ledger() {
           },
         ],
       });
-      const text = `Ledger Statement\nTotal Received: ${rupees(totalReceived)}\nTotal Paid: ${rupees(totalPaid)}\nNet: ${rupees(totalReceived - totalPaid)}`;
+      const text = `Ledger Statement (${rangeLabel})\nTotal Received: ${rupees(totalReceived)}\nTotal Paid: ${rupees(totalPaid)}\nNet: ${rupees(totalReceived - totalPaid)}`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -129,7 +135,17 @@ export default function Ledger() {
       <h1 className="page-title">Ledger</h1>
       <p className="page-subtitle">Every party's inputs first, then every party's outputs — across all roles.</p>
 
-      <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} onApply={() => load(from, to)} onClear={() => { setFrom(''); setTo(''); load('', ''); }} />
+      <DateFilterBar
+        mode={mode}
+        onModeChange={(m) => { setMode(m); load(m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); load('single', d, from, to); }}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); load('range', date, f, t); }}
+      />
 
       {!loading && (
         <div className="summary-row">

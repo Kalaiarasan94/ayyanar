@@ -3,13 +3,14 @@ import { Download, Fuel, Route, Share2, Truck } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fieldApi } from '../api';
 import DataTable from '../components/DataTable';
-import DateRangePicker from '../components/DateRangePicker';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
+const todayIso = () => new Date().toISOString().split('T')[0];
 
 const summarize = (records: any[], key: 'vehicle_name' | 'driver_name') => {
   const map = new Map<string, { trips: number; total_km: number; diesel_fare: number }>();
@@ -29,12 +30,15 @@ export default function DriverReports() {
   const [bills, setBills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [mode, setMode] = useState<DateFilterMode>('all');
+  const [date, setDate] = useState(todayIso());
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
-  const load = (f = from, t = to) => {
+  const load = (m = mode, d = date, f = from, t = to) => {
     setLoading(true);
-    Promise.all([fieldApi.getDriverRecords(f || undefined, t || undefined), fieldApi.getDriverBills(f || undefined, t || undefined)])
+    const [qFrom, qTo] = m === 'single' ? [d, d] : m === 'range' ? [f, t] : [undefined, undefined];
+    Promise.all([fieldApi.getDriverRecords(qFrom, qTo), fieldApi.getDriverBills(qFrom, qTo)])
       .then(([r, b]) => {
         setRecords(r);
         setBills(b);
@@ -47,7 +51,7 @@ export default function DriverReports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const rangeLabel = from && to ? `${dateLabel(from)} to ${dateLabel(to)}` : from ? `From ${dateLabel(from)}` : to ? `Until ${dateLabel(to)}` : 'All Time';
+  const rangeLabel = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
 
   const totalKm = records.reduce((s, r) => s + Number(r.total_km || 0), 0);
   const totalDiesel = records.reduce((s, r) => s + Number(r.diesel_fare || 0), 0);
@@ -140,7 +144,17 @@ export default function DriverReports() {
       <h1 className="page-title">Driver Reports</h1>
       <p className="page-subtitle">Trip records and diesel bills across all drivers.</p>
 
-      <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} onApply={() => load(from, to)} onClear={() => { setFrom(''); setTo(''); load('', ''); }} />
+      <DateFilterBar
+        mode={mode}
+        onModeChange={(m) => { setMode(m); load(m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); load('single', d, from, to); }}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); load('range', date, f, t); }}
+      />
 
       {loading ? (
         <div className="empty-note">Loading…</div>

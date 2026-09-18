@@ -103,10 +103,11 @@ export const fieldController = {
   getIndirectBills: async (req: Request, res: Response): Promise<void> => {
     try {
       const { status, siteId, userId, from, to } = req.query;
-      let query = `SELECT l.*, u.name AS supervisor_name, s.name AS site_name
+      let query = `SELECT l.*, u.name AS supervisor_name, s.name AS site_name, approver.name AS approved_by_name
          FROM ledger l
          LEFT JOIN users u ON l.user_id = u.id
          LEFT JOIN sites s ON l.site_id = s.id
+         LEFT JOIN users approver ON l.approved_by = approver.id
          WHERE l.payment_mode = 'Indirect'`;
       const params: any[] = [];
 

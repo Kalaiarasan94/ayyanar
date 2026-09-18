@@ -3,13 +3,14 @@ import { ArrowDownCircle, ArrowUpCircle, Download, Share2, Wallet } from 'lucide
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { accountsApi, adminApi } from '../api';
 import DataTable from '../components/DataTable';
-import DateRangePicker from '../components/DateRangePicker';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
+const todayIso = () => new Date().toISOString().split('T')[0];
 
 const ROLES = ['Admin', 'Supervisor', 'Owner'];
 
@@ -19,16 +20,19 @@ export default function IoReport() {
   // specific supervisor instead of the whole team's combined book
   const [supervisors, setSupervisors] = useState<{ id: any; name: string }[]>([]);
   const [supervisorId, setSupervisorId] = useState<string | null>(null);
+  const [mode, setMode] = useState<DateFilterMode>('all');
+  const [date, setDate] = useState(todayIso());
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
-  const load = (r = role, f = from, t = to, userId = supervisorId) => {
+  const load = (r = role, m = mode, d = date, f = from, t = to, userId = supervisorId) => {
     setLoading(true);
+    const [qFrom, qTo] = m === 'single' ? [d, d] : m === 'range' ? [f, t] : [undefined, undefined];
     accountsApi
-      .getIoReport(r, f || undefined, t || undefined, r === 'Supervisor' ? userId || undefined : undefined)
+      .getIoReport(r, qFrom, qTo, r === 'Supervisor' ? userId || undefined : undefined)
       .then(setReport)
       .finally(() => setLoading(false));
   };
@@ -42,21 +46,21 @@ export default function IoReport() {
   const selectRole = (r: string) => {
     setRole(r);
     setSupervisorId(null);
-    load(r, from, to, null);
+    load(r, mode, date, from, to, null);
   };
 
   const selectSupervisor = (id: string | null) => {
     setSupervisorId(id);
-    load(role, from, to, id);
+    load(role, mode, date, from, to, id);
   };
 
   const supervisorName = supervisorId ? supervisors.find((s) => s.id.toString() === supervisorId)?.name : null;
+  const rangeTitle = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
 
   const handleDownload = async () => {
     if (!report) return;
     setDownloading(true);
     try {
-      const rangeTitle = from && to ? `${dateLabel(from)} to ${dateLabel(to)}` : from ? `From ${dateLabel(from)}` : 'All Time';
       const { doc, filename } = await buildPdfReport({
         filename: `${role}${supervisorName ? `-${supervisorName}` : ''}-io-report.pdf`,
         title: `${supervisorName || role} I/O Report`,
@@ -71,7 +75,7 @@ export default function IoReport() {
             title: 'Date-wise Statement',
             head: ['Date', 'Input (Rs)', 'Output (Rs)', 'Balance (Rs)'],
             body: [
-              ...(from ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
+              ...(mode !== 'all' ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
               ...report.rows.map((r: any) => [
                 dateLabel(r.date),
                 Number(r.input).toLocaleString('en-IN'),
@@ -103,7 +107,6 @@ export default function IoReport() {
     if (!report) return;
     setDownloading(true);
     try {
-      const rangeTitle = from && to ? `${dateLabel(from)} to ${dateLabel(to)}` : from ? `From ${dateLabel(from)}` : 'All Time';
       const pdf = await buildPdfReport({
         filename: `${role}${supervisorName ? `-${supervisorName}` : ''}-io-report.pdf`,
         title: `${supervisorName || role} I/O Report`,
@@ -118,7 +121,7 @@ export default function IoReport() {
             title: 'Date-wise Statement',
             head: ['Date', 'Input (Rs)', 'Output (Rs)', 'Balance (Rs)'],
             body: [
-              ...(from ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
+              ...(mode !== 'all' ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
               ...report.rows.map((r: any) => [
                 dateLabel(r.date),
                 Number(r.input).toLocaleString('en-IN'),
@@ -173,17 +176,16 @@ export default function IoReport() {
         </div>
       )}
 
-      <DateRangePicker
+      <DateFilterBar
+        mode={mode}
+        onModeChange={(m) => { setMode(m); load(role, m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); load(role, 'single', d, from, to); }}
         from={from}
         to={to}
         onFromChange={setFrom}
         onToChange={setTo}
-        onApply={() => load(role, from, to)}
-        onClear={() => {
-          setFrom('');
-          setTo('');
-          load(role, '', '');
-        }}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); load(role, 'range', date, f, t); }}
       />
 
       {loading ? (

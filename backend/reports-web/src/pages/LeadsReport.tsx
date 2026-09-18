@@ -2,24 +2,39 @@ import { useEffect, useState } from 'react';
 import { Download, FileSpreadsheet, Share2 } from 'lucide-react';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
 
 const dateLabel = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-IN') : '—');
+const todayIso = () => new Date().toISOString().split('T')[0];
 
 export default function LeadsReport() {
+  const [mode, setMode] = useState<DateFilterMode>('all');
+  const [date, setDate] = useState(todayIso());
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [leads, setLeads] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
-  useEffect(() => {
+  const load = (m = mode, d = date, f = from, t = to) => {
+    setLoading(true);
+    const params = m === 'single' ? { date: d } : m === 'range' ? { from: f, to: t } : {};
     adminApi
-      .getLeads()
+      .getLeads(params)
       .then(setLeads)
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const rangeLabel = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
 
   const total = leads.length;
   const converted = leads.filter((l) => l.status === 'Converted').length;
@@ -41,7 +56,7 @@ export default function LeadsReport() {
       const { doc, filename } = await buildPdfReport({
         filename: 'leads-report.pdf',
         title: 'Leads & Marketing Pipeline Report',
-        subtitle: `Generated on ${new Date().toLocaleDateString('en-IN')}`,
+        subtitle: rangeLabel,
         summaryBoxes: [
           { label: 'Total Leads', value: total.toString() },
           { label: 'Converted', value: converted.toString(), color: '#15803d' },
@@ -86,7 +101,7 @@ export default function LeadsReport() {
       const pdf = await buildPdfReport({
         filename: 'leads-report.pdf',
         title: 'Leads & Marketing Pipeline Report',
-        subtitle: `Generated on ${new Date().toLocaleDateString('en-IN')}`,
+        subtitle: rangeLabel,
         summaryBoxes: [
           { label: 'Total Leads', value: total.toString() },
           { label: 'Converted', value: converted.toString(), color: '#15803d' },
@@ -105,7 +120,7 @@ export default function LeadsReport() {
           },
         ],
       });
-      const text = `Leads Pipeline Report\nTotal Leads: ${total}\nConverted: ${converted}\nConversion Rate: ${conversionRate}`;
+      const text = `Leads Pipeline Report (${rangeLabel})\nTotal Leads: ${total}\nConverted: ${converted}\nConversion Rate: ${conversionRate}`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -122,6 +137,18 @@ export default function LeadsReport() {
     <div>
       <h1 className="page-title">Leads Report</h1>
       <p className="page-subtitle">Pipeline by status and channel, with conversion rate.</p>
+
+      <DateFilterBar
+        mode={mode}
+        onModeChange={(m) => { setMode(m); load(m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); load('single', d, from, to); }}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); load('range', date, f, t); }}
+      />
 
       {loading ? (
         <div className="empty-note">Loading…</div>

@@ -3,6 +3,7 @@ import { Banknote, Download, FileSpreadsheet, FileText, Share2, Users, Wallet } 
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, buildSingleDailySheetPdfDoc, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
@@ -12,29 +13,12 @@ const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en-IN') : '—');
 const todayIso = () => new Date().toISOString().split('T')[0];
 
-const getYesterdayIso = () => {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().split('T')[0];
-};
-
-const get7DaysAgoIso = () => {
-  const d = new Date();
-  d.setDate(d.getDate() - 7);
-  return d.toISOString().split('T')[0];
-};
-
-const getFirstDayOfMonthIso = () => {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-};
-
 const PIE_COLORS = ['#e23744', '#cb202d', '#8c0f16', '#15803d', '#8c7576'];
 
 export default function DailySheetReport() {
-  const [filterMode, setFilterMode] = useState<'single' | 'range' | 'all'>('single');
+  const [filterMode, setFilterMode] = useState<DateFilterMode>('single');
   const [date, setDate] = useState(todayIso());
-  const [from, setFrom] = useState(get7DaysAgoIso());
+  const [from, setFrom] = useState(todayIso());
   const [to, setTo] = useState(todayIso());
   const [sheets, setSheets] = useState<any[]>([]);
   const [supervisor, setSupervisor] = useState<string | null>(null);
@@ -42,17 +26,9 @@ export default function DailySheetReport() {
   const [downloading, setDownloading] = useState(false);
   const [detail, setDetail] = useState<any>(null);
 
-  const fetchSheets = () => {
+  const fetchSheets = (m = filterMode, d = date, f = from, t = to) => {
     setLoading(true);
-    let params: any = undefined;
-    if (filterMode === 'single') {
-      params = { date };
-    } else if (filterMode === 'range') {
-      params = { from, to };
-    } else {
-      params = {};
-    }
-
+    const params = m === 'single' ? { date: d } : m === 'range' ? { from: f, to: t } : {};
     adminApi
       .getAllDailySheets(params)
       .then(setSheets)
@@ -62,7 +38,7 @@ export default function DailySheetReport() {
   useEffect(() => {
     fetchSheets();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterMode, date]);
+  }, []);
 
   const supervisors = Array.from(new Set(sheets.map((s) => s.supervisor_name))).filter(Boolean).sort();
   const filtered = supervisor ? sheets.filter((s) => s.supervisor_name === supervisor) : sheets;
@@ -100,36 +76,12 @@ export default function DailySheetReport() {
     { name: 'Vehicle & Rental', value: vehicleRentalTotal },
   ].filter((d) => d.value > 0);
 
-  const setPresetToday = () => {
-    setFilterMode('single');
-    setDate(todayIso());
-  };
-
-  const setPresetYesterday = () => {
-    setFilterMode('single');
-    setDate(getYesterdayIso());
-  };
-
-  const setPreset7Days = () => {
-    setFrom(get7DaysAgoIso());
-    setTo(todayIso());
-    setFilterMode('range');
-  };
-
-  const setPresetThisMonth = () => {
-    setFrom(getFirstDayOfMonthIso());
-    setTo(todayIso());
-    setFilterMode('range');
-  };
+  const rangeSubtitle = filterMode === 'single' ? `Date: ${dateLabel(date)}` : filterMode === 'range' ? `Range: ${dateLabel(from)} to ${dateLabel(to)}` : 'All Submitted Daily Sheets';
 
   const handleDownloadPdf = async () => {
     if (filtered.length === 0) return;
     setDownloading(true);
     try {
-      let rangeSubtitle = 'All Submitted Daily Sheets';
-      if (filterMode === 'single') rangeSubtitle = `Date: ${dateLabel(date)}`;
-      else if (filterMode === 'range') rangeSubtitle = `Range: ${dateLabel(from)} to ${dateLabel(to)}`;
-
       const { doc, filename } = await buildPdfReport({
         filename: `daily-sheets-${filterMode === 'single' ? date : 'report'}.pdf`,
         title: 'Daily Sheet Reports',
@@ -176,10 +128,6 @@ export default function DailySheetReport() {
     if (filtered.length === 0) return;
     setDownloading(true);
     try {
-      let rangeSubtitle = 'All Submitted Daily Sheets';
-      if (filterMode === 'single') rangeSubtitle = `Date: ${dateLabel(date)}`;
-      else if (filterMode === 'range') rangeSubtitle = `Range: ${dateLabel(from)} to ${dateLabel(to)}`;
-
       const pdf = await buildPdfReport({
         filename: `daily-sheets-${filterMode === 'single' ? date : 'report'}.pdf`,
         title: 'Daily Sheet Reports',

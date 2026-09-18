@@ -163,7 +163,28 @@ export const adminController = {
 
   getLeads: async (req: Request, res: Response): Promise<void> => {
     try {
-      const result = await db.query('SELECT * FROM leads ORDER BY created_at DESC');
+      const dateParam = req.query.date as string | undefined;
+      const fromParam = req.query.from as string | undefined;
+      const toParam = req.query.to as string | undefined;
+
+      let sql = 'SELECT * FROM leads';
+      const params: any[] = [];
+      if (dateParam) {
+        sql += ' WHERE DATE(created_at) = ?';
+        params.push(dateParam);
+      } else if (fromParam && toParam) {
+        sql += ' WHERE DATE(created_at) BETWEEN ? AND ?';
+        params.push(fromParam, toParam);
+      } else if (fromParam) {
+        sql += ' WHERE DATE(created_at) >= ?';
+        params.push(fromParam);
+      } else if (toParam) {
+        sql += ' WHERE DATE(created_at) <= ?';
+        params.push(toParam);
+      }
+      sql += ' ORDER BY created_at DESC';
+
+      const result = await db.query(sql, params);
       res.status(200).json(result.rows);
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
@@ -172,11 +193,40 @@ export const adminController = {
 
   getAttendanceOverview: async (req: Request, res: Response): Promise<void> => {
     try {
-      const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+      const dateParam = req.query.date as string | undefined;
+      const fromParam = req.query.from as string | undefined;
+      const toParam = req.query.to as string | undefined;
+      const allTime = req.query.all === '1' || req.query.all === 'true';
       const supervisorId = req.query.supervisorId;
 
+      // Exact date wins (default, used by every existing caller); otherwise a
+      // from/to range; otherwise, unless "all time" was explicitly asked for
+      // (?all=1), fall back to today so old callers that pass nothing keep
+      // seeing today's snapshot exactly as before.
+      let dateClause = '';
+      let dateParams: any[] = [];
+      if (!allTime) {
+        if (dateParam) {
+          dateClause = ' = ?';
+          dateParams = [dateParam];
+        } else if (fromParam && toParam) {
+          dateClause = ' BETWEEN ? AND ?';
+          dateParams = [fromParam, toParam];
+        } else if (fromParam) {
+          dateClause = ' >= ?';
+          dateParams = [fromParam];
+        } else if (toParam) {
+          dateClause = ' <= ?';
+          dateParams = [toParam];
+        } else {
+          dateClause = ' = ?';
+          dateParams = [new Date().toISOString().split('T')[0]];
+        }
+      }
+      const dateFilter = (col: string) => (dateClause ? ` AND ${col}${dateClause}` : '');
+
       let workerQuery = `
-        SELECT 
+        SELECT
           a.id,
           a.date,
           a.status,
@@ -187,14 +237,14 @@ export const adminController = {
         FROM attendance a
         LEFT JOIN workers w ON a.worker_id = w.id
         LEFT JOIN sites s ON a.site_id = s.id
-        WHERE a.date = ?
+        WHERE 1=1${dateFilter('a.date')}
       `;
-      const workerParams: any[] = [date];
+      const workerParams: any[] = [...dateParams];
       if (supervisorId) {
         workerQuery += ' AND s.supervisor_id = ?';
         workerParams.push(parseInt(supervisorId.toString()));
       }
-      workerQuery += ' ORDER BY s.name ASC, w.name ASC';
+      workerQuery += ' ORDER BY a.date DESC, s.name ASC, w.name ASC';
 
       const workerAttendance = await db.query(workerQuery, workerParams);
 
@@ -215,14 +265,14 @@ export const adminController = {
         FROM attendance_categories ac
         LEFT JOIN sites s ON ac.site_id = s.id
         LEFT JOIN users u ON s.supervisor_id = u.id
-        WHERE ac.date = ?
+        WHERE 1=1${dateFilter('ac.date')}
       `;
-      const categoryParams: any[] = [date];
+      const categoryParams: any[] = [...dateParams];
       if (supervisorId) {
         categoryQuery += ' AND s.supervisor_id = ?';
         categoryParams.push(parseInt(supervisorId.toString()));
       }
-      categoryQuery += ' ORDER BY s.name ASC, ac.category ASC';
+      categoryQuery += ' ORDER BY ac.date DESC, s.name ASC, ac.category ASC';
 
       const categoryAttendance = await db.query(categoryQuery, categoryParams);
 
@@ -243,19 +293,19 @@ export const adminController = {
         FROM supervisor_attendance sa
         LEFT JOIN users u ON sa.user_id = u.id
         LEFT JOIN sites s ON sa.site_id = s.id
-        WHERE sa.date = ?
+        WHERE 1=1${dateFilter('sa.date')}
       `;
-      const supervisorParams: any[] = [date];
+      const supervisorParams: any[] = [...dateParams];
       if (supervisorId) {
         supervisorQuery += ' AND sa.user_id = ?';
         supervisorParams.push(parseInt(supervisorId.toString()));
       }
-      supervisorQuery += ' ORDER BY u.name ASC';
+      supervisorQuery += ' ORDER BY sa.date DESC, u.name ASC';
 
       const supervisorAttendance = await db.query(supervisorQuery, supervisorParams);
 
       res.status(200).json({
-        date,
+        date: dateParam || (allTime || fromParam || toParam ? null : new Date().toISOString().split('T')[0]),
         workers: workerAttendance.rows || [],
         categories: categoryAttendance.rows || [],
         supervisors: supervisorAttendance.rows || [],

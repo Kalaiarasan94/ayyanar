@@ -45,7 +45,8 @@ export const accountsApi = {
 
 export const adminApi = {
   getAnalytics: () => request<any>('/analytics/dashboard'),
-  getAttendanceOverview: (date?: string) => request<any>(`/attendance/overview${qs({ date })}`),
+  getAttendanceOverview: (params?: { date?: string; from?: string; to?: string; all?: boolean }) =>
+    request<any>(`/attendance/overview${qs({ ...params, all: params?.all ? 1 : undefined })}`),
   getSites: () => request<any[]>('/sites'),
   createSite: (data: { name: string; location?: string }) =>
     request<{ success: boolean; message?: string }>('/sites', { method: 'POST', body: JSON.stringify(data) }),
@@ -56,7 +57,7 @@ export const adminApi = {
   getStaff: () => request<any[]>('/staff'),
   deleteStaff: (id: string | number) =>
     request<{ success: boolean; message?: string }>(`/staff/${id}`, { method: 'DELETE' }),
-  getLeads: () => request<any[]>('/leads'),
+  getLeads: (params?: { date?: string; from?: string; to?: string }) => request<any[]>(`/leads${qs(params || {})}`),
   getAllDailySheets: (params?: string | { date?: string; from?: string; to?: string }) => {
     const q = typeof params === 'string' ? { date: params } : params;
     return request<any[]>(`/daily-sheets${qs(q || {})}`);
@@ -72,4 +73,6 @@ export const fieldApi = {
     request<{ success: boolean; message?: string }>(`/expenses/${id}`, { method: 'DELETE' }),
   getDriverRecords: (from?: string, to?: string) => request<any[]>(`/driver-records${qs({ from, to })}`),
   getDriverBills: (from?: string, to?: string) => request<any[]>(`/driver-bills${qs({ from, to })}`),
+  getIndirectBills: (params?: { status?: 'Pending' | 'Approved'; siteId?: string | number; userId?: string | number; from?: string; to?: string }) =>
+    request<any[]>(`/expenses/indirect${qs(params || {})}`),
 };

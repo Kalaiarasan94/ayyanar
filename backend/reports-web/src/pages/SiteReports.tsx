@@ -3,7 +3,7 @@ import { Banknote, CreditCard, Download, Share2, Wallet } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { adminApi, fieldApi } from '../api';
 import DataTable from '../components/DataTable';
-import DateRangePicker from '../components/DateRangePicker';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
@@ -11,16 +11,7 @@ import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
 const dateInputValue = (iso: string) => (iso ? iso.toString().split('T')[0] : '');
-
-const toIso = (d: Date) => d.toISOString().split('T')[0];
-const getFirstDayOfMonth = (monthsAgo = 0) => {
-  const d = new Date();
-  return toIso(new Date(d.getFullYear(), d.getMonth() - monthsAgo, 1));
-};
-const getLastDayOfMonth = (monthsAgo = 0) => {
-  const d = new Date();
-  return toIso(new Date(d.getFullYear(), d.getMonth() - monthsAgo + 1, 0));
-};
+const todayIso = () => new Date().toISOString().split('T')[0];
 
 type EditForm = {
   id: string | number;
@@ -39,7 +30,9 @@ export default function SiteReports() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
-  // Date filter — empty from/to means "all time" (the previous default)
+  // Date filter — starts on "All Time" (the previous default)
+  const [mode, setMode] = useState<DateFilterMode>('all');
+  const [date, setDate] = useState(todayIso());
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
@@ -55,11 +48,12 @@ export default function SiteReports() {
     adminApi.getAnalytics().then((a) => setAllSitesBreakdown(a?.siteWiseExpenseBreakdown || []));
   }, []);
 
-  const loadRows = (f = from, t = to) => {
+  const loadRows = (m = mode, d = date, f = from, t = to) => {
     if (!siteId) return;
     setLoading(true);
+    const [qFrom, qTo] = m === 'single' ? [d, d] : m === 'range' ? [f, t] : [undefined, undefined];
     fieldApi
-      .getLedgerBySite(siteId, undefined, f || undefined, t || undefined)
+      .getLedgerBySite(siteId, undefined, qFrom, qTo)
       .then(setRows)
       .finally(() => setLoading(false));
   };
@@ -67,13 +61,7 @@ export default function SiteReports() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadRows, [siteId]);
 
-  const applyRange = (f: string, t: string) => {
-    setFrom(f);
-    setTo(t);
-    loadRows(f, t);
-  };
-  const isAllTime = !from && !to;
-  const rangeLabel = isAllTime ? 'All Time' : `${from ? dateLabel(from) : 'Start'} to ${to ? dateLabel(to) : 'Now'}`;
+  const rangeLabel = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
 
   const site = sites.find((s) => s.id.toString() === siteId);
   const direct = rows.filter((r) => r.payment_mode === 'Direct');
@@ -256,19 +244,18 @@ export default function SiteReports() {
         ))}
       </div>
 
-      <div className="chip-row" style={{ marginBottom: 12 }}>
-        <button className={`chip${isAllTime ? ' active' : ''}`} onClick={() => applyRange('', '')}>
-          All Time
-        </button>
-        <button className="chip" onClick={() => applyRange(getFirstDayOfMonth(0), getLastDayOfMonth(0))}>
-          This Month
-        </button>
-        <button className="chip" onClick={() => applyRange(getFirstDayOfMonth(1), getLastDayOfMonth(1))}>
-          Last Month
-        </button>
-      </div>
-      <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} onApply={() => loadRows()} onClear={() => applyRange('', '')} />
-      <p className="text-muted" style={{ fontSize: 12.5, margin: '10px 0 18px' }}>Showing: {rangeLabel}</p>
+      <DateFilterBar
+        mode={mode}
+        onModeChange={(m) => { setMode(m); loadRows(m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); loadRows('single', d, from, to); }}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); loadRows('range', date, f, t); }}
+      />
+      <p className="text-muted" style={{ fontSize: 12.5, margin: '-6px 0 18px' }}>Showing: {rangeLabel}</p>
 
       {loading ? (
         <div className="empty-note">Loading…</div>
@@ -373,14 +360,14 @@ export default function SiteReports() {
 
             <div className="field-label">Payment Mode</div>
             <div className="chip-row">
-              {(['Direct', 'Indirect'] as const).map((mode) => (
+              {(['Direct', 'Indirect'] as const).map((paymentModeOption) => (
                 <button
-                  key={mode}
+                  key={paymentModeOption}
                   type="button"
-                  className={`chip${editingBill.paymentMode === mode ? ' active' : ''}`}
-                  onClick={() => setEditingBill({ ...editingBill, paymentMode: mode })}
+                  className={`chip${editingBill.paymentMode === paymentModeOption ? ' active' : ''}`}
+                  onClick={() => setEditingBill({ ...editingBill, paymentMode: paymentModeOption })}
                 >
-                  {mode === 'Direct' ? 'Direct (Cash)' : 'Indirect (Credit)'}
+                  {paymentModeOption === 'Direct' ? 'Direct (Cash)' : 'Indirect (Credit)'}
                 </button>
               ))}
             </div>
