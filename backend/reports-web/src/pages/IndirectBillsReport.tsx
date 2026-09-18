@@ -77,12 +77,14 @@ export default function IndirectBillsReport() {
                   b.approval_notes || '-',
                 ]),
                 foot: ['', '', '', 'TOTAL', '', totalAmount.toLocaleString('en-IN'), '', '', ''],
+                columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } },
               }
             : {
                 title: `Pending Indirect Bills (${bills.length})`,
                 head: ['#', 'Date', 'Supervisor', 'Site', 'Category', 'Description', 'Amount (Rs)'],
                 body: bills.map((b, i) => [i + 1, dateLabel(b.date), b.supervisor_name || '-', b.site_name || '-', b.category || '-', b.description || '-', Number(b.amount || 0).toLocaleString('en-IN')]),
                 foot: ['', '', '', '', '', 'TOTAL', totalAmount.toLocaleString('en-IN')],
+                columnStyles: { 6: { halign: 'right' } },
               },
         ],
       });
@@ -110,11 +112,13 @@ export default function IndirectBillsReport() {
                 title: `Approved Indirect Bills (${bills.length})`,
                 head: ['#', 'Supervisor', 'Site', 'Category', 'Approved (Rs)', 'Approved Date', 'Approved By'],
                 body: bills.map((b, i) => [i + 1, b.supervisor_name || '-', b.site_name || '-', b.category || '-', Number(b.approved_amount || 0).toLocaleString('en-IN'), dateLabel(b.approved_date), b.approved_by_name || '-']),
+                columnStyles: { 4: { halign: 'right' } },
               }
             : {
                 title: `Pending Indirect Bills (${bills.length})`,
                 head: ['#', 'Date', 'Supervisor', 'Site', 'Category', 'Amount (Rs)'],
                 body: bills.map((b, i) => [i + 1, dateLabel(b.date), b.supervisor_name || '-', b.site_name || '-', b.category || '-', Number(b.amount || 0).toLocaleString('en-IN')]),
+                columnStyles: { 5: { halign: 'right' } },
               },
         ],
       });

@@ -115,6 +115,7 @@ export default function DailySheetReport() {
               totalReceived.toLocaleString('en-IN'),
               totalSpent.toLocaleString('en-IN'),
             ],
+            columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' } },
           },
         ],
       });
@@ -161,6 +162,7 @@ export default function DailySheetReport() {
               totalReceived.toLocaleString('en-IN'),
               totalSpent.toLocaleString('en-IN'),
             ],
+            columnStyles: { 5: { halign: 'right' }, 6: { halign: 'right' } },
           },
         ],
       });

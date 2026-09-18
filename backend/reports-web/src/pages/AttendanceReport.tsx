@@ -88,6 +88,7 @@ export default function AttendanceReport() {
               c.present_count || 0,
               c.absent_count || 0,
             ]),
+            columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } },
           },
         ],
       });

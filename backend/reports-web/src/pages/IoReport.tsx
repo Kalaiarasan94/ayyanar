@@ -84,6 +84,7 @@ export default function IoReport() {
               ]),
             ],
             foot: ['TOTAL', Number(report.totals.input).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN'), Number(report.totals.closing).toLocaleString('en-IN')],
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
           ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
             ? [
@@ -92,6 +93,7 @@ export default function IoReport() {
                   head: ['Date', 'Site', 'Notes', 'Amount (Rs)'],
                   body: report.indirect.rows.map((r: any) => [dateLabel(r.date), r.site || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
                   foot: ['', '', 'TOTAL', Number(report.indirect.total).toLocaleString('en-IN')],
+                  columnStyles: { 3: { halign: 'right' as const } },
                 },
               ]
             : []),
@@ -130,6 +132,7 @@ export default function IoReport() {
               ]),
             ],
             foot: ['TOTAL', Number(report.totals.input).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN'), Number(report.totals.closing).toLocaleString('en-IN')],
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
           ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
             ? [
@@ -138,6 +141,7 @@ export default function IoReport() {
                   head: ['Date', 'Site', 'Notes', 'Amount (Rs)'],
                   body: report.indirect.rows.map((r: any) => [dateLabel(r.date), r.site || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
                   foot: ['', '', 'TOTAL', Number(report.indirect.total).toLocaleString('en-IN')],
+                  columnStyles: { 3: { halign: 'right' as const } },
                 },
               ]
             : []),

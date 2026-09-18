@@ -70,6 +70,7 @@ export default function DayBook() {
               Number(r.amount).toLocaleString('en-IN'),
             ]),
             foot: ['', '', '', '', '', '', '', 'TOTAL', (totalIn - totalOut).toLocaleString('en-IN')],
+            columnStyles: { 8: { halign: 'right' } },
           },
         ],
       });

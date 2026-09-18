@@ -72,6 +72,7 @@ export default function LeadsReport() {
               r.converted,
               r.total > 0 ? `${Math.round((r.converted / r.total) * 100)}%` : '0%',
             ]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
           {
             title: `All Leads (${leads.length})`,
@@ -117,6 +118,7 @@ export default function LeadsReport() {
               r.converted,
               r.total > 0 ? `${Math.round((r.converted / r.total) * 100)}%` : '0%',
             ]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
         ],
       });

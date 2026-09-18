@@ -79,6 +79,7 @@ export default function Overview() {
               Number(r.totalOut).toLocaleString('en-IN'),
               Number(r.balance).toLocaleString('en-IN'),
             ]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
           {
             title: 'Site-wise Expenses Breakdown',
@@ -90,6 +91,7 @@ export default function Overview() {
               Number(s.petty_cash_costs || 0).toLocaleString('en-IN'),
               Number(s.total_expenses || 0).toLocaleString('en-IN'),
             ]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
           },
         ],
       });
@@ -121,6 +123,7 @@ export default function Overview() {
               Number(r.totalOut).toLocaleString('en-IN'),
               Number(r.balance).toLocaleString('en-IN'),
             ]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
           {
             title: 'Site-wise Expenses Breakdown',
@@ -132,6 +135,7 @@ export default function Overview() {
               Number(s.petty_cash_costs || 0).toLocaleString('en-IN'),
               Number(s.total_expenses || 0).toLocaleString('en-IN'),
             ]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' } },
           },
         ],
       });

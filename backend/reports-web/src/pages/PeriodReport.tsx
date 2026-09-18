@@ -70,11 +70,13 @@ export default function PeriodReport() {
             title: 'Received From',
             head: ['Category', 'Amount (Rs)'],
             body: report.receivedBreakdown.map((b: any) => [b.category, Number(b.total).toLocaleString('en-IN')]),
+            columnStyles: { 1: { halign: 'right' } },
           },
           {
             title: 'Paid To',
             head: ['Category', 'Amount (Rs)'],
             body: report.paidBreakdown.map((b: any) => [b.category, Number(b.total).toLocaleString('en-IN')]),
+            columnStyles: { 1: { halign: 'right' } },
           },
           {
             title: `Vouchers (${report.transactions.length})`,
@@ -87,6 +89,7 @@ export default function PeriodReport() {
               t.party_name || '-',
               Number(t.amount).toLocaleString('en-IN'),
             ]),
+            columnStyles: { 5: { halign: 'right' } },
           },
         ],
       });
@@ -115,11 +118,13 @@ export default function PeriodReport() {
             title: 'Received From',
             head: ['Category', 'Amount (Rs)'],
             body: report.receivedBreakdown.map((b: any) => [b.category, Number(b.total).toLocaleString('en-IN')]),
+            columnStyles: { 1: { halign: 'right' } },
           },
           {
             title: 'Paid To',
             head: ['Category', 'Amount (Rs)'],
             body: report.paidBreakdown.map((b: any) => [b.category, Number(b.total).toLocaleString('en-IN')]),
+            columnStyles: { 1: { halign: 'right' } },
           },
           {
             title: `Vouchers (${report.transactions.length})`,
@@ -132,6 +137,7 @@ export default function PeriodReport() {
               t.party_name || '-',
               Number(t.amount).toLocaleString('en-IN'),
             ]),
+            columnStyles: { 5: { halign: 'right' } },
           },
         ],
       });

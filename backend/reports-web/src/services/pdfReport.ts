@@ -211,6 +211,7 @@ export const buildSingleDailySheetPdfDoc = async (sheet: SingleDailySheetInput):
     styles: { fontSize: 8.5, cellPadding: 5, textColor: DARK, lineColor: BORDER, lineWidth: 0.5 },
     headStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: LIGHT_ROW },
+    columnStyles: { 3: { halign: 'right' } },
   });
 
   y = (doc as any).lastAutoTable.finalY + 16;
@@ -245,6 +246,7 @@ export const buildSingleDailySheetPdfDoc = async (sheet: SingleDailySheetInput):
     headStyles: { fillColor: BRAND_RED, textColor: [255, 255, 255], fontStyle: 'bold' },
     footStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: LIGHT_ROW },
+    columnStyles: { 1: { halign: 'right' } },
   });
 
   y = (doc as any).lastAutoTable.finalY + 16;
@@ -266,6 +268,7 @@ export const buildSingleDailySheetPdfDoc = async (sheet: SingleDailySheetInput):
     headStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
     footStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
     alternateRowStyles: { fillColor: LIGHT_ROW },
+    columnStyles: { 2: { halign: 'right' } },
   });
 
   y = (doc as any).lastAutoTable.finalY + 36;

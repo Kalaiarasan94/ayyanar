@@ -76,11 +76,13 @@ export default function DriverReports() {
             title: 'Vehicle-wise Summary',
             head: ['Vehicle', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
             body: byVehicle.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
           {
             title: 'Driver-wise Summary',
             head: ['Driver', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
             body: byDriver.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
           {
             title: `Trip Detail (${records.length})`,
@@ -96,6 +98,7 @@ export default function DriverReports() {
               r.load_type === 'Rent' ? `Rent / ${r.customer_name || '-'}` : 'Own',
               r.place || '-',
             ]),
+            columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } },
           },
         ],
       });
@@ -124,11 +127,13 @@ export default function DriverReports() {
             title: 'Vehicle-wise Summary',
             head: ['Vehicle', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
             body: byVehicle.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
           {
             title: 'Driver-wise Summary',
             head: ['Driver', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
             body: byDriver.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
           },
         ],
       });

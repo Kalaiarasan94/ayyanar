@@ -148,12 +148,14 @@ export default function SiteReports() {
             head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
             body: direct.map((r, i) => [i + 1, dateLabel(r.date), r.supervisor_name || '-', r.category || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
             foot: ['', '', '', '', 'TOTAL', directTotal.toLocaleString('en-IN')],
+            columnStyles: { 5: { halign: 'right' } },
           },
           {
             title: `Indirect / Credit Bills (${indirect.length})`,
             head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
             body: indirect.map((r, i) => [i + 1, dateLabel(r.date), r.supervisor_name || '-', r.category || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
             foot: ['', '', '', '', 'TOTAL', indirectTotal.toLocaleString('en-IN')],
+            columnStyles: { 5: { halign: 'right' } },
           },
         ],
       });
@@ -181,12 +183,14 @@ export default function SiteReports() {
             head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
             body: direct.map((r, i) => [i + 1, dateLabel(r.date), r.supervisor_name || '-', r.category || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
             foot: ['', '', '', '', 'TOTAL', directTotal.toLocaleString('en-IN')],
+            columnStyles: { 5: { halign: 'right' } },
           },
           {
             title: `Indirect / Credit Bills (${indirect.length})`,
             head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
             body: indirect.map((r, i) => [i + 1, dateLabel(r.date), r.supervisor_name || '-', r.category || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
             foot: ['', '', '', '', 'TOTAL', indirectTotal.toLocaleString('en-IN')],
+            columnStyles: { 5: { halign: 'right' } },
           },
         ],
       });
