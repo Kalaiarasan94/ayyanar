@@ -262,6 +262,27 @@ export const initDb = async () => {
       );
     `);
 
+    // Indirect (credit) bills are settled later, not the moment they're logged —
+    // so they shouldn't reduce the supervisor's cash balance until an Admin/Owner
+    // actually approves the settlement. These columns track that: new Indirect
+    // bills default to 'Pending' in fieldController.logExpense; Direct bills stay
+    // 'Approved' since cash already left at the moment they're logged. Existing
+    // rows default to 'Approved' too, so this migration doesn't create a false
+    // backlog of "pending" approvals out of years of already-settled history.
+    const [approvalColResult] = await pool.execute("SHOW COLUMNS FROM ledger LIKE 'approval_status'");
+    if ((approvalColResult as any[]).length === 0) {
+      await db.query(`
+        ALTER TABLE ledger
+        ADD COLUMN approval_status ENUM('Pending', 'Approved') DEFAULT 'Approved',
+        ADD COLUMN approved_amount DECIMAL(15, 2) NULL,
+        ADD COLUMN approved_date DATE NULL,
+        ADD COLUMN approval_notes TEXT NULL,
+        ADD COLUMN approved_by INT NULL,
+        ADD COLUMN linked_transaction_id INT NULL;
+      `);
+      console.log('Added indirect-bill approval columns to ledger.');
+    }
+
     console.log('MySQL Database initialized successfully.');
   } catch (error) {
     console.error('Failed to initialize database schema:', error);

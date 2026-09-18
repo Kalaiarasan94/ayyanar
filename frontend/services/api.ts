@@ -357,6 +357,22 @@ export const fieldService = {
     request<ApiResponse>(`/expenses/${id}`, {
       method: 'DELETE',
     }),
+  // Indirect (credit) bill approval — Admin/Owner review queue
+  getIndirectBills: (filters?: { status?: 'Pending' | 'Approved'; siteId?: string | number; userId?: string | number; from?: string; to?: string }) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.siteId) params.append('siteId', filters.siteId.toString());
+    if (filters?.userId) params.append('userId', filters.userId.toString());
+    if (filters?.from) params.append('from', filters.from);
+    if (filters?.to) params.append('to', filters.to);
+    const qs = params.toString();
+    return request<any[]>(`/expenses/indirect${qs ? `?${qs}` : ''}`);
+  },
+  approveIndirectBill: (id: string | number, payload: { amount: number; date: string; notes?: string; approvedBy?: string | number | null }) =>
+    request<ApiResponse>(`/expenses/${id}/approve`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
   getSupervisorWallet: (userId: string | number) => request<any>(`/wallet/${userId}`),
   getSupervisorSites: (userId: string | number) => request<any[]>(`/supervisor-sites/${userId}`),
   submitAttendance: (attendance: Record<string, any>) =>

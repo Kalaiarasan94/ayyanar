@@ -339,6 +339,38 @@ export const accountsController = {
         };
       });
 
+      // Indirect-bill settlements are one slice of the Output total above
+      // (they use the 'Indirect Bill Settlement' category — see
+      // fieldController.approveIndirectBill) — listed here separately so the
+      // I/O report can show Input, then Output, then this Indirect-Output
+      // breakdown, in that order.
+      let indirectSql = `SELECT id, date, party_name, description, amount
+         FROM account_transactions
+         WHERE role = ? AND flow = 'OUT' AND category = 'Indirect Bill Settlement'`;
+      const indirectParams: any[] = [role];
+      if (req.query.userId) {
+        indirectSql += ' AND user_id = ?';
+        indirectParams.push(parseInt(req.query.userId.toString()));
+      }
+      if (from) {
+        indirectSql += ' AND date >= ?';
+        indirectParams.push(from);
+      }
+      if (to) {
+        indirectSql += ' AND date <= ?';
+        indirectParams.push(to);
+      }
+      indirectSql += ' ORDER BY date DESC, id DESC';
+      const indirectResult = await db.query(indirectSql, indirectParams);
+      const indirectRows = (indirectResult.rows || []).map((r: any) => ({
+        id: r.id,
+        date: r.date,
+        site: r.party_name,
+        description: r.description,
+        amount: Number(r.amount),
+      }));
+      const indirectTotal = indirectRows.reduce((s: number, r: any) => s + r.amount, 0);
+
       res.status(200).json({
         role,
         opening,
@@ -347,6 +379,10 @@ export const accountsController = {
           input: rows.reduce((s: number, r: any) => s + r.input, 0),
           output: rows.reduce((s: number, r: any) => s + r.output, 0),
           closing: balance,
+        },
+        indirect: {
+          total: indirectTotal,
+          rows: indirectRows,
         },
       });
     } catch (error: any) {

@@ -16,7 +16,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import AppBackground from './components/AppBackground';
 import LogoutButton from '../components/LogoutButton';
@@ -74,6 +74,7 @@ const todayIso = () => new Date().toISOString().split('T')[0];
 const rupeesText = (value: any) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 
 export default function AdminPanelScreen() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<AdminTab>('DASHBOARD');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -94,6 +95,9 @@ export default function AdminPanelScreen() {
   const [driverRecords, setDriverRecords] = useState<any[]>([]);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const [ioRole, setIoRole] = useState<'Admin' | 'Supervisor' | 'Owner'>('Admin');
+  // Only meaningful when ioRole === 'Supervisor': narrows the statement to one
+  // specific supervisor instead of the whole team's combined book
+  const [ioSupervisorId, setIoSupervisorId] = useState<string | null>(null);
   const [ioFrom, setIoFrom] = useState('');
   const [ioTo, setIoTo] = useState('');
   const [ioReport, setIoReport] = useState<any>(null);
@@ -777,7 +781,7 @@ export default function AdminPanelScreen() {
     }
   };
 
-  const fetchIoReport = async (role = ioRole, from = ioFrom, to = ioTo) => {
+  const fetchIoReport = async (role = ioRole, from = ioFrom, to = ioTo, supervisorId = ioSupervisorId) => {
     const dateOk = (v: string) => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
     if (!dateOk(from) || !dateOk(to)) {
       Alert.alert('Invalid Date', 'Use the YYYY-MM-DD format, e.g., 2026-07-01.');
@@ -785,7 +789,7 @@ export default function AdminPanelScreen() {
     }
     setLoading(true);
     try {
-      setIoReport(await accountsService.getIOReport(role, from || undefined, to || undefined));
+      setIoReport(await accountsService.getIOReport(role, from || undefined, to || undefined, role === 'Supervisor' ? supervisorId || undefined : undefined));
     } catch {
       Alert.alert('Data Error', 'Unable to load the I/O report.');
     } finally {
@@ -805,6 +809,12 @@ export default function AdminPanelScreen() {
     if (ioFrom) {
       rows.unshift(['Opening Balance', '', '', Number(ioReport?.opening || 0).toLocaleString('en-IN')]);
     }
+    const indirectRows = (ioReport?.indirect?.rows || []).map((r: any) => [
+      new Date(r.date).toLocaleDateString('en-IN'),
+      r.site || '-',
+      r.description || '-',
+      Number(r.amount).toLocaleString('en-IN'),
+    ]);
     return buildPdfReport({
       filename: `${ioRole}_IO_Report.pdf`,
       title: `${ioRole} I/O Report`,
@@ -816,6 +826,7 @@ export default function AdminPanelScreen() {
       ],
       tables: [
         {
+          title: 'Input & Output — Date-wise',
           head: ['Date', 'Input (Rs)', 'Output (Rs)', 'Balance (Rs)'],
           body: rows,
           foot: [
@@ -826,6 +837,16 @@ export default function AdminPanelScreen() {
           ],
           columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
         },
+        ...(ioRole === 'Supervisor' && indirectRows.length > 0
+          ? [
+              {
+                title: `Indirect Bills Output (${indirectRows.length}) — Rs ${Number(ioReport?.indirect?.total || 0).toLocaleString('en-IN')}`,
+                head: ['Date', 'Site', 'Notes', 'Amount (Rs)'],
+                body: indirectRows,
+                columnStyles: { 3: { halign: 'right' as const } },
+              },
+            ]
+          : []),
       ],
     });
   };
@@ -1661,6 +1682,13 @@ export default function AdminPanelScreen() {
         <LedgerList data={direct} empty="No direct cash bills recorded for this site." onEdit={handleStartEditBill} onDelete={handleDeleteBill} />
 
         <SectionTitle title={`💳 Indirect / Credit Bills (${credit.length})`} />
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#8C0F16', borderRadius: BORDER_RADIUS.md, paddingVertical: 12, marginBottom: 12 }}
+          onPress={() => router.push('/indirect-bills')}
+        >
+          <MaterialIcons name="fact-check" size={18} color="#FFF" />
+          <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>Review & Approve Indirect Bills</Text>
+        </TouchableOpacity>
         <LedgerList data={credit} empty="No indirect credit bills recorded for this site." onEdit={handleStartEditBill} onDelete={handleDeleteBill} />
       </View>
     );
@@ -1782,9 +1810,25 @@ export default function AdminPanelScreen() {
         value={ioRole}
         onChange={(r) => {
           setIoRole(r as 'Admin' | 'Supervisor' | 'Owner');
-          fetchIoReport(r as 'Admin' | 'Supervisor' | 'Owner');
+          setIoSupervisorId(null);
+          fetchIoReport(r as 'Admin' | 'Supervisor' | 'Owner', ioFrom, ioTo, null);
         }}
       />
+
+      {ioRole === 'Supervisor' && supervisors.length > 0 && (
+        <>
+          <Text style={styles.formTitle}>Supervisor</Text>
+          <ChipSelect
+            items={[{ id: '', label: 'All Supervisors (Combined)' }, ...supervisors.map((s) => ({ id: s.id.toString(), label: s.name }))]}
+            value={ioSupervisorId || ''}
+            onChange={(id) => {
+              const supervisorId = id || null;
+              setIoSupervisorId(supervisorId);
+              fetchIoReport(ioRole, ioFrom, ioTo, supervisorId);
+            }}
+          />
+        </>
+      )}
 
       <View style={styles.card}>
         <Text style={styles.formTitle}>Pick Date Range</Text>
@@ -1840,6 +1884,32 @@ export default function AdminPanelScreen() {
         )}
         {(!ioReport || (ioReport.rows || []).length === 0) && <EmptyState text="No transactions for this account in the selected range." />}
       </View>
+
+      {ioRole === 'Supervisor' && (
+        <>
+          <SectionTitle title={`Indirect Bills Output (${(ioReport?.indirect?.rows || []).length})`} />
+          <View style={styles.card}>
+            <Text style={[styles.rowMeta, { marginBottom: 10 }]}>
+              Approved indirect-bill settlements only — this is the part of the Output above that came from credit bills, not cash.
+            </Text>
+            {(ioReport?.indirect?.rows || []).map((r: any) => (
+              <View key={r.id} style={styles.ioRow}>
+                <Text style={styles.ioDateCell}>{new Date(r.date).toLocaleDateString('en-IN')}</Text>
+                <Text style={[styles.ioCell, { flex: 1.4, textAlign: 'left' }]} numberOfLines={1}>{r.site || '-'}</Text>
+                <Text style={[styles.ioCell, { color: COLORS.primary, fontWeight: '900' }]}>{Number(r.amount).toLocaleString('en-IN')}</Text>
+              </View>
+            ))}
+            {ioReport && (ioReport.indirect?.rows || []).length > 0 && (
+              <View style={[styles.ioRow, styles.ioTotalRow]}>
+                <Text style={[styles.ioDateCell, { fontWeight: '900' }]}>TOTAL</Text>
+                <Text style={{ flex: 1.4 }} />
+                <Text style={[styles.ioCell, { color: COLORS.primary, fontWeight: '900' }]}>{Number(ioReport.indirect.total).toLocaleString('en-IN')}</Text>
+              </View>
+            )}
+            {(!ioReport || (ioReport.indirect?.rows || []).length === 0) && <EmptyState text="No indirect bills settled in this range." />}
+          </View>
+        </>
+      )}
     </View>
   );
 

@@ -55,6 +55,16 @@ CREATE TABLE IF NOT EXISTS ledger (
     is_gst BOOLEAN DEFAULT FALSE,
     image_url TEXT NULL,
     date DATE NOT NULL,
+    -- Indirect (credit) bills are settled later: they stay 'Pending' (no
+    -- effect on the supervisor's cash balance) until an Admin/Owner approves
+    -- the settlement, which registers the matching account_transactions OUT.
+    -- Direct bills are 'Approved' immediately since cash already left.
+    approval_status ENUM('Pending', 'Approved') DEFAULT 'Approved',
+    approved_amount DECIMAL(15, 2) NULL,
+    approved_date DATE NULL,
+    approval_notes TEXT NULL,
+    approved_by INT NULL,
+    linked_transaction_id INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL

@@ -14,21 +14,28 @@ export const fieldController = {
       console.log('--- LOG EXPENSE ATTEMPT ---');
       console.log('Payload:', { cleanSiteId, cleanUserId, type, category, amount, paymentMode, imageUrl: imageUrl ? 'Present' : 'Missing' });
       
+      // Indirect (credit) bills are settled later — they start Pending and only
+      // reduce the supervisor's cash balance once Admin/Owner approves the
+      // settlement (see approveIndirectBill). Direct bills are cash-in-hand
+      // paid immediately, so they're Approved from the moment they're logged.
+      const approvalStatus = paymentMode === 'Indirect' ? 'Pending' : 'Approved';
+
       const queryText = `
-        INSERT INTO ledger (site_id, user_id, type, category, description, amount, date, payment_mode, is_gst, image_url)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+        INSERT INTO ledger (site_id, user_id, type, category, description, amount, date, payment_mode, is_gst, image_url, approval_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
       `;
       await db.query(queryText, [
-        cleanSiteId, 
-        cleanUserId, 
-        type, 
-        category, 
-        description, 
-        amount, 
-        date, 
-        paymentMode || 'Direct', 
+        cleanSiteId,
+        cleanUserId,
+        type,
+        category,
+        description,
+        amount,
+        date,
+        paymentMode || 'Direct',
         isGst ? 1 : 0,
-        imageUrl || null
+        imageUrl || null,
+        approvalStatus
       ]);
 
       // If the bill is Direct (Cash) and uploaded by a supervisor/user,
@@ -87,6 +94,117 @@ export const fieldController = {
       res.status(200).json({ success: true, message: 'Bill deleted.' });
     } catch (error: any) {
       console.error('deleteExpense Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  // Lists Indirect (credit) bills for the Admin/Owner approval screen —
+  // optionally filtered by approval status, site, supervisor, or date range.
+  getIndirectBills: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { status, siteId, userId, from, to } = req.query;
+      let query = `SELECT l.*, u.name AS supervisor_name, s.name AS site_name
+         FROM ledger l
+         LEFT JOIN users u ON l.user_id = u.id
+         LEFT JOIN sites s ON l.site_id = s.id
+         WHERE l.payment_mode = 'Indirect'`;
+      const params: any[] = [];
+
+      if (status === 'Pending' || status === 'Approved') {
+        query += ' AND l.approval_status = ?';
+        params.push(status);
+      }
+      if (siteId) {
+        query += ' AND l.site_id = ?';
+        params.push(parseInt(siteId.toString()));
+      }
+      if (userId) {
+        query += ' AND l.user_id = ?';
+        params.push(parseInt(userId.toString()));
+      }
+      if (from) {
+        query += ' AND l.date >= ?';
+        params.push(from);
+      }
+      if (to) {
+        query += ' AND l.date <= ?';
+        params.push(to);
+      }
+      query += ' ORDER BY l.approval_status ASC, l.date DESC, l.id DESC';
+
+      const result = await db.query(query, params);
+      res.status(200).json(result.rows || []);
+    } catch (error: any) {
+      console.error('getIndirectBills Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
+  // Approves an Indirect bill's settlement. This is the moment the amount
+  // actually leaves the supervisor's account, so it's also the moment the
+  // matching account_transactions OUT row gets created — not when the bill
+  // was originally logged. Category 'Indirect Bill Settlement' keeps these
+  // separate from every other kind of OUT entry, so the I/O report can break
+  // them out as their own "Indirect Output" figure.
+  approveIndirectBill: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { amount, date, notes, approvedBy } = req.body;
+
+      const cleanAmount = parseFloat(amount);
+      if (amount === undefined || amount === null || amount === '' || isNaN(cleanAmount) || cleanAmount <= 0) {
+        res.status(400).json({ success: false, error: 'amount must be a positive number.' });
+        return;
+      }
+      if (!date) {
+        res.status(400).json({ success: false, error: 'date is required.' });
+        return;
+      }
+
+      const billResult = await db.query('SELECT * FROM ledger WHERE id = ?', [id]);
+      const bill = billResult.rows[0];
+      if (!bill) {
+        res.status(404).json({ success: false, error: 'Bill not found.' });
+        return;
+      }
+      if (bill.payment_mode !== 'Indirect') {
+        res.status(400).json({ success: false, error: 'Only Indirect bills go through approval.' });
+        return;
+      }
+      if (bill.approval_status === 'Approved') {
+        res.status(400).json({ success: false, error: 'This bill has already been approved.' });
+        return;
+      }
+      if (!bill.user_id) {
+        res.status(400).json({ success: false, error: 'This bill has no supervisor to register the output against.' });
+        return;
+      }
+
+      const userRes = await db.query('SELECT role FROM users WHERE id = ?', [bill.user_id]);
+      const siteRes = await db.query('SELECT name FROM sites WHERE id = ?', [bill.site_id]);
+      if (userRes.rows.length === 0 || siteRes.rows.length === 0) {
+        res.status(400).json({ success: false, error: 'Could not resolve the supervisor or site for this bill.' });
+        return;
+      }
+      const userRole = userRes.rows[0].role;
+      const siteName = siteRes.rows[0].name;
+      const cleanApprovedBy = approvedBy ? parseInt(approvedBy.toString()) : null;
+
+      const inserted = await db.query(
+        `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
+         VALUES (?, ?, 'OUT', 'Indirect Bill Settlement', ?, 'Cash', ?, ?, ?)`,
+        [userRole, bill.user_id, siteName, notes || bill.description || 'Indirect Bill Settlement', cleanAmount, date]
+      );
+      const transactionId = (inserted.rows as any).insertId;
+
+      await db.query(
+        `UPDATE ledger SET approval_status = 'Approved', approved_amount = ?, approved_date = ?, approval_notes = ?, approved_by = ?, linked_transaction_id = ? WHERE id = ?`,
+        [cleanAmount, date, notes || null, cleanApprovedBy, transactionId, id]
+      );
+
+      res.status(200).json({ success: true, message: 'Indirect bill approved and registered as an output.' });
+    } catch (error: any) {
+      console.error('approveIndirectBill Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   },

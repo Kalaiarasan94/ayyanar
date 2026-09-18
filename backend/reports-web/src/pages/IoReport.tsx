@@ -81,6 +81,16 @@ export default function IoReport() {
             ],
             foot: ['TOTAL', Number(report.totals.input).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN'), Number(report.totals.closing).toLocaleString('en-IN')],
           },
+          ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
+            ? [
+                {
+                  title: `Indirect Bills Output (${report.indirect.rows.length}) — part of Output above`,
+                  head: ['Date', 'Site', 'Notes', 'Amount (Rs)'],
+                  body: report.indirect.rows.map((r: any) => [dateLabel(r.date), r.site || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
+                  foot: ['', '', 'TOTAL', Number(report.indirect.total).toLocaleString('en-IN')],
+                },
+              ]
+            : []),
         ],
       });
       await downloadPdfReport({ doc, filename });
@@ -118,6 +128,16 @@ export default function IoReport() {
             ],
             foot: ['TOTAL', Number(report.totals.input).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN'), Number(report.totals.closing).toLocaleString('en-IN')],
           },
+          ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
+            ? [
+                {
+                  title: `Indirect Bills Output (${report.indirect.rows.length}) — part of Output above`,
+                  head: ['Date', 'Site', 'Notes', 'Amount (Rs)'],
+                  body: report.indirect.rows.map((r: any) => [dateLabel(r.date), r.site || '-', r.description || '-', Number(r.amount).toLocaleString('en-IN')]),
+                  foot: ['', '', 'TOTAL', Number(report.indirect.total).toLocaleString('en-IN')],
+                },
+              ]
+            : []),
         ],
       });
       const text = `${supervisorName || role} I/O Report (${rangeTitle})\nInput: ${rupees(report.totals.input)}\nOutput: ${rupees(report.totals.output)}\nClosing Balance: ${rupees(report.totals.closing)}`;
@@ -217,6 +237,27 @@ export default function IoReport() {
               ]}
             />
           </div>
+
+          {role === 'Supervisor' && (
+            <div className="card">
+              <h3 className="section-heading">Indirect Bills Output ({(report.indirect?.rows || []).length})</h3>
+              <p className="text-muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 12 }}>
+                Approved indirect-bill settlements only — already counted inside Output above, broken out here.
+              </p>
+              <DataTable<any>
+                rowKey={(r: any) => r.id}
+                rows={report.indirect?.rows || []}
+                emptyText="No indirect bills settled in this range."
+                totalRow={report.indirect?.rows?.length ? ['', '', 'TOTAL', rupees(report.indirect.total)] : undefined}
+                columns={[
+                  { header: 'Date', render: (r: any) => dateLabel(r.date) },
+                  { header: 'Site', render: (r: any) => r.site || '—' },
+                  { header: 'Notes', render: (r: any) => r.description || '—' },
+                  { header: 'Amount', align: 'right', render: (r: any) => <span className="text-primary">{rupees(r.amount)}</span> },
+                ]}
+              />
+            </div>
+          )}
         </>
       ) : (
         <div className="empty-note">No data.</div>
