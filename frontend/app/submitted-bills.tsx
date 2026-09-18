@@ -8,6 +8,11 @@ import {
   ActivityIndicator,
   RefreshControl,
   StyleSheet,
+  Alert,
+  Modal,
+  Platform,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -45,6 +50,17 @@ export default function SubmittedBills() {
   const [bills, setBills] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Edit / delete a submitted bill
+  const [editVisible, setEditVisible] = useState(false);
+  const [editingBillId, setEditingBillId] = useState<string | number | null>(null);
+  const [editCategory, setEditCategory] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editPaymentMode, setEditPaymentMode] = useState<'Direct' | 'Indirect'>('Direct');
+  const [editDate, setEditDate] = useState(TODAY);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | number | null>(null);
 
   const isToday = filterDate === TODAY;
 
@@ -98,6 +114,64 @@ export default function SubmittedBills() {
     setSelectedSiteId(val);
     const siteObj = assignedSites.find((s) => s.id.toString() === val);
     if (siteObj) setSelectedSiteName(siteObj.name);
+  };
+
+  const handleStartEdit = (bill: any) => {
+    setEditingBillId(bill.id);
+    setEditCategory(bill.category || '');
+    setEditDescription(bill.description || '');
+    setEditAmount(bill.amount?.toString() || '');
+    setEditPaymentMode(bill.payment_mode === 'Indirect' ? 'Indirect' : 'Direct');
+    setEditDate((bill.date || TODAY).toString().split('T')[0]);
+    setEditVisible(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingBillId || !editCategory || !editAmount) {
+      Alert.alert('Missing Details', 'Category and amount are required.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await fieldService.updateExpense(editingBillId, {
+        category: editCategory,
+        description: editDescription,
+        amount: parseFloat(editAmount),
+        paymentMode: editPaymentMode,
+        date: editDate,
+      });
+      setEditVisible(false);
+      setEditingBillId(null);
+      await loadBills(selectedSiteId, filterDate);
+      Alert.alert('Success', 'Bill updated.');
+    } catch {
+      Alert.alert('Update Error', 'Unable to update this bill.');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteBill = (id: string | number) => {
+    const confirmDelete = async () => {
+      setDeletingId(id);
+      try {
+        await fieldService.deleteExpense(id);
+        await loadBills(selectedSiteId, filterDate);
+      } catch {
+        Alert.alert('Delete Error', 'Unable to delete this bill.');
+      } finally {
+        setDeletingId(null);
+      }
+    };
+    const message = 'Delete this bill? This cannot be undone.';
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) confirmDelete();
+    } else {
+      Alert.alert('Delete Bill', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]);
+    }
   };
 
   const directTotal = bills
@@ -218,6 +292,18 @@ export default function SubmittedBills() {
                         ))}
                       </ScrollView>
                     )}
+                    <View style={styles.billActionsRow}>
+                      <TouchableOpacity style={styles.iconBtn} onPress={() => handleStartEdit(bill)} disabled={deletingId === bill.id}>
+                        <MaterialIcons name="edit" size={17} color="#8C0F16" />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.iconBtn} onPress={() => handleDeleteBill(bill.id)} disabled={deletingId === bill.id}>
+                        {deletingId === bill.id ? (
+                          <ActivityIndicator color="#CB202D" size="small" />
+                        ) : (
+                          <MaterialIcons name="delete-outline" size={17} color="#CB202D" />
+                        )}
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 );
               })}
@@ -225,6 +311,80 @@ export default function SubmittedBills() {
           )}
         </View>
       </ScrollView>
+
+      {/* Edit a submitted bill */}
+      <Modal visible={editVisible} transparent animationType="slide" onRequestClose={() => setEditVisible(false)}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+        >
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Edit Bill</Text>
+
+            <Text style={styles.modalFieldLabel}>Category</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Category"
+              value={editCategory}
+              onChangeText={setEditCategory}
+              placeholderTextColor={COLORS.textLight}
+            />
+
+            <Text style={styles.modalFieldLabel}>Description</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Description"
+              value={editDescription}
+              onChangeText={setEditDescription}
+              placeholderTextColor={COLORS.textLight}
+            />
+
+            <Text style={styles.modalFieldLabel}>Amount (₹)</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Amount"
+              keyboardType="numeric"
+              value={editAmount}
+              onChangeText={setEditAmount}
+              placeholderTextColor={COLORS.textLight}
+            />
+
+            <Text style={styles.modalFieldLabel}>Bill Type</Text>
+            <View style={styles.modalToggleRow}>
+              <TouchableOpacity
+                style={[styles.modalToggleBtn, editPaymentMode === 'Direct' && styles.modalToggleBtnActive]}
+                onPress={() => setEditPaymentMode('Direct')}
+              >
+                <Text style={[styles.modalToggleText, editPaymentMode === 'Direct' && styles.modalToggleTextActive]}>Direct (Cash)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalToggleBtn, editPaymentMode === 'Indirect' && styles.modalToggleBtnActive]}
+                onPress={() => setEditPaymentMode('Indirect')}
+              >
+                <Text style={[styles.modalToggleText, editPaymentMode === 'Indirect' && styles.modalToggleTextActive]}>Indirect (Credit)</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalFieldLabel}>Bill Date</Text>
+            <DatePickerField value={editDate} onChange={setEditDate} placeholder="Bill date" style={{ marginBottom: 14 }} />
+
+            <View style={styles.modalActionsRow}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setEditVisible(false)} disabled={savingEdit}>
+                <Text style={styles.modalCancelBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalSaveBtn, savingEdit && { opacity: 0.6 }]}
+                onPress={handleSaveEdit}
+                disabled={savingEdit}
+              >
+                {savingEdit ? <ActivityIndicator color="#FFF" /> : <Text style={styles.modalSaveBtnText}>Save Changes</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -415,5 +575,123 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontWeight: '600',
     textAlign: 'center',
+  },
+  billActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 8,
+  },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 26, 18, 0.15)',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(11, 13, 16, 0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: BORDER_RADIUS.xl,
+    borderTopRightRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    maxHeight: '92%',
+  },
+  modalHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: COLORS.border,
+    alignSelf: 'center',
+    marginBottom: SPACING.md,
+  },
+  modalTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: SPACING.md,
+  },
+  modalFieldLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#E23744',
+    marginBottom: 6,
+    marginTop: 8,
+    letterSpacing: 0.5,
+  },
+  modalInput: {
+    backgroundColor: COLORS.steel,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: '600',
+    padding: 12,
+  },
+  modalToggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalToggleBtn: {
+    flex: 1,
+    padding: 12,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.steel,
+    alignItems: 'center',
+  },
+  modalToggleBtnActive: {
+    borderColor: '#E23744',
+    backgroundColor: 'rgba(226, 26, 18, 0.1)',
+  },
+  modalToggleText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.textLight,
+  },
+  modalToggleTextActive: {
+    color: COLORS.text,
+  },
+  modalActionsRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    backgroundColor: COLORS.steel,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  modalCancelBtnText: {
+    color: COLORS.text,
+    fontWeight: '900',
+    fontSize: 14,
+  },
+  modalSaveBtn: {
+    flex: 2,
+    borderRadius: BORDER_RADIUS.md,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E23744',
+  },
+  modalSaveBtnText: {
+    color: '#FFF',
+    fontWeight: '900',
+    fontSize: 14,
   },
 });

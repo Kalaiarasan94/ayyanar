@@ -3,6 +3,7 @@ import { Banknote, Download, FileSpreadsheet, FileText, Share2, Users, Wallet } 
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
+import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, buildSingleDailySheetPdfDoc, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
@@ -382,7 +383,7 @@ export default function DailySheetReport() {
             <SummaryCard label="Workers Logged" value={totalWorkers.toString()} icon={Users} />
           </div>
 
-          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+          <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownloadPdf} disabled={downloading || filtered.length === 0}>
               <Download size={16} />
               {downloading ? 'Generating PDF…' : 'Download PDF'}
@@ -395,6 +396,7 @@ export default function DailySheetReport() {
               <FileSpreadsheet size={16} />
               Export CSV
             </button>
+            <PrintButton />
           </div>
 
           {bySupervisor.length > 0 && (

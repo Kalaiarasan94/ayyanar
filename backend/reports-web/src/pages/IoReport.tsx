@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ArrowDownCircle, ArrowUpCircle, Download, Share2, Wallet } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { accountsApi } from '../api';
+import { accountsApi, adminApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateRangePicker from '../components/DateRangePicker';
+import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
@@ -14,24 +15,42 @@ const ROLES = ['Admin', 'Supervisor', 'Owner'];
 
 export default function IoReport() {
   const [role, setRole] = useState('Admin');
+  // Only meaningful when role === 'Supervisor': narrows the statement to one
+  // specific supervisor instead of the whole team's combined book
+  const [supervisors, setSupervisors] = useState<{ id: any; name: string }[]>([]);
+  const [supervisorId, setSupervisorId] = useState<string | null>(null);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
 
-  const load = (r = role, f = from, t = to) => {
+  const load = (r = role, f = from, t = to, userId = supervisorId) => {
     setLoading(true);
     accountsApi
-      .getIoReport(r, f || undefined, t || undefined)
+      .getIoReport(r, f || undefined, t || undefined, r === 'Supervisor' ? userId || undefined : undefined)
       .then(setReport)
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
     load();
+    adminApi.getStaff().then((staff) => setSupervisors((staff || []).filter((s: any) => s.role === 'Supervisor').map((s: any) => ({ id: s.id, name: s.name }))));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const selectRole = (r: string) => {
+    setRole(r);
+    setSupervisorId(null);
+    load(r, from, to, null);
+  };
+
+  const selectSupervisor = (id: string | null) => {
+    setSupervisorId(id);
+    load(role, from, to, id);
+  };
+
+  const supervisorName = supervisorId ? supervisors.find((s) => s.id.toString() === supervisorId)?.name : null;
 
   const handleDownload = async () => {
     if (!report) return;
@@ -39,9 +58,9 @@ export default function IoReport() {
     try {
       const rangeTitle = from && to ? `${dateLabel(from)} to ${dateLabel(to)}` : from ? `From ${dateLabel(from)}` : 'All Time';
       const { doc, filename } = await buildPdfReport({
-        filename: `${role}-io-report.pdf`,
-        title: `${role} I/O Report`,
-        subtitle: rangeTitle,
+        filename: `${role}${supervisorName ? `-${supervisorName}` : ''}-io-report.pdf`,
+        title: `${supervisorName || role} I/O Report`,
+        subtitle: supervisorName ? `${role}: ${supervisorName} — ${rangeTitle}` : rangeTitle,
         summaryBoxes: [
           { label: 'Total Input', value: rupees(report.totals.input), color: '#15803d' },
           { label: 'Total Output', value: rupees(report.totals.output), color: '#e23744' },
@@ -76,9 +95,9 @@ export default function IoReport() {
     try {
       const rangeTitle = from && to ? `${dateLabel(from)} to ${dateLabel(to)}` : from ? `From ${dateLabel(from)}` : 'All Time';
       const pdf = await buildPdfReport({
-        filename: `${role}-io-report.pdf`,
-        title: `${role} I/O Report`,
-        subtitle: rangeTitle,
+        filename: `${role}${supervisorName ? `-${supervisorName}` : ''}-io-report.pdf`,
+        title: `${supervisorName || role} I/O Report`,
+        subtitle: supervisorName ? `${role}: ${supervisorName} — ${rangeTitle}` : rangeTitle,
         summaryBoxes: [
           { label: 'Total Input', value: rupees(report.totals.input), color: '#15803d' },
           { label: 'Total Output', value: rupees(report.totals.output), color: '#e23744' },
@@ -101,7 +120,7 @@ export default function IoReport() {
           },
         ],
       });
-      const text = `${role} I/O Report (${rangeTitle})\nInput: ${rupees(report.totals.input)}\nOutput: ${rupees(report.totals.output)}\nClosing Balance: ${rupees(report.totals.closing)}`;
+      const text = `${supervisorName || role} I/O Report (${rangeTitle})\nInput: ${rupees(report.totals.input)}\nOutput: ${rupees(report.totals.output)}\nClosing Balance: ${rupees(report.totals.closing)}`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -115,18 +134,24 @@ export default function IoReport() {
 
       <div className="chip-row" style={{ marginBottom: 14 }}>
         {ROLES.map((r) => (
-          <button
-            key={r}
-            className={`chip${role === r ? ' active' : ''}`}
-            onClick={() => {
-              setRole(r);
-              load(r, from, to);
-            }}
-          >
+          <button key={r} className={`chip${role === r ? ' active' : ''}`} onClick={() => selectRole(r)}>
             {r}
           </button>
         ))}
       </div>
+
+      {role === 'Supervisor' && supervisors.length > 0 && (
+        <div className="chip-row" style={{ marginBottom: 14 }}>
+          <button className={`chip${!supervisorId ? ' active' : ''}`} onClick={() => selectSupervisor(null)}>
+            All Supervisors (Combined)
+          </button>
+          {supervisors.map((s) => (
+            <button key={s.id} className={`chip${supervisorId === s.id.toString() ? ' active' : ''}`} onClick={() => selectSupervisor(s.id.toString())}>
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <DateRangePicker
         from={from}
@@ -151,7 +176,7 @@ export default function IoReport() {
             <SummaryCard label="Closing Balance" value={rupees(report.totals.closing)} icon={Wallet} />
           </div>
 
-          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+          <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownload} disabled={downloading}>
               <Download size={16} />
               {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -160,6 +185,7 @@ export default function IoReport() {
               <Share2 size={16} />
               Share on WhatsApp
             </button>
+            <PrintButton />
           </div>
 
           {report.rows.length > 1 && (

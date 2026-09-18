@@ -173,6 +173,55 @@ export const accountsController = {
     }
   },
 
+  // Updates a transaction entry (fixing a typo'd amount, date, name, etc.).
+  // If it's one side of an internal transfer (linked_id set), amount/date/
+  // description/party/method are kept in sync on both sides so the two
+  // books never disagree about the same movement of money. The category is
+  // left untouched on linked rows — it encodes which role the transfer is
+  // with, and each side legitimately shows a different one.
+  updateTransaction: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { category, partyName, paymentMethod, description, amount, date } = req.body;
+
+      const cleanAmount = parseFloat(amount);
+      if (amount === undefined || amount === null || amount === '' || isNaN(cleanAmount) || cleanAmount <= 0) {
+        res.status(400).json({ success: false, error: 'amount must be a positive number.' });
+        return;
+      }
+      if (!date) {
+        res.status(400).json({ success: false, error: 'date is required.' });
+        return;
+      }
+      const cleanMethod = paymentMethod === 'Bank' ? 'Bank' : 'Cash';
+      const cleanPartyName = partyName || null;
+
+      const found = await db.query('SELECT id, linked_id FROM account_transactions WHERE id = ?', [id]);
+      if (!found.rows[0]) {
+        res.status(404).json({ success: false, error: 'Transaction not found.' });
+        return;
+      }
+      const { linked_id } = found.rows[0];
+
+      if (linked_id) {
+        await db.query(
+          `UPDATE account_transactions SET party_name = ?, payment_method = ?, description = ?, amount = ?, date = ? WHERE id IN (?, ?)`,
+          [cleanPartyName, cleanMethod, description || null, cleanAmount, date, id, linked_id]
+        );
+      } else {
+        await db.query(
+          `UPDATE account_transactions SET category = ?, party_name = ?, payment_method = ?, description = ?, amount = ?, date = ? WHERE id = ?`,
+          [category, cleanPartyName, cleanMethod, description || null, cleanAmount, date, id]
+        );
+      }
+
+      res.status(200).json({ success: true, message: 'Transaction updated.' });
+    } catch (error: any) {
+      console.error('updateTransaction Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   // Deletes a transaction entry. If it was one side of an internal transfer
   // (Admin pays Supervisor, etc.), the mirrored entry on the other role's book
   // is deleted too so both books stay in sync.

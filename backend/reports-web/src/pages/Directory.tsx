@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Download, Plus, Share2, Trash2 } from 'lucide-react';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
+import PrintButton from '../components/PrintButton';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 export default function Directory() {
@@ -150,10 +151,10 @@ export default function Directory() {
       ) : (
         <>
           <div className="toolbar" style={{ justifyContent: 'space-between', marginBottom: 14 }}>
-            <button className="btn" onClick={handleOpenAddSite}>
+            <button className="btn no-print" onClick={handleOpenAddSite}>
               <Plus size={16} /> New Project Site
             </button>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div className="no-print" style={{ display: 'flex', gap: 8 }}>
               <button className="btn secondary" onClick={handleDownloadPdf} disabled={downloading}>
                 <Download size={16} />
                 {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -162,6 +163,7 @@ export default function Directory() {
                 <Share2 size={16} />
                 WhatsApp
               </button>
+              <PrintButton />
             </div>
           </div>
 

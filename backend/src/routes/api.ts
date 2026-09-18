@@ -35,6 +35,7 @@ router.delete('/driver-bills/:id', fieldController.deleteDriverBill);
 
 // Role Accounts (Admin / Supervisor / Owner money in-out ledgers + TotalAccounts overview)
 router.post('/accounts/transactions', accountsController.addTransaction);
+router.put('/accounts/transactions/:id', accountsController.updateTransaction);
 router.delete('/accounts/transactions/:id', accountsController.deleteTransaction);
 router.get('/accounts/total-summary', accountsController.getTotalSummary);
 router.get('/accounts/daybook', accountsController.getDayBook);

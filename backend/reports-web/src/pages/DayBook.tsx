@@ -3,6 +3,7 @@ import { ArrowDownCircle, ArrowUpCircle, Download, FileSpreadsheet, Share2 } fro
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateRangePicker from '../components/DateRangePicker';
+import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
@@ -134,7 +135,7 @@ export default function DayBook() {
         <SummaryCard label="Total Paid" value={rupees(totalOut)} color="#e23744" icon={ArrowUpCircle} />
       </div>
 
-      <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+      <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
         <button className="btn" onClick={handleDownloadPdf} disabled={downloading || rows.length === 0}>
           <Download size={16} />
           {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -147,6 +148,7 @@ export default function DayBook() {
           <FileSpreadsheet size={16} />
           Download CSV
         </button>
+        <PrintButton />
       </div>
 
       <div className="card">

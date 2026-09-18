@@ -16,6 +16,7 @@ import {
 import { accountsApi, adminApi } from '../api';
 import SummaryCard from '../components/SummaryCard';
 import DataTable from '../components/DataTable';
+import PrintButton from '../components/PrintButton';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
@@ -146,7 +147,7 @@ export default function Overview() {
       <h1 className="page-title">Overview</h1>
       <p className="page-subtitle">Company-wide financial picture — Owner, Admin and Supervisor books combined.</p>
 
-      <div className="toolbar" style={{ justifyContent: 'flex-end', marginBottom: 14 }}>
+      <div className="toolbar no-print" style={{ justifyContent: 'flex-end', marginBottom: 14 }}>
         <button className="btn" onClick={handleDownloadPdf} disabled={downloading}>
           <Download size={16} />
           {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -155,6 +156,7 @@ export default function Overview() {
           <Share2 size={16} />
           Share on WhatsApp
         </button>
+        <PrintButton />
       </div>
 
       <div className="summary-row">

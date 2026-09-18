@@ -91,22 +91,34 @@ export const fieldController = {
     }
   },
 
-  // Fetches transaction logs for a specific site, optionally filtered by date
+  // Fetches transaction logs for a specific site, optionally filtered by an
+  // exact date (?date=) or a calendar range (?from=&to=, either end optional)
   getLedgerBySite: async (req: Request, res: Response): Promise<void> => {
     try {
       const { siteId } = req.params;
       const dateFilter = req.query.date as string | undefined;
-      console.log(`--- FETCHING LEDGER FOR SITE ${siteId} ${dateFilter ? `on ${dateFilter}` : '(all dates)'} ---`);
+      const fromFilter = req.query.from as string | undefined;
+      const toFilter = req.query.to as string | undefined;
+      console.log(`--- FETCHING LEDGER FOR SITE ${siteId} ${dateFilter ? `on ${dateFilter}` : fromFilter || toFilter ? `from ${fromFilter || '...'} to ${toFilter || '...'}` : '(all dates)'} ---`);
 
-      let query = `SELECT l.*, u.name AS supervisor_name 
-         FROM ledger l 
-         LEFT JOIN users u ON l.user_id = u.id 
+      let query = `SELECT l.*, u.name AS supervisor_name
+         FROM ledger l
+         LEFT JOIN users u ON l.user_id = u.id
          WHERE l.site_id = ?`;
       const params: any[] = [siteId];
 
       if (dateFilter) {
         query += ' AND l.date = ?';
         params.push(dateFilter);
+      } else {
+        if (fromFilter) {
+          query += ' AND l.date >= ?';
+          params.push(fromFilter);
+        }
+        if (toFilter) {
+          query += ' AND l.date <= ?';
+          params.push(toFilter);
+        }
       }
       query += ' ORDER BY l.date DESC, l.id DESC';
 

@@ -144,6 +144,16 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
   const [entryDate, setEntryDate] = useState(todayLocal());
   const [deleting, setDeleting] = useState(false);
 
+  // Edit modal — lets a mistake (wrong amount, date, name...) be fixed after the fact
+  const [editVisible, setEditVisible] = useState(false);
+  const [editCategory, setEditCategory] = useState('');
+  const [editPartyName, setEditPartyName] = useState('');
+  const [editPaymentMethod, setEditPaymentMethod] = useState<'Cash' | 'Bank'>('Cash');
+  const [editDescription, setEditDescription] = useState('');
+  const [editAmount, setEditAmount] = useState('');
+  const [editDate, setEditDate] = useState(todayLocal());
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const isInput = flowTab === 'INPUT';
   const flow = isInput ? 'IN' : 'OUT';
   const accent = isInput ? COLORS.success : COLORS.primary;
@@ -367,6 +377,50 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: confirmDelete },
       ]);
+    }
+  };
+
+  const handleStartEditTransaction = () => {
+    if (!activeTransaction) return;
+    setEditCategory(activeTransaction.category || '');
+    setEditPartyName(activeTransaction.party_name || '');
+    setEditPaymentMethod(activeTransaction.payment_method === 'Bank' ? 'Bank' : 'Cash');
+    setEditDescription(activeTransaction.description || '');
+    setEditAmount(activeTransaction.amount?.toString() || '');
+    setEditDate((activeTransaction.date || todayLocal()).toString().split('T')[0]);
+    setDetailsVisible(false);
+    setEditVisible(true);
+  };
+
+  const handleSaveEditTransaction = async () => {
+    if (!activeTransaction) return;
+    const cleanAmount = parseFloat(editAmount);
+    if (!editAmount || isNaN(cleanAmount) || cleanAmount <= 0) {
+      Alert.alert('Invalid Amount', 'Enter an amount greater than zero.');
+      return;
+    }
+    if (!isValidDate(editDate)) {
+      Alert.alert('Invalid Date', 'Pick a valid date.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await accountsService.updateTransaction(activeTransaction.id, {
+        category: editCategory,
+        partyName: editPartyName,
+        paymentMethod: editPaymentMethod,
+        description: editDescription,
+        amount: cleanAmount,
+        date: editDate,
+      });
+      setEditVisible(false);
+      setActiveTransaction(null);
+      Alert.alert('Success', 'Entry updated.');
+      await loadData(flowTab);
+    } catch (error: any) {
+      Alert.alert('Update Error', error?.message || 'Unable to update this entry.');
+    } finally {
+      setSavingEdit(false);
     }
   };
 
@@ -936,11 +990,21 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
             )}
 
             <View style={[styles.modalActions, { marginTop: 20 }]}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => setDetailsVisible(false)} disabled={deleting}>
+              <TouchableOpacity style={[styles.cancelButton, { flex: 1 }]} onPress={() => setDetailsVisible(false)} disabled={deleting}>
                 <Text style={styles.cancelButtonText}>Close</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.saveButton, { backgroundColor: COLORS.primary }, deleting && { opacity: 0.6 }]}
+                style={[styles.saveButton, { flex: 1, backgroundColor: COLORS.headerBackground }]}
+                onPress={handleStartEditTransaction}
+                disabled={deleting}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <MaterialIcons name="edit" size={16} color={COLORS.white} />
+                  <Text style={styles.saveButtonText}>Edit</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.saveButton, { flex: 1, backgroundColor: COLORS.primary }, deleting && { opacity: 0.6 }]}
                 onPress={handleDeleteTransaction}
                 disabled={deleting}
               >
@@ -954,6 +1018,102 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Edit Transaction modal — amount/date/name/mode/note can be fixed after the fact.
+          Category is locked for one side of an internal transfer (see updateTransaction). */}
+      <Modal visible={editVisible} transparent animationType="slide" onRequestClose={() => setEditVisible(false)}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+        >
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Edit Entry</Text>
+            <Text style={styles.modalSubtitle}>
+              {heading} — {activeTransaction?.flow === 'IN' ? 'money received' : 'money paid'}
+            </Text>
+
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <Text style={styles.fieldLabel}>{activeTransaction?.flow === 'IN' ? 'FROM CATEGORY' : 'TO CATEGORY'}</Text>
+              <TextInput
+                style={[styles.input, !!activeTransaction?.linked_id && { color: COLORS.textLight }]}
+                value={editCategory}
+                onChangeText={setEditCategory}
+                editable={!activeTransaction?.linked_id}
+                placeholderTextColor={COLORS.textLight}
+              />
+              {!!activeTransaction?.linked_id && (
+                <View style={styles.infoCard}>
+                  <MaterialIcons name="sync-alt" size={18} color={COLORS.textLight} />
+                  <Text style={styles.infoText}>
+                    This is one side of an internal transfer — the category stays linked to the transfer and can't be
+                    changed here. Amount, date, name, mode and note update on both accounts together.
+                  </Text>
+                </View>
+              )}
+
+              <Text style={styles.fieldLabel}>NAME</Text>
+              <TextInput
+                style={styles.input}
+                value={editPartyName}
+                onChangeText={setEditPartyName}
+                placeholder="Name / site / shop"
+                placeholderTextColor={COLORS.textLight}
+              />
+
+              <Text style={styles.fieldLabel}>DATE</Text>
+              <DatePickerField value={editDate} onChange={setEditDate} placeholder="Entry date" style={{ marginBottom: SPACING.md }} />
+
+              <Text style={styles.fieldLabel}>PAYMENT METHOD</Text>
+              <View style={styles.chipRow}>
+                {(['Cash', 'Bank'] as const).map((method) => (
+                  <TouchableOpacity
+                    key={method}
+                    style={[styles.chip, editPaymentMethod === method && { backgroundColor: COLORS.headerBackground, borderColor: COLORS.headerBackground }]}
+                    onPress={() => setEditPaymentMethod(method)}
+                  >
+                    <MaterialIcons name={method === 'Cash' ? 'payments' : 'account-balance'} size={13} color={editPaymentMethod === method ? COLORS.white : COLORS.textLight} />
+                    <Text style={[styles.chipText, editPaymentMethod === method && styles.chipTextActive]}>{method}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.fieldLabel}>AMOUNT (₹)</Text>
+              <TextInput
+                style={styles.input}
+                keyboardType="numeric"
+                value={editAmount}
+                onChangeText={setEditAmount}
+                placeholder="0.00"
+                placeholderTextColor={COLORS.textLight}
+              />
+
+              <Text style={styles.fieldLabel}>REASON / NOTE (OPTIONAL)</Text>
+              <TextInput
+                style={styles.input}
+                value={editDescription}
+                onChangeText={setEditDescription}
+                placeholder="Note"
+                placeholderTextColor={COLORS.textLight}
+              />
+
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.cancelButton} onPress={() => setEditVisible(false)} disabled={savingEdit}>
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.saveButton, { backgroundColor: accent }, savingEdit && { opacity: 0.6 }]}
+                  onPress={handleSaveEditTransaction}
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.saveButtonText}>Save Changes</Text>}
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

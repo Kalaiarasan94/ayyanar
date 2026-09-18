@@ -3,6 +3,8 @@ import { Download, Fuel, Route, Share2, Truck } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fieldApi } from '../api';
 import DataTable from '../components/DataTable';
+import DateRangePicker from '../components/DateRangePicker';
+import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
@@ -27,15 +29,25 @@ export default function DriverReports() {
   const [bills, setBills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
-  useEffect(() => {
-    Promise.all([fieldApi.getDriverRecords(), fieldApi.getDriverBills()])
+  const load = (f = from, t = to) => {
+    setLoading(true);
+    Promise.all([fieldApi.getDriverRecords(f || undefined, t || undefined), fieldApi.getDriverBills(f || undefined, t || undefined)])
       .then(([r, b]) => {
         setRecords(r);
         setBills(b);
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const rangeLabel = from && to ? `${dateLabel(from)} to ${dateLabel(to)}` : from ? `From ${dateLabel(from)}` : to ? `Until ${dateLabel(to)}` : 'All Time';
 
   const totalKm = records.reduce((s, r) => s + Number(r.total_km || 0), 0);
   const totalDiesel = records.reduce((s, r) => s + Number(r.diesel_fare || 0), 0);
@@ -48,7 +60,7 @@ export default function DriverReports() {
       const { doc, filename } = await buildPdfReport({
         filename: 'driver-trip-report.pdf',
         title: 'Driver Trip Report',
-        subtitle: 'All recorded trips',
+        subtitle: rangeLabel,
         orientation: 'landscape',
         summaryBoxes: [
           { label: 'Total Trips', value: records.length.toString() },
@@ -96,7 +108,7 @@ export default function DriverReports() {
       const pdf = await buildPdfReport({
         filename: 'driver-trip-report.pdf',
         title: 'Driver Trip Report',
-        subtitle: 'All recorded trips',
+        subtitle: rangeLabel,
         orientation: 'landscape',
         summaryBoxes: [
           { label: 'Total Trips', value: records.length.toString() },
@@ -116,7 +128,7 @@ export default function DriverReports() {
           },
         ],
       });
-      const text = `Driver Trip Report\nTotal Trips: ${records.length}\nTotal KM: ${totalKm.toLocaleString('en-IN')}\nTotal Diesel Fare: ${rupees(totalDiesel)}`;
+      const text = `Driver Trip Report (${rangeLabel})\nTotal Trips: ${records.length}\nTotal KM: ${totalKm.toLocaleString('en-IN')}\nTotal Diesel Fare: ${rupees(totalDiesel)}`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -128,6 +140,8 @@ export default function DriverReports() {
       <h1 className="page-title">Driver Reports</h1>
       <p className="page-subtitle">Trip records and diesel bills across all drivers.</p>
 
+      <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} onApply={() => load(from, to)} onClear={() => { setFrom(''); setTo(''); load('', ''); }} />
+
       {loading ? (
         <div className="empty-note">Loading…</div>
       ) : (
@@ -138,7 +152,7 @@ export default function DriverReports() {
             <SummaryCard label="Total Diesel Fare" value={rupees(totalDiesel)} color="#e23744" icon={Fuel} />
           </div>
 
-          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+          <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownload} disabled={downloading || records.length === 0}>
               <Download size={16} />
               {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -147,6 +161,7 @@ export default function DriverReports() {
               <Share2 size={16} />
               Share on WhatsApp
             </button>
+            <PrintButton />
           </div>
 
           {byVehicle.length > 0 && (

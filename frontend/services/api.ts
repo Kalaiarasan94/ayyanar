@@ -293,6 +293,11 @@ export const accountsService = {
   getPeriods: () => request<{ months: string[]; years: string[] }>('/accounts/periods'),
   getReport: (type: 'monthly' | 'yearly', period: string) =>
     request<any>(`/accounts/report?type=${type}&period=${encodeURIComponent(period)}`),
+  updateTransaction: (id: string | number, txn: Record<string, any>) =>
+    request<ApiResponse>(`/accounts/transactions/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(txn),
+    }),
   deleteTransaction: (id: string | number) =>
     request<ApiResponse>(`/accounts/transactions/${id}`, {
       method: 'DELETE',

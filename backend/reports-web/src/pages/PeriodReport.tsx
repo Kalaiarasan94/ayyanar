@@ -3,6 +3,7 @@ import { Download, Share2, TrendingDown, TrendingUp, Wallet } from 'lucide-react
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
+import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
@@ -178,7 +179,7 @@ export default function PeriodReport() {
             Internal transfers this period: {rupees(report.transfers)} (not counted in revenue or expenses)
           </p>
 
-          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+          <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownload} disabled={downloading}>
               <Download size={16} />
               {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -187,6 +188,7 @@ export default function PeriodReport() {
               <Share2 size={16} />
               Share on WhatsApp
             </button>
+            <PrintButton />
           </div>
 
           {(report.receivedBreakdown.length > 0 || report.paidBreakdown.length > 0) && (

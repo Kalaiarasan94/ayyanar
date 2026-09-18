@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Download, FileSpreadsheet, Share2 } from 'lucide-react';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
+import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
@@ -132,7 +133,7 @@ export default function LeadsReport() {
             <SummaryCard label="Conversion Rate" value={conversionRate} />
           </div>
 
-          <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+          <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
             <button className="btn" onClick={handleDownloadPdf} disabled={downloading || leads.length === 0}>
               <Download size={16} />
               {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -145,6 +146,7 @@ export default function LeadsReport() {
               <FileSpreadsheet size={16} />
               Download CSV
             </button>
+            <PrintButton />
           </div>
 
           <div className="card">

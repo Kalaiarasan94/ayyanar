@@ -64,7 +64,8 @@ export const adminApi = {
 };
 
 export const fieldApi = {
-  getLedgerBySite: (siteId: string | number, date?: string) => request<any[]>(`/expenses/site/${siteId}${qs({ date })}`),
+  getLedgerBySite: (siteId: string | number, date?: string, from?: string, to?: string) =>
+    request<any[]>(`/expenses/site/${siteId}${qs({ date, from, to })}`),
   updateExpense: (id: string | number, expense: Record<string, any>) =>
     request<{ success: boolean; message?: string }>(`/expenses/${id}`, { method: 'PUT', body: JSON.stringify(expense) }),
   deleteExpense: (id: string | number) =>

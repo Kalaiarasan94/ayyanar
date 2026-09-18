@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Download, Share2, UserCheck, UserMinus, UserX, Users } from 'lucide-react';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
+import PrintButton from '../components/PrintButton';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { downloadImage } from '../services/printReport';
@@ -136,7 +137,7 @@ export default function AttendanceReport() {
         <SummaryCard label="Workers Absent" value={workerAbsent.toString()} color="#e23744" icon={UserMinus} />
       </div>
 
-      <div className="toolbar" style={{ justifyContent: 'flex-end', marginBottom: 14 }}>
+      <div className="toolbar no-print" style={{ justifyContent: 'flex-end', marginBottom: 14 }}>
         <button className="btn" onClick={handleDownloadPdf} disabled={downloading}>
           <Download size={16} />
           {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -145,6 +146,7 @@ export default function AttendanceReport() {
           <Share2 size={16} />
           Share on WhatsApp
         </button>
+        <PrintButton />
       </div>
 
       <div className="card">
@@ -185,7 +187,7 @@ export default function AttendanceReport() {
                   if (!s.selfie_url) return null;
                   const src = s.selfie_url.startsWith('http') || s.selfie_url.startsWith('/') ? s.selfie_url : `/${s.selfie_url}`;
                   return (
-                    <button className="btn secondary" onClick={() => downloadImage(src, `${s.supervisor_name}-${date}.jpg`)}>
+                    <button className="btn secondary no-print" onClick={() => downloadImage(src, `${s.supervisor_name}-${date}.jpg`)}>
                       Download
                     </button>
                   );

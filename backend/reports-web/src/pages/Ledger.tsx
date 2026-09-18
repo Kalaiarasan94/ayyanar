@@ -3,6 +3,7 @@ import { Download, FileSpreadsheet, Share2 } from 'lucide-react';
 import { accountsApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateRangePicker from '../components/DateRangePicker';
+import PrintButton from '../components/PrintButton';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { csvCell, exportCsv } from '../services/printReport';
 
@@ -119,7 +120,7 @@ export default function Ledger() {
 
       <DateRangePicker from={from} to={to} onFromChange={setFrom} onToChange={setTo} onApply={() => load(from, to)} onClear={() => { setFrom(''); setTo(''); load('', ''); }} />
 
-      <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+      <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
         <button className="btn" onClick={handleDownloadPdf} disabled={downloading || rows.length === 0}>
           <Download size={16} />
           {downloading ? 'Building PDF…' : 'Download PDF'}
@@ -132,6 +133,7 @@ export default function Ledger() {
           <FileSpreadsheet size={16} />
           Download CSV
         </button>
+        <PrintButton />
       </div>
 
       <div className="card">
