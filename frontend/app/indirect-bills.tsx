@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { adminService, fieldService } from '../services/api';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
@@ -222,36 +223,28 @@ export default function IndirectBillsScreen() {
             {sites.length > 0 && (
               <>
                 <Text style={styles.filterLabel}>SITE</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.chipRow}>
-                    <TouchableOpacity style={[styles.chip, !selectedSiteId && styles.chipActive]} onPress={() => setSelectedSiteId(null)}>
-                      <Text style={[styles.chipText, !selectedSiteId && styles.chipTextActive]}>All Sites</Text>
-                    </TouchableOpacity>
+                <View style={styles.pickerContainer}>
+                  <Picker selectedValue={selectedSiteId || ''} onValueChange={(v) => setSelectedSiteId(v || null)} style={styles.picker}>
+                    <Picker.Item label="All Sites" value="" />
                     {sites.map((s) => (
-                      <TouchableOpacity key={s.id} style={[styles.chip, selectedSiteId === s.id.toString() && styles.chipActive]} onPress={() => setSelectedSiteId(s.id.toString())}>
-                        <Text style={[styles.chipText, selectedSiteId === s.id.toString() && styles.chipTextActive]}>{s.name}</Text>
-                      </TouchableOpacity>
+                      <Picker.Item key={s.id} label={s.name} value={s.id.toString()} />
                     ))}
-                  </View>
-                </ScrollView>
+                  </Picker>
+                </View>
               </>
             )}
 
             {supervisors.length > 0 && (
               <>
                 <Text style={styles.filterLabel}>SUPERVISOR</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <View style={styles.chipRow}>
-                    <TouchableOpacity style={[styles.chip, !selectedSupervisorId && styles.chipActive]} onPress={() => setSelectedSupervisorId(null)}>
-                      <Text style={[styles.chipText, !selectedSupervisorId && styles.chipTextActive]}>All Supervisors</Text>
-                    </TouchableOpacity>
+                <View style={styles.pickerContainer}>
+                  <Picker selectedValue={selectedSupervisorId || ''} onValueChange={(v) => setSelectedSupervisorId(v || null)} style={styles.picker}>
+                    <Picker.Item label="All Supervisors" value="" />
                     {supervisors.map((s) => (
-                      <TouchableOpacity key={s.id} style={[styles.chip, selectedSupervisorId === s.id.toString() && styles.chipActive]} onPress={() => setSelectedSupervisorId(s.id.toString())}>
-                        <Text style={[styles.chipText, selectedSupervisorId === s.id.toString() && styles.chipTextActive]}>{s.name}</Text>
-                      </TouchableOpacity>
+                      <Picker.Item key={s.id} label={s.name} value={s.id.toString()} />
                     ))}
-                  </View>
-                </ScrollView>
+                  </Picker>
+                </View>
               </>
             )}
           </View>
@@ -525,18 +518,14 @@ const styles = StyleSheet.create({
   filtersHeaderText: { fontSize: 11, fontWeight: '800', color: '#E23744', letterSpacing: 0.6 },
   clearFiltersText: { fontSize: 11.5, fontWeight: '800', color: COLORS.textLight, textDecorationLine: 'underline' },
   filterLabel: { fontSize: 10.5, fontWeight: '800', color: COLORS.textLight, marginBottom: 8, marginTop: 8, letterSpacing: 0.5 },
-  chipRow: { flexDirection: 'row', gap: 8, paddingBottom: 4 },
-  chip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+  pickerContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
+    borderRadius: BORDER_RADIUS.md,
     borderWidth: 1,
     borderColor: 'rgba(226, 26, 18, 0.15)',
-    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    overflow: 'hidden',
   },
-  chipActive: { borderColor: '#E23744', backgroundColor: '#E23744' },
-  chipText: { color: COLORS.text, fontSize: 12, fontWeight: '700' },
-  chipTextActive: { color: '#FFF' },
+  picker: { height: 50, width: '100%' },
   billRow: {
     flexDirection: 'row',
     alignItems: 'center',

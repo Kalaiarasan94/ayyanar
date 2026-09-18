@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
 import AppBackground from './components/AppBackground';
 import LogoutButton from '../components/LogoutButton';
 import DatePickerField from '../components/DatePickerField';
@@ -1638,7 +1639,13 @@ export default function AdminPanelScreen() {
     const grandTotal = directTotal + creditTotal;
     return (
       <View>
-        <ChipSelect items={sitesList.map((site) => ({ id: site.id, label: site.name }))} value={reportSiteId} onChange={selectReportSite} />
+        <View style={styles.inlinePickerContainer}>
+          <Picker selectedValue={reportSiteId as any} onValueChange={(v) => selectReportSite(v as string)} style={styles.inlinePicker}>
+            {sitesList.map((site) => (
+              <Picker.Item key={site.id} label={site.name} value={site.id} />
+            ))}
+          </Picker>
+        </View>
 
         {/* Summary totals */}
         {reportData.length > 0 && (
@@ -1818,15 +1825,22 @@ export default function AdminPanelScreen() {
       {ioRole === 'Supervisor' && supervisors.length > 0 && (
         <>
           <Text style={styles.formTitle}>Supervisor</Text>
-          <ChipSelect
-            items={[{ id: '', label: 'All Supervisors (Combined)' }, ...supervisors.map((s) => ({ id: s.id.toString(), label: s.name }))]}
-            value={ioSupervisorId || ''}
-            onChange={(id) => {
-              const supervisorId = id || null;
-              setIoSupervisorId(supervisorId);
-              fetchIoReport(ioRole, ioFrom, ioTo, supervisorId);
-            }}
-          />
+          <View style={styles.inlinePickerContainer}>
+            <Picker
+              selectedValue={ioSupervisorId || ''}
+              onValueChange={(id) => {
+                const supervisorId = (id as string) || null;
+                setIoSupervisorId(supervisorId);
+                fetchIoReport(ioRole, ioFrom, ioTo, supervisorId);
+              }}
+              style={styles.inlinePicker}
+            >
+              <Picker.Item label="All Supervisors (Combined)" value="" />
+              {supervisors.map((s) => (
+                <Picker.Item key={s.id} label={s.name} value={s.id.toString()} />
+              ))}
+            </Picker>
+          </View>
         </>
       )}
 
@@ -2429,6 +2443,20 @@ const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  // Dropdown used to filter a report by site/supervisor — swaps in for a chip
+  // row once the list gets long enough that wrapped buttons get unwieldy.
+  inlinePickerContainer: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    overflow: 'hidden',
+    marginBottom: SPACING.md,
+  },
+  inlinePicker: {
+    height: 50,
+    width: '100%',
   },
   container: {
     flex: 1,
