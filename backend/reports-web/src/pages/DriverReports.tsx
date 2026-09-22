@@ -5,6 +5,7 @@ import { fieldApi } from '../api';
 import DataTable from '../components/DataTable';
 import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
+import SelectField from '../components/SelectField';
 import SummaryCard from '../components/SummaryCard';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
@@ -34,6 +35,9 @@ export default function DriverReports() {
   const [date, setDate] = useState(todayIso());
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  // Narrows every section on this page to one driver's own trips and bills —
+  // pick a name, then Download PDF / Share produce that driver's own report.
+  const [driverFilter, setDriverFilter] = useState<string | null>(null);
 
   const load = (m = mode, d = date, f = from, t = to) => {
     setLoading(true);
@@ -53,53 +57,72 @@ export default function DriverReports() {
 
   const rangeLabel = mode === 'single' ? dateLabel(date) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'All Time';
 
-  const totalKm = records.reduce((s, r) => s + Number(r.total_km || 0), 0);
-  const totalDiesel = records.reduce((s, r) => s + Number(r.diesel_fare || 0), 0);
-  const byVehicle = summarize(records, 'vehicle_name');
-  const byDriver = summarize(records, 'driver_name');
+  const driverNames = Array.from(new Set(records.map((r) => r.driver_name))).filter(Boolean).sort();
+  const filteredRecords = driverFilter ? records.filter((r) => r.driver_name === driverFilter) : records;
+  const filteredBills = driverFilter ? bills.filter((b) => b.driver_name === driverFilter) : bills;
+
+  const totalKm = filteredRecords.reduce((s, r) => s + Number(r.total_km || 0), 0);
+  const totalDiesel = filteredRecords.reduce((s, r) => s + Number(r.diesel_fare || 0), 0);
+  const byVehicle = summarize(filteredRecords, 'vehicle_name');
+  const byDriver = summarize(filteredRecords, 'driver_name');
+  const reportTitle = driverFilter ? `${driverFilter} — Driver Trip Report` : 'Driver Trip Report';
 
   const handleDownload = async () => {
     setDownloading(true);
     try {
       const { doc, filename } = await buildPdfReport({
-        filename: 'driver-trip-report.pdf',
-        title: 'Driver Trip Report',
+        filename: `${driverFilter ? driverFilter.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'driver'}-trip-report.pdf`,
+        title: reportTitle,
         subtitle: rangeLabel,
         orientation: 'landscape',
         summaryBoxes: [
-          { label: 'Total Trips', value: records.length.toString() },
+          { label: 'Total Trips', value: filteredRecords.length.toString() },
           { label: 'Total KM', value: totalKm.toLocaleString('en-IN') },
           { label: 'Total Diesel Fare', value: rupees(totalDiesel), color: '#e23744' },
         ],
         tables: [
+          ...(driverFilter
+            ? []
+            : [
+                {
+                  title: 'Vehicle-wise Summary',
+                  head: ['Vehicle', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
+                  body: byVehicle.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+                  columnStyles: { 1: { halign: 'right' as const }, 2: { halign: 'right' as const }, 3: { halign: 'right' as const } },
+                },
+                {
+                  title: 'Driver-wise Summary',
+                  head: ['Driver', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
+                  body: byDriver.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+                  columnStyles: { 1: { halign: 'right' as const }, 2: { halign: 'right' as const }, 3: { halign: 'right' as const } },
+                },
+              ]),
           {
-            title: 'Vehicle-wise Summary',
-            head: ['Vehicle', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
-            body: byVehicle.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
-            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
-          },
-          {
-            title: 'Driver-wise Summary',
-            head: ['Driver', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
-            body: byDriver.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
-            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
-          },
-          {
-            title: `Trip Detail (${records.length})`,
-            head: ['#', 'Date', 'Vehicle', 'KM (Start→End)', 'Total KM', 'Diesel (Rs)', 'Load', 'Type/Customer', 'Place'],
-            body: records.map((r, i) => [
+            title: `Trip Detail (${filteredRecords.length})`,
+            head: ['#', 'Date', 'Vehicle', 'KM (Start -> End)', 'Total KM', 'Diesel (Rs)', 'Load', 'Type/Customer', 'Place'],
+            body: filteredRecords.map((r, i) => [
               i + 1,
               dateLabel(r.date),
               r.vehicle_name,
-              `${r.starting_km}→${r.ending_km}`,
+              `${r.starting_km} -> ${r.ending_km}`,
               r.total_km,
               Number(r.diesel_fare || 0).toLocaleString('en-IN'),
               r.load_name || '-',
               r.load_type === 'Rent' ? `Rent / ${r.customer_name || '-'}` : 'Own',
               r.place || '-',
             ]),
-            columnStyles: { 4: { halign: 'right' }, 5: { halign: 'right' } },
+            columnStyles: { 4: { halign: 'right' as const }, 5: { halign: 'right' as const } },
           },
+          ...(filteredBills.length > 0
+            ? [
+                {
+                  title: `Diesel Bills (${filteredBills.length})`,
+                  head: ['Date', 'Driver', 'Vehicle', 'Note', 'Amount (Rs)'],
+                  body: filteredBills.map((b: any) => [dateLabel(b.date), b.driver_name, b.vehicle_name || '-', b.note || '-', Number(b.amount || 0).toLocaleString('en-IN')]),
+                  columnStyles: { 4: { halign: 'right' as const } },
+                },
+              ]
+            : []),
         ],
       });
       await downloadPdfReport({ doc, filename });
@@ -109,35 +132,39 @@ export default function DriverReports() {
   };
 
   const handleShareWhatsApp = async () => {
-    if (records.length === 0) return;
+    if (filteredRecords.length === 0) return;
     setDownloading(true);
     try {
       const pdf = await buildPdfReport({
-        filename: 'driver-trip-report.pdf',
-        title: 'Driver Trip Report',
+        filename: `${driverFilter ? driverFilter.toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'driver'}-trip-report.pdf`,
+        title: reportTitle,
         subtitle: rangeLabel,
         orientation: 'landscape',
         summaryBoxes: [
-          { label: 'Total Trips', value: records.length.toString() },
+          { label: 'Total Trips', value: filteredRecords.length.toString() },
           { label: 'Total KM', value: totalKm.toLocaleString('en-IN') },
           { label: 'Total Diesel Fare', value: rupees(totalDiesel), color: '#e23744' },
         ],
         tables: [
-          {
-            title: 'Vehicle-wise Summary',
-            head: ['Vehicle', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
-            body: byVehicle.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
-            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
-          },
-          {
-            title: 'Driver-wise Summary',
-            head: ['Driver', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
-            body: byDriver.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
-            columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
-          },
+          ...(driverFilter
+            ? []
+            : [
+                {
+                  title: 'Vehicle-wise Summary',
+                  head: ['Vehicle', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
+                  body: byVehicle.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+                  columnStyles: { 1: { halign: 'right' as const }, 2: { halign: 'right' as const }, 3: { halign: 'right' as const } },
+                },
+                {
+                  title: 'Driver-wise Summary',
+                  head: ['Driver', 'Trips', 'Total KM', 'Diesel Fare (Rs)'],
+                  body: byDriver.map((v) => [v.name, v.trips, v.total_km.toLocaleString('en-IN'), v.diesel_fare.toLocaleString('en-IN')]),
+                  columnStyles: { 1: { halign: 'right' as const }, 2: { halign: 'right' as const }, 3: { halign: 'right' as const } },
+                },
+              ]),
         ],
       });
-      const text = `Driver Trip Report (${rangeLabel})\nTotal Trips: ${records.length}\nTotal KM: ${totalKm.toLocaleString('en-IN')}\nTotal Diesel Fare: ${rupees(totalDiesel)}`;
+      const text = `${reportTitle} (${rangeLabel})\nTotal Trips: ${filteredRecords.length}\nTotal KM: ${totalKm.toLocaleString('en-IN')}\nTotal Diesel Fare: ${rupees(totalDiesel)}`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -147,7 +174,9 @@ export default function DriverReports() {
   return (
     <div>
       <h1 className="page-title">Driver Reports</h1>
-      <p className="page-subtitle">Trip records and diesel bills across all drivers.</p>
+      <p className="page-subtitle">
+        {driverFilter ? `Trip records and diesel bills for ${driverFilter}.` : 'Trip records and diesel bills across all drivers.'}
+      </p>
 
       <DateFilterBar
         mode={mode}
@@ -161,22 +190,34 @@ export default function DriverReports() {
         onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); load('range', date, f, t); }}
       />
 
+      {driverNames.length > 0 && (
+        <div className="filter-row">
+          <SelectField
+            label="DRIVER"
+            value={driverFilter || ''}
+            placeholder={`All Drivers (${driverNames.length})`}
+            onChange={(v) => setDriverFilter(v || null)}
+            options={driverNames.map((name) => ({ value: name, label: name }))}
+          />
+        </div>
+      )}
+
       {loading ? (
         <div className="empty-note">Loading…</div>
       ) : (
         <>
           <div className="summary-row">
-            <SummaryCard label="Total Trips" value={records.length.toString()} icon={Truck} />
+            <SummaryCard label="Total Trips" value={filteredRecords.length.toString()} icon={Truck} />
             <SummaryCard label="Total KM" value={totalKm.toLocaleString('en-IN')} icon={Route} />
             <SummaryCard label="Total Diesel Fare" value={rupees(totalDiesel)} color="#e23744" icon={Fuel} />
           </div>
 
           <div className="toolbar no-print" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn" onClick={handleDownload} disabled={downloading || records.length === 0}>
+            <button className="btn" onClick={handleDownload} disabled={downloading || filteredRecords.length === 0}>
               <Download size={16} />
-              {downloading ? 'Building PDF…' : 'Download PDF'}
+              {downloading ? 'Building PDF…' : driverFilter ? `Download ${driverFilter}'s PDF` : 'Download PDF'}
             </button>
-            <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading || records.length === 0}>
+            <button className="btn whatsapp" onClick={handleShareWhatsApp} disabled={downloading || filteredRecords.length === 0}>
               <Share2 size={16} />
               Share on WhatsApp
             </button>
@@ -213,26 +254,46 @@ export default function DriverReports() {
             />
           </div>
 
+          {!driverFilter && (
+            <div className="card">
+              <h3 className="section-heading">Driver-wise Summary</h3>
+              <DataTable<any>
+                rowKey={(r) => r.name}
+                rows={byDriver}
+                emptyText="No trips recorded."
+                columns={[
+                  { header: 'Driver', render: (r) => r.name },
+                  { header: 'Trips', align: 'right', render: (r) => r.trips },
+                  { header: 'Total KM', align: 'right', render: (r) => r.total_km.toLocaleString('en-IN') },
+                  { header: 'Diesel Fare', align: 'right', render: (r) => rupees(r.diesel_fare) },
+                ]}
+              />
+            </div>
+          )}
+
           <div className="card">
-            <h3 className="section-heading">Driver-wise Summary</h3>
+            <h3 className="section-heading">Trip Detail ({filteredRecords.length})</h3>
             <DataTable<any>
-              rowKey={(r) => r.name}
-              rows={byDriver}
-              emptyText="No trips recorded."
+              rowKey={(r) => r.id}
+              rows={filteredRecords}
+              emptyText="No trips recorded for this selection."
               columns={[
-                { header: 'Driver', render: (r) => r.name },
-                { header: 'Trips', align: 'right', render: (r) => r.trips },
-                { header: 'Total KM', align: 'right', render: (r) => r.total_km.toLocaleString('en-IN') },
-                { header: 'Diesel Fare', align: 'right', render: (r) => rupees(r.diesel_fare) },
+                { header: 'Date', render: (r: any) => dateLabel(r.date) },
+                ...(driverFilter ? [] : [{ header: 'Driver', render: (r: any) => r.driver_name || '—' }]),
+                { header: 'Vehicle', render: (r: any) => r.vehicle_name || '—' },
+                { header: 'KM (Start→End)', render: (r: any) => `${r.starting_km}→${r.ending_km}` },
+                { header: 'Total KM', align: 'right', render: (r: any) => Number(r.total_km || 0).toLocaleString('en-IN') },
+                { header: 'Diesel', align: 'right', render: (r: any) => rupees(r.diesel_fare) },
+                { header: 'Load / Place', render: (r: any) => `${r.load_name || '-'} • ${r.place || '-'}` },
               ]}
             />
           </div>
 
           <div className="card">
-            <h3 className="section-heading">Diesel Bills ({bills.length})</h3>
+            <h3 className="section-heading">Diesel Bills ({filteredBills.length})</h3>
             <DataTable<any>
               rowKey={(b) => b.id}
-              rows={bills}
+              rows={filteredBills}
               emptyText="No diesel bills uploaded."
               columns={[
                 {

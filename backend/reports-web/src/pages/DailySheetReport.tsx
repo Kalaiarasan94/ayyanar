@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Banknote, Download, FileSpreadsheet, FileText, Share2, Users, Wallet } from 'lucide-react';
+import { Banknote, Briefcase, Download, FileSpreadsheet, FileText, Receipt, Share2, Users, Wallet, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
@@ -356,9 +356,19 @@ export default function DailySheetReport() {
               emptyText="No daily sheets found for this selection."
               columns={[
                 { header: 'Date', render: (r) => dateLabel(r.date) },
-                { header: 'Supervisor', render: (r) => r.supervisor_name },
-                { header: 'Site', render: (r) => r.site_name },
-                { header: 'Work Description', render: (r) => r.work_description || '—' },
+                { header: 'Supervisor', render: (r) => r.supervisor_name || '—' },
+                { header: 'Site', render: (r) => r.site_name || '—' },
+                {
+                  header: 'Work Description',
+                  render: (r) => (
+                    <span
+                      style={{ display: 'inline-block', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'bottom' }}
+                      title={r.work_description || undefined}
+                    >
+                      {r.work_description || '—'}
+                    </span>
+                  ),
+                },
                 { header: 'Received', align: 'right', render: (r) => <span className="text-success">{rupees(r.amount_received)}</span> },
                 { header: 'Total Spent', align: 'right', render: (r) => <b>{rupees(r.total_amount)}</b> },
                 {
@@ -366,13 +376,13 @@ export default function DailySheetReport() {
                   align: 'right',
                   render: (r) => (
                     <div className="row-actions">
-                      <button className="icon-btn" onClick={() => setDetail(r)} title="View Detail">
+                      <button className="icon-btn" onClick={() => setDetail(r)} title="View full daily sheet">
                         View
                       </button>
-                      <button className="icon-btn" onClick={() => handleDownloadSinglePdf(r)} disabled={downloading} title="Download Single Daily Sheet PDF">
-                        <Download size={13} /> Single PDF
+                      <button className="icon-btn" onClick={() => handleDownloadSinglePdf(r)} disabled={downloading} title="Download this sheet as a PDF">
+                        <Download size={13} /> PDF
                       </button>
-                      <button className="icon-btn" onClick={() => handleShareSingleWhatsApp(r)} disabled={downloading} title="Share Single Sheet on WhatsApp" style={{ color: '#25D366' }}>
+                      <button className="icon-btn" onClick={() => handleShareSingleWhatsApp(r)} disabled={downloading} title="Share this sheet on WhatsApp" style={{ color: '#25D366' }}>
                         <Share2 size={13} /> WhatsApp
                       </button>
                     </div>
@@ -386,79 +396,151 @@ export default function DailySheetReport() {
 
       {detail && (
         <div className="modal-backdrop" onClick={() => setDetail(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-            <h3>{detail.supervisor_name}</h3>
-            <div className="sub">
-              {detail.site_name} • {dateLabel(detail.date)}
-            </div>
-            {detail.work_description && <div className="sub" style={{ marginBottom: 12 }}>Work: {detail.work_description}</div>}
-
-            <div className="field-label">Worker Attendance</div>
-            {(detail.attendance || []).length > 0 ? (
-              (detail.attendance || []).map((a: any, i: number) => (
-                <div key={i} style={{ fontSize: 13, fontWeight: 700, padding: '4px 0', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{a.category}{a.name ? ` — ${a.name}` : ''}</span>
-                  <span className="text-success">{a.count} Present</span>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 12,
+                  background: 'var(--tint)',
+                  border: '1px solid var(--tint-border)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <FileText size={19} color="var(--primary)" />
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h3 style={{ margin: 0 }}>{detail.supervisor_name || 'Supervisor'}</h3>
+                <div className="sub" style={{ margin: 0 }}>
+                  {detail.site_name || 'Site'} • {dateLabel(detail.date)}
                 </div>
-              ))
-            ) : (
-              <div className="empty-note">No attendance recorded.</div>
+              </div>
+              <button
+                onClick={() => setDetail(null)}
+                aria-label="Close"
+                style={{ border: 'none', background: 'transparent', color: 'var(--text-light)', cursor: 'pointer', padding: 4, flexShrink: 0 }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {detail.work_description && (
+              <div
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  color: 'var(--text)',
+                  background: 'var(--background)',
+                  border: '1px solid var(--border)',
+                  borderRadius: 10,
+                  padding: '9px 12px',
+                  marginBottom: 16,
+                }}
+              >
+                {detail.work_description}
+              </div>
             )}
 
-            <div className="field-label">Money & Bills Summary</div>
-            <div style={{ fontSize: 13, fontWeight: 700, padding: '4px 0', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Amount Received:</span>
-              <span className="text-success">{rupees(detail.amount_received)}</span>
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 700, padding: '4px 0', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Bills — Normal:</span>
-              <span>{rupees(detail.bills_normal)}</span>
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 700, padding: '4px 0', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Bills — GST:</span>
-              <span>{rupees(detail.bills_gst)}</span>
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 700, padding: '4px 0', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Bills — Credit / Under GST:</span>
-              <span>{rupees(detail.bills_credit)}</span>
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 700, padding: '4px 0', display: 'flex', justifyContent: 'space-between' }}>
-              <span>Vehicle & Rental:</span>
-              <span>{rupees(detail.vehicle_rental)}</span>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+              <div style={{ flex: 1, background: 'rgba(21, 128, 61, 0.08)', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color: '#15803d' }}>RECEIVED</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#15803d', marginTop: 2 }}>{rupees(detail.amount_received)}</div>
+              </div>
+              <div style={{ flex: 1, background: 'var(--tint)', borderRadius: 10, padding: '10px 12px' }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: 0.4, color: 'var(--primary)' }}>TOTAL SPENT</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: 'var(--primary)', marginTop: 2 }}>{rupees(detail.total_amount)}</div>
+              </div>
             </div>
 
-            <div className="field-label">Labour Salary Paid</div>
-            {(detail.labourSalary || []).length > 0 ? (
-              (detail.labourSalary || []).map((l: any, i: number) => (
-                <div key={i} style={{ fontSize: 13, fontWeight: 700, padding: '4px 0', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>{l.name}</span>
-                  <span className="text-primary">{rupees(l.amount)}</span>
-                </div>
-              ))
+            <div className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Users size={13} /> WORKER ATTENDANCE
+            </div>
+            {(detail.attendance || []).length > 0 ? (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                {(detail.attendance || []).map((a: any, i: number) => (
+                  <div
+                    key={i}
+                    style={{
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      padding: '8px 12px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      borderTop: i > 0 ? '1px solid var(--border)' : 'none',
+                    }}
+                  >
+                    <span>{a.category}{a.name ? ` — ${a.name}` : ''}</span>
+                    <span className="text-success">{a.count} Present</span>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="empty-note">No labour salary recorded.</div>
+              <div className="empty-note" style={{ padding: '10px 0' }}>No attendance recorded.</div>
+            )}
+
+            <div className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Receipt size={13} /> BILLS BREAKDOWN
+            </div>
+            <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+              {[
+                { label: 'Normal Bills', value: detail.bills_normal },
+                { label: 'GST Bills', value: detail.bills_gst },
+                { label: 'Credit / Under GST', value: detail.bills_credit },
+                { label: 'Vehicle & Rental', value: detail.vehicle_rental },
+              ].map((row, i) => (
+                <div
+                  key={row.label}
+                  style={{ fontSize: 12.5, fontWeight: 700, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}
+                >
+                  <span className="text-muted">{row.label}</span>
+                  <span>{rupees(row.value)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Briefcase size={13} /> LABOUR SALARY PAID
+            </div>
+            {(detail.labourSalary || []).length > 0 ? (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
+                {(detail.labourSalary || []).map((l: any, i: number) => (
+                  <div
+                    key={i}
+                    style={{ fontSize: 12.5, fontWeight: 700, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}
+                  >
+                    <span>{l.name}</span>
+                    <span className="text-primary">{rupees(l.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="empty-note" style={{ padding: '10px 0' }}>No labour salary recorded.</div>
             )}
 
             <div
               style={{
-                fontSize: 15,
+                fontSize: 14,
                 fontWeight: 900,
-                color: 'var(--primary)',
-                marginTop: 14,
+                color: 'var(--text)',
+                marginTop: 16,
                 paddingTop: 14,
-                borderTop: '1px solid var(--border)',
+                borderTop: '2px solid var(--border)',
                 display: 'flex',
                 justifyContent: 'space-between',
               }}
             >
-              <span>TOTAL SPENT:</span>
-              <span>{rupees(detail.total_amount)}</span>
+              <span>TOTAL SPENT</span>
+              <span style={{ color: 'var(--primary)' }}>{rupees(detail.total_amount)}</span>
             </div>
 
             <div className="modal-actions" style={{ flexDirection: 'column', gap: 8, marginTop: 18 }}>
               <div style={{ display: 'flex', gap: 8, width: '100%' }}>
                 <button className="btn" onClick={() => handleDownloadSinglePdf(detail)} disabled={downloading}>
-                  <Download size={15} /> Download Single Sheet PDF
+                  <Download size={15} /> Download PDF
                 </button>
                 <button className="btn whatsapp" onClick={() => handleShareSingleWhatsApp(detail)} disabled={downloading}>
                   <Share2 size={15} /> WhatsApp

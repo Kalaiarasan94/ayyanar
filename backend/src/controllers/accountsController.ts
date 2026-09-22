@@ -371,10 +371,41 @@ export const accountsController = {
       }));
       const indirectTotal = indirectRows.reduce((s: number, r: any) => s + r.amount, 0);
 
+      // Individual transactions (not date-aggregated) so the report can show
+      // who each input/output actually was with, not just a daily total.
+      let entriesSql = `SELECT id, date, flow, category, party_name, payment_method, description, amount
+         FROM account_transactions WHERE role = ?`;
+      const entriesParams: any[] = [role];
+      if (req.query.userId) {
+        entriesSql += ' AND user_id = ?';
+        entriesParams.push(parseInt(req.query.userId.toString()));
+      }
+      if (from) {
+        entriesSql += ' AND date >= ?';
+        entriesParams.push(from);
+      }
+      if (to) {
+        entriesSql += ' AND date <= ?';
+        entriesParams.push(to);
+      }
+      entriesSql += ' ORDER BY date DESC, id DESC';
+      const entriesResult = await db.query(entriesSql, entriesParams);
+      const entries = (entriesResult.rows || []).map((r: any) => ({
+        id: r.id,
+        date: r.date,
+        flow: r.flow,
+        category: r.category,
+        party: r.party_name,
+        paymentMethod: r.payment_method,
+        description: r.description,
+        amount: Number(r.amount),
+      }));
+
       res.status(200).json({
         role,
         opening,
         rows,
+        entries,
         totals: {
           input: rows.reduce((s: number, r: any) => s + r.input, 0),
           output: rows.reduce((s: number, r: any) => s + r.output, 0),

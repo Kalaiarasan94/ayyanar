@@ -801,15 +801,23 @@ export default function AdminPanelScreen() {
   const ioRangeTitle = ioFrom || ioTo ? `${ioFrom || 'Beginning'} to ${ioTo || 'Today'}` : 'All Time';
 
   const buildIoPdfDoc = () => {
-    const rows = (ioReport?.rows || []).map((r: any) => [
+    const inputEntries = (ioReport?.entries || []).filter((e: any) => e.flow === 'IN');
+    const outputEntries = (ioReport?.entries || []).filter((e: any) => e.flow === 'OUT');
+    const inputRows = [
+      ...(ioFrom ? [['Opening Balance', '', '', Number(ioReport?.opening || 0).toLocaleString('en-IN')]] : []),
+      ...inputEntries.map((r: any) => [
+        new Date(r.date).toLocaleDateString('en-IN'),
+        r.party || r.description || '-',
+        r.category || '-',
+        Number(r.amount).toLocaleString('en-IN'),
+      ]),
+    ];
+    const outputRows = outputEntries.map((r: any) => [
       new Date(r.date).toLocaleDateString('en-IN'),
-      r.input ? Number(r.input).toLocaleString('en-IN') : '-',
-      r.output ? Number(r.output).toLocaleString('en-IN') : '-',
-      Number(r.balance).toLocaleString('en-IN'),
+      r.party || r.description || '-',
+      r.category || '-',
+      Number(r.amount).toLocaleString('en-IN'),
     ]);
-    if (ioFrom) {
-      rows.unshift(['Opening Balance', '', '', Number(ioReport?.opening || 0).toLocaleString('en-IN')]);
-    }
     const indirectRows = (ioReport?.indirect?.rows || []).map((r: any) => [
       new Date(r.date).toLocaleDateString('en-IN'),
       r.site || '-',
@@ -819,7 +827,7 @@ export default function AdminPanelScreen() {
     return buildPdfReport({
       filename: `${ioRole}_IO_Report.pdf`,
       title: `${ioRole} I/O Report`,
-      subtitle: `Date-wise Input / Output / Balance • ${ioRangeTitle}`,
+      subtitle: `Input / Output / Balance • ${ioRangeTitle}`,
       summaryBoxes: [
         { label: 'Total Input', value: rupeesText(ioReport?.totals?.input), color: '#8C0F16' },
         { label: 'Total Output', value: rupeesText(ioReport?.totals?.output), color: '#E23744' },
@@ -827,27 +835,41 @@ export default function AdminPanelScreen() {
       ],
       tables: [
         {
-          title: 'Input & Output — Date-wise',
-          head: ['Date', 'Input (Rs)', 'Output (Rs)', 'Balance (Rs)'],
-          body: rows,
-          foot: [
-            'TOTAL',
-            Number(ioReport?.totals?.input || 0).toLocaleString('en-IN'),
-            Number(ioReport?.totals?.output || 0).toLocaleString('en-IN'),
-            Number(ioReport?.totals?.closing || 0).toLocaleString('en-IN'),
-          ],
-          columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } },
+          title: `All Inputs (${inputEntries.length})`,
+          head: ['Date', 'Party', 'Category', 'Input (Rs)'],
+          body: inputRows,
+          foot: ['TOTAL INPUT', '', '', Number(ioReport?.totals?.input || 0).toLocaleString('en-IN')],
+          columnStyles: { 3: { halign: 'right' as const } },
+        },
+        {
+          title: `All Outputs (${outputEntries.length})`,
+          head: ['Date', 'Party', 'Category', 'Output (Rs)'],
+          body: outputRows,
+          foot: ['TOTAL OUTPUT', '', '', Number(ioReport?.totals?.output || 0).toLocaleString('en-IN')],
+          columnStyles: { 3: { halign: 'right' as const } },
         },
         ...(ioRole === 'Supervisor' && indirectRows.length > 0
           ? [
               {
-                title: `Indirect Bills Output (${indirectRows.length}) — Rs ${Number(ioReport?.indirect?.total || 0).toLocaleString('en-IN')}`,
+                title: `Indirect Bills Output (${indirectRows.length}) — part of Output above`,
                 head: ['Date', 'Site', 'Notes', 'Amount (Rs)'],
                 body: indirectRows,
+                foot: ['', '', 'TOTAL', Number(ioReport?.indirect?.total || 0).toLocaleString('en-IN')],
                 columnStyles: { 3: { halign: 'right' as const } },
               },
             ]
           : []),
+        {
+          title: 'Input / Output / Balance',
+          head: ['', 'Amount (Rs)'],
+          body: [
+            ...(ioFrom ? [['Opening Balance', Number(ioReport?.opening || 0).toLocaleString('en-IN')]] : []),
+            ['Total Input', Number(ioReport?.totals?.input || 0).toLocaleString('en-IN')],
+            ['Total Output', Number(ioReport?.totals?.output || 0).toLocaleString('en-IN')],
+          ],
+          foot: ['Closing Balance', Number(ioReport?.totals?.closing || 0).toLocaleString('en-IN')],
+          columnStyles: { 1: { halign: 'right' as const } },
+        },
       ],
     });
   };
@@ -980,19 +1002,19 @@ export default function AdminPanelScreen() {
       const trips = driverRecords.filter((r: any) => (r.driver_name || 'Unknown') === driverName);
       return {
         title: `${driverName} — ${s.trips} trip(s) • ${s.km.toLocaleString('en-IN')} km • Diesel Rs ${s.diesel.toLocaleString('en-IN')}`,
-        head: ['#', 'Date', 'Vehicle', 'KM (Start→End)', 'Total KM', 'Distance', 'Diesel (Rs)', 'Load (Weight)', 'Type/Customer', 'Place', 'Time'],
+        head: ['#', 'Date', 'Vehicle', 'KM (Start -> End)', 'Total KM', 'Distance', 'Diesel (Rs)', 'Load (Weight)', 'Type/Customer', 'Place', 'Time'],
         body: trips.map((rec: any, i: number) => [
           i + 1,
           new Date(rec.date).toLocaleDateString('en-IN'),
           rec.vehicle_name || '-',
-          `${Number(rec.starting_km || 0)} → ${Number(rec.ending_km || 0)}`,
+          `${Number(rec.starting_km || 0)} -> ${Number(rec.ending_km || 0)}`,
           Number(rec.total_km || 0),
           rec.distance || '-',
           Number(rec.diesel_fare || 0).toLocaleString('en-IN'),
           `${rec.load_name || '-'}${rec.load_weight ? ` (${rec.load_weight})` : ''}`,
           `${rec.load_type || '-'}${rec.customer_name ? ` — ${rec.customer_name}` : ''}`,
           rec.place || '-',
-          `${rec.starting_time || '-'} → ${rec.ending_time || '-'}`,
+          `${rec.starting_time || '-'} -> ${rec.ending_time || '-'}`,
         ]),
       };
     };
@@ -1864,39 +1886,65 @@ export default function AdminPanelScreen() {
         </TouchableOpacity>
       </View>
 
-      <SectionTitle title={`${ioRole} Statement — ${ioRangeTitle}`} />
+      <SectionTitle title={`All Inputs (${(ioReport?.entries || []).filter((e: any) => e.flow === 'IN').length}) — ${ioRangeTitle}`} />
       <View style={styles.card}>
         <View style={styles.ioHeaderRow}>
-          <Text style={[styles.ioHeaderText, { flex: 1.2, textAlign: 'left' }]}>Date</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1, textAlign: 'left' }]}>Date</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1.4, textAlign: 'left' }]}>Party / Category</Text>
           <Text style={styles.ioHeaderText}>Input</Text>
-          <Text style={styles.ioHeaderText}>Output</Text>
-          <Text style={styles.ioHeaderText}>Balance</Text>
         </View>
         {ioFrom ? (
           <View style={styles.ioRow}>
-            <Text style={[styles.ioDateCell, { fontStyle: 'italic' }]}>Opening</Text>
-            <Text style={styles.ioCell}> </Text>
-            <Text style={styles.ioCell}> </Text>
+            <Text style={[styles.ioDateCell, { flex: 1, fontStyle: 'italic' }]}>Opening</Text>
+            <Text style={{ flex: 1.4 }} />
             <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(ioReport?.opening || 0).toLocaleString('en-IN')}</Text>
           </View>
         ) : null}
-        {(ioReport?.rows || []).map((r: any) => (
-          <View key={r.date} style={styles.ioRow}>
-            <Text style={styles.ioDateCell}>{new Date(r.date).toLocaleDateString('en-IN')}</Text>
-            <Text style={[styles.ioCell, { color: COLORS.success }]}>{r.input ? Number(r.input).toLocaleString('en-IN') : '-'}</Text>
-            <Text style={[styles.ioCell, { color: COLORS.primary }]}>{r.output ? Number(r.output).toLocaleString('en-IN') : '-'}</Text>
-            <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(r.balance).toLocaleString('en-IN')}</Text>
+        {(ioReport?.entries || []).filter((e: any) => e.flow === 'IN').map((r: any) => (
+          <View key={r.id} style={styles.ioRow}>
+            <Text style={[styles.ioDateCell, { flex: 1 }]}>{new Date(r.date).toLocaleDateString('en-IN')}</Text>
+            <Text style={{ flex: 1.4 }} numberOfLines={1}>
+              <Text style={{ color: COLORS.text, fontSize: 12.5, fontWeight: '700' }}>{r.party || r.description || '—'}</Text>
+              {r.category ? <Text style={styles.rowMeta}>{`  •  ${r.category}`}</Text> : null}
+            </Text>
+            <Text style={[styles.ioCell, { color: COLORS.success, fontWeight: '900' }]}>{Number(r.amount).toLocaleString('en-IN')}</Text>
           </View>
         ))}
-        {ioReport && (ioReport.rows || []).length > 0 && (
+        {ioReport && (ioReport.entries || []).filter((e: any) => e.flow === 'IN').length > 0 && (
           <View style={[styles.ioRow, styles.ioTotalRow]}>
-            <Text style={[styles.ioDateCell, { fontWeight: '900' }]}>TOTAL</Text>
+            <Text style={[styles.ioDateCell, { flex: 1, fontWeight: '900' }]}>TOTAL INPUT</Text>
+            <Text style={{ flex: 1.4 }} />
             <Text style={[styles.ioCell, { color: COLORS.success, fontWeight: '900' }]}>{Number(ioReport.totals.input).toLocaleString('en-IN')}</Text>
-            <Text style={[styles.ioCell, { color: COLORS.primary, fontWeight: '900' }]}>{Number(ioReport.totals.output).toLocaleString('en-IN')}</Text>
-            <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(ioReport.totals.closing).toLocaleString('en-IN')}</Text>
           </View>
         )}
-        {(!ioReport || (ioReport.rows || []).length === 0) && <EmptyState text="No transactions for this account in the selected range." />}
+        {(!ioReport || (ioReport.entries || []).filter((e: any) => e.flow === 'IN').length === 0) && <EmptyState text="No money received in this range." />}
+      </View>
+
+      <SectionTitle title={`All Outputs (${(ioReport?.entries || []).filter((e: any) => e.flow === 'OUT').length})`} />
+      <View style={styles.card}>
+        <View style={styles.ioHeaderRow}>
+          <Text style={[styles.ioHeaderText, { flex: 1, textAlign: 'left' }]}>Date</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1.4, textAlign: 'left' }]}>Party / Category</Text>
+          <Text style={styles.ioHeaderText}>Output</Text>
+        </View>
+        {(ioReport?.entries || []).filter((e: any) => e.flow === 'OUT').map((r: any) => (
+          <View key={r.id} style={styles.ioRow}>
+            <Text style={[styles.ioDateCell, { flex: 1 }]}>{new Date(r.date).toLocaleDateString('en-IN')}</Text>
+            <Text style={{ flex: 1.4 }} numberOfLines={1}>
+              <Text style={{ color: COLORS.text, fontSize: 12.5, fontWeight: '700' }}>{r.party || r.description || '—'}</Text>
+              {r.category ? <Text style={styles.rowMeta}>{`  •  ${r.category}`}</Text> : null}
+            </Text>
+            <Text style={[styles.ioCell, { color: COLORS.primary, fontWeight: '900' }]}>{Number(r.amount).toLocaleString('en-IN')}</Text>
+          </View>
+        ))}
+        {ioReport && (ioReport.entries || []).filter((e: any) => e.flow === 'OUT').length > 0 && (
+          <View style={[styles.ioRow, styles.ioTotalRow]}>
+            <Text style={[styles.ioDateCell, { flex: 1, fontWeight: '900' }]}>TOTAL OUTPUT</Text>
+            <Text style={{ flex: 1.4 }} />
+            <Text style={[styles.ioCell, { color: COLORS.primary, fontWeight: '900' }]}>{Number(ioReport.totals.output).toLocaleString('en-IN')}</Text>
+          </View>
+        )}
+        {(!ioReport || (ioReport.entries || []).filter((e: any) => e.flow === 'OUT').length === 0) && <EmptyState text="No money paid in this range." />}
       </View>
 
       {ioRole === 'Supervisor' && (
@@ -1924,6 +1972,28 @@ export default function AdminPanelScreen() {
           </View>
         </>
       )}
+
+      <SectionTitle title="Input / Output / Balance" />
+      <View style={styles.card}>
+        {ioFrom ? (
+          <View style={styles.ioRow}>
+            <Text style={[styles.ioDateCell, { flex: 1.4 }]}>Opening Balance</Text>
+            <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(ioReport?.opening || 0).toLocaleString('en-IN')}</Text>
+          </View>
+        ) : null}
+        <View style={styles.ioRow}>
+          <Text style={[styles.ioDateCell, { flex: 1.4 }]}>Total Input</Text>
+          <Text style={[styles.ioCell, { color: COLORS.success, fontWeight: '900' }]}>{Number(ioReport?.totals?.input || 0).toLocaleString('en-IN')}</Text>
+        </View>
+        <View style={styles.ioRow}>
+          <Text style={[styles.ioDateCell, { flex: 1.4 }]}>Total Output</Text>
+          <Text style={[styles.ioCell, { color: COLORS.primary, fontWeight: '900' }]}>{Number(ioReport?.totals?.output || 0).toLocaleString('en-IN')}</Text>
+        </View>
+        <View style={[styles.ioRow, styles.ioTotalRow]}>
+          <Text style={[styles.ioDateCell, { flex: 1.4, fontWeight: '900' }]}>Closing Balance</Text>
+          <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(ioReport?.totals?.closing || 0).toLocaleString('en-IN')}</Text>
+        </View>
+      </View>
     </View>
   );
 
