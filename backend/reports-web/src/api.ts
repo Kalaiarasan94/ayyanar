@@ -34,7 +34,7 @@ export const authApi = {
 };
 
 export const accountsApi = {
-  getTotalSummary: () => request<any>('/accounts/total-summary'),
+  getTotalSummary: (from?: string, to?: string) => request<any>(`/accounts/total-summary${qs({ from, to })}`),
   getDayBook: (from?: string, to?: string) => request<any[]>(`/accounts/daybook${qs({ from, to })}`),
   getLedger: (from?: string, to?: string) => request<any[]>(`/accounts/ledger${qs({ from, to })}`),
   getPeriods: () => request<{ months: string[]; years: string[] }>('/accounts/periods'),
@@ -44,7 +44,7 @@ export const accountsApi = {
 };
 
 export const adminApi = {
-  getAnalytics: () => request<any>('/analytics/dashboard'),
+  getAnalytics: (from?: string, to?: string) => request<any>(`/analytics/dashboard${qs({ from, to })}`),
   getAttendanceOverview: (params?: { date?: string; from?: string; to?: string; all?: boolean }) =>
     request<any>(`/attendance/overview${qs({ ...params, all: params?.all ? 1 : undefined })}`),
   getSites: () => request<any[]>('/sites'),

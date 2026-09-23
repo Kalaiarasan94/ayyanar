@@ -275,7 +275,13 @@ export const accountsService = {
     const qs = userId ? `?userId=${userId}` : '';
     return request<any>(`/accounts/summary/${role}${qs}`);
   },
-  getTotalSummary: () => request<any>('/accounts/total-summary'),
+  getTotalSummary: (from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const qs = params.toString();
+    return request<any>(`/accounts/total-summary${qs ? `?${qs}` : ''}`);
+  },
   getDayBook: (from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.append('from', from);

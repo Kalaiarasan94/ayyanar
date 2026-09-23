@@ -1,4 +1,4 @@
-export type DateFilterMode = 'single' | 'range' | 'all';
+export type DateFilterMode = 'single' | 'range' | 'all' | 'month';
 
 type Props = {
   mode: DateFilterMode;
@@ -14,6 +14,9 @@ type Props = {
   // yet — the same explicit-argument pattern every other data-fetch in this
   // app already uses.
   onApplyRange: (from?: string, to?: string) => void;
+  // Opt-in: adds a "Month" chip with a native month picker (whole calendar
+  // month, not just today's date) — only where a page asks for it.
+  enableMonth?: boolean;
 };
 
 const toIso = (d: Date) => d.toISOString().split('T')[0];
@@ -35,13 +38,18 @@ const firstDayOfMonthIso = () => {
 
 // The standard "Single Date / Date Range / All Time" filter used across every
 // reports-web page — one calendar picker, one interaction model everywhere.
-export default function DateFilterBar({ mode, onModeChange, date, onDateChange, from, to, onFromChange, onToChange, onApplyRange }: Props) {
+export default function DateFilterBar({ mode, onModeChange, date, onDateChange, from, to, onFromChange, onToChange, onApplyRange, enableMonth }: Props) {
   return (
     <>
       <div className="chip-row" style={{ marginBottom: 12 }}>
         <button className={`chip${mode === 'single' ? ' active' : ''}`} onClick={() => onModeChange('single')}>
           Single Date
         </button>
+        {enableMonth && (
+          <button className={`chip${mode === 'month' ? ' active' : ''}`} onClick={() => onModeChange('month')}>
+            Month
+          </button>
+        )}
         <button className={`chip${mode === 'range' ? ' active' : ''}`} onClick={() => onModeChange('range')}>
           Date Range
         </button>
@@ -51,6 +59,26 @@ export default function DateFilterBar({ mode, onModeChange, date, onDateChange, 
       </div>
 
       <div className="toolbar" style={{ marginBottom: 18 }}>
+        {mode === 'month' && (
+          <div className="date-input-group">
+            <input
+              type="month"
+              className="input"
+              value={date.slice(0, 7)}
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const [y, m] = e.target.value.split('-').map(Number);
+                const first = toIso(new Date(y, m - 1, 1));
+                const last = toIso(new Date(y, m, 0));
+                onDateChange(first);
+                onFromChange(first);
+                onToChange(last);
+                onApplyRange(first, last);
+              }}
+            />
+          </div>
+        )}
+
         {mode === 'single' && (
           <div className="date-input-group">
             <input type="date" className="input" value={date} onChange={(e) => onDateChange(e.target.value)} />

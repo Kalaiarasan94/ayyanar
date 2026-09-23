@@ -16,10 +16,13 @@ import {
 import { accountsApi, adminApi } from '../api';
 import SummaryCard from '../components/SummaryCard';
 import DataTable from '../components/DataTable';
+import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
+const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
+const todayIso = () => new Date().toISOString().split('T')[0];
 const monthLabel = (period: string) => {
   const [year, month] = period.split('-');
   if (!month) return period;
@@ -34,15 +37,29 @@ export default function Overview() {
   const [analytics, setAnalytics] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [mode, setMode] = useState<DateFilterMode>('all');
+  const [date, setDate] = useState(todayIso());
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
 
-  useEffect(() => {
-    Promise.all([accountsApi.getTotalSummary(), adminApi.getAnalytics()])
+  const load = (m = mode, d = date, f = from, t = to) => {
+    setLoading(true);
+    const [qFrom, qTo] = m === 'single' ? [d, d] : m === 'range' || m === 'month' ? [f, t] : [undefined, undefined];
+    Promise.all([accountsApi.getTotalSummary(qFrom, qTo), adminApi.getAnalytics(qFrom, qTo)])
       .then(([s, a]) => {
         setSummary(s);
         setAnalytics(a);
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const rangeTitle =
+    mode === 'single' ? dateLabel(date) : mode === 'month' ? monthLabel(date.slice(0, 7)) : mode === 'range' ? `${dateLabel(from)} to ${dateLabel(to)}` : 'Lifetime';
 
   if (loading) return <div className="empty-note">Loading overview…</div>;
 
@@ -61,9 +78,9 @@ export default function Overview() {
     setDownloading(true);
     try {
       const { doc, filename } = await buildPdfReport({
-        filename: `company-overview-${new Date().toISOString().split('T')[0]}.pdf`,
+        filename: `company-overview-${mode === 'all' ? 'lifetime' : `${from}-to-${to}`}.pdf`,
         title: 'Company Financial Overview',
-        subtitle: 'Company-wide financial picture — Owner, Admin and Supervisor books combined',
+        subtitle: `Company-wide financial picture — Owner, Admin and Supervisor books combined • ${rangeTitle}`,
         summaryBoxes: [
           { label: 'Revenue', value: rupees(summary?.revenue), color: '#15803d' },
           { label: 'Expenses', value: rupees(summary?.expenses), color: '#e23744' },
@@ -105,9 +122,9 @@ export default function Overview() {
     setDownloading(true);
     try {
       const pdf = await buildPdfReport({
-        filename: `company-overview-${new Date().toISOString().split('T')[0]}.pdf`,
+        filename: `company-overview-${mode === 'all' ? 'lifetime' : `${from}-to-${to}`}.pdf`,
         title: 'Company Financial Overview',
-        subtitle: 'Company-wide financial picture — Owner, Admin and Supervisor books combined',
+        subtitle: `Company-wide financial picture — Owner, Admin and Supervisor books combined • ${rangeTitle}`,
         summaryBoxes: [
           { label: 'Revenue', value: rupees(summary?.revenue), color: '#15803d' },
           { label: 'Expenses', value: rupees(summary?.expenses), color: '#e23744' },
@@ -139,7 +156,7 @@ export default function Overview() {
           },
         ],
       });
-      const text = `Ayyanar Construction — Overview Report\nRevenue: ${rupees(summary?.revenue)}\nExpenses: ${rupees(summary?.expenses)}\n${profitPositive ? 'Profit' : 'Loss'}: ${rupees(Math.abs(Number(summary?.profit || 0)))}`;
+      const text = `Ayyanar Construction — Overview Report (${rangeTitle})\nRevenue: ${rupees(summary?.revenue)}\nExpenses: ${rupees(summary?.expenses)}\n${profitPositive ? 'Profit' : 'Loss'}: ${rupees(Math.abs(Number(summary?.profit || 0)))}`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -150,6 +167,19 @@ export default function Overview() {
     <div>
       <h1 className="page-title">Overview</h1>
       <p className="page-subtitle">Company-wide financial picture — Owner, Admin and Supervisor books combined.</p>
+
+      <DateFilterBar
+        enableMonth
+        mode={mode}
+        onModeChange={(m) => { setMode(m); load(m, date, from, to); }}
+        date={date}
+        onDateChange={(d) => { setDate(d); if (mode !== 'month') load('single', d, from, to); }}
+        from={from}
+        to={to}
+        onFromChange={setFrom}
+        onToChange={setTo}
+        onApplyRange={(f = from, t = to) => { setFrom(f); setTo(t); load(mode === 'month' ? 'month' : 'range', date, f, t); }}
+      />
 
       <div className="toolbar no-print" style={{ justifyContent: 'flex-end', marginBottom: 14 }}>
         <button className="btn" onClick={handleDownloadPdf} disabled={downloading}>
@@ -164,13 +194,13 @@ export default function Overview() {
       </div>
 
       <div className="summary-row">
-        <SummaryCard label="Revenue (Lifetime)" value={rupees(summary?.revenue)} color="#15803d" icon={TrendingUp} />
-        <SummaryCard label="Expenses (Lifetime)" value={rupees(summary?.expenses)} color="#e23744" icon={TrendingDown} />
+        <SummaryCard label={`Revenue (${rangeTitle})`} value={rupees(summary?.revenue)} color="#15803d" icon={TrendingUp} />
+        <SummaryCard label={`Expenses (${rangeTitle})`} value={rupees(summary?.expenses)} color="#e23744" icon={TrendingDown} />
       </div>
 
       <div className="hero-card" style={{ background: profitPositive ? '#15803d' : '#cb202d' }}>
         <div>
-          <div className="hero-label">{profitPositive ? 'Profit' : 'Loss'} — Lifetime</div>
+          <div className="hero-label">{profitPositive ? 'Profit' : 'Loss'} — {rangeTitle}</div>
           <div className="hero-value">{rupees(Math.abs(Number(summary?.profit || 0)))}</div>
         </div>
         <Wallet size={34} strokeWidth={1.8} />
@@ -178,7 +208,7 @@ export default function Overview() {
 
       {monthlyTrend.length > 0 && (
         <div className="card">
-          <h3 className="section-heading">Revenue vs Expenses — Last 6 Months</h3>
+          <h3 className="section-heading">Revenue vs Expenses — Last 6 Months{mode !== 'all' ? ' (Lifetime Trend)' : ''}</h3>
           <ResponsiveContainer width="100%" height={280}>
             <BarChart data={monthlyTrend}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1dede" />

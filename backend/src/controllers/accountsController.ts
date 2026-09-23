@@ -643,12 +643,22 @@ export const accountsController = {
   // monthly + yearly breakdown, and cash balance per role
   getTotalSummary: async (req: Request, res: Response): Promise<void> => {
     try {
+      // Optional Month/Duration filter — when given, the headline totals and
+      // role balances narrow to that range; the monthly/yearly trend stays
+      // lifetime so the chart keeps its full context regardless of filter.
+      const { from, to } = req.query;
+      const dateWhere: string[] = [];
+      const dateParams: any[] = [];
+      if (from) { dateWhere.push('date >= ?'); dateParams.push(from); }
+      if (to) { dateWhere.push('date <= ?'); dateParams.push(to); }
+      const dateClause = dateWhere.length ? ` AND ${dateWhere.join(' AND ')}` : '';
+
       const totalsResult = await db.query(
         `SELECT
            COALESCE(SUM(IF(flow = 'IN'  AND category NOT IN (${internalList}), amount, 0)), 0) AS revenue,
            COALESCE(SUM(IF(flow = 'OUT' AND category NOT IN (${internalList}), amount, 0)), 0) AS expenses
-         FROM account_transactions`,
-        [...INTERNAL_PARTIES, ...INTERNAL_PARTIES]
+         FROM account_transactions WHERE 1=1${dateClause}`,
+        [...INTERNAL_PARTIES, ...INTERNAL_PARTIES, ...dateParams]
       );
 
       const monthlyResult = await db.query(
@@ -675,7 +685,8 @@ export const accountsController = {
         `SELECT role,
            COALESCE(SUM(IF(flow = 'IN', amount, 0)), 0) AS totalIn,
            COALESCE(SUM(IF(flow = 'OUT', amount, 0)), 0) AS totalOut
-         FROM account_transactions GROUP BY role`
+         FROM account_transactions WHERE 1=1${dateClause} GROUP BY role`,
+        dateParams
       );
 
       const { revenue, expenses } = totalsResult.rows[0];

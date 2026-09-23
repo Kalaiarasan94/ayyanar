@@ -7,7 +7,7 @@ import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import SelectField from '../components/SelectField';
 import SummaryCard from '../components/SummaryCard';
-import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
+import { buildPdfReport, buildSingleDriverTripPdfDoc, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
@@ -126,6 +126,32 @@ export default function DriverReports() {
         ],
       });
       await downloadPdfReport({ doc, filename });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleDownloadSingleTrip = async (r: any) => {
+    setDownloading(true);
+    try {
+      const pdf = await buildSingleDriverTripPdfDoc({
+        driverName: r.driver_name,
+        vehicleName: r.vehicle_name,
+        date: r.date,
+        startingKm: r.starting_km,
+        endingKm: r.ending_km,
+        totalKm: r.total_km,
+        distance: r.distance,
+        loadName: r.load_name,
+        loadType: r.load_type,
+        customerName: r.customer_name,
+        place: r.place,
+        loadWeight: r.load_weight,
+        startingTime: r.starting_time,
+        endingTime: r.ending_time,
+        dieselFare: r.diesel_fare,
+      });
+      await downloadPdfReport(pdf);
     } finally {
       setDownloading(false);
     }
@@ -285,6 +311,15 @@ export default function DriverReports() {
                 { header: 'Total KM', align: 'right', render: (r: any) => Number(r.total_km || 0).toLocaleString('en-IN') },
                 { header: 'Diesel', align: 'right', render: (r: any) => rupees(r.diesel_fare) },
                 { header: 'Load / Place', render: (r: any) => `${r.load_name || '-'} • ${r.place || '-'}` },
+                {
+                  header: 'Actions',
+                  align: 'right',
+                  render: (r: any) => (
+                    <button className="icon-btn" onClick={() => handleDownloadSingleTrip(r)} disabled={downloading} title="Download this trip as a PDF">
+                      <Download size={13} /> PDF
+                    </button>
+                  ),
+                },
               ]}
             />
           </div>

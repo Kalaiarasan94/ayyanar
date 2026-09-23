@@ -291,6 +291,147 @@ export const buildSingleDailySheetPdfDoc = async (sheet: SingleDailySheetInput):
   return { doc, filename };
 };
 
+export type SingleDriverTripInput = {
+  driverName: string;
+  vehicleName: string;
+  date: string;
+  startingKm?: number | string;
+  endingKm?: number | string;
+  totalKm?: number | string;
+  distance?: string;
+  loadName?: string;
+  loadType?: string;
+  customerName?: string;
+  place?: string;
+  loadWeight?: string;
+  startingTime?: string;
+  endingTime?: string;
+  dieselFare?: number | string;
+};
+
+// Generates a vertical, all-fields PDF for one driver trip record — every
+// value the driver entered, laid out as label:value rows (mirrors the
+// single Daily Sheet format above).
+export const buildSingleDriverTripPdfDoc = async (trip: SingleDriverTripInput): Promise<ReportDoc> => {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 40;
+  let y = 0;
+
+  // Header Company Banner Box
+  doc.setFillColor(...BRAND_RED);
+  doc.rect(0, 0, pageWidth, 56, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(255, 255, 255);
+  doc.text('AYYANAR BUILDERS & PROPERTYS', marginX, 35);
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DRIVER TRIP REPORT', pageWidth - marginX, 35, { align: 'right' });
+
+  y = 75;
+
+  // Driver & Vehicle Metadata Container Box
+  doc.setDrawColor(...BORDER);
+  doc.setFillColor(248, 250, 252);
+  doc.roundedRect(marginX, y, pageWidth - marginX * 2, 64, 6, 6, 'FD');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GREY);
+  doc.text('DRIVER NAME:', marginX + 14, y + 22);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(...DARK);
+  doc.text(trip.driverName || '—', marginX + 110, y + 22);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GREY);
+  doc.text('VEHICLE:', marginX + 14, y + 46);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(...DARK);
+  doc.text(trip.vehicleName || '—', marginX + 110, y + 46);
+
+  const rightColX = pageWidth / 2 + 15;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GREY);
+  doc.text('DATE:', rightColX, y + 22);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(...DARK);
+  doc.text(dailySheetDateLabel(trip.date), rightColX + 45, y + 22);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GREY);
+  doc.text('LOAD TYPE:', rightColX, y + 46);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(...DARK);
+  doc.text(trip.loadType === 'Rent' ? `Rent / ${trip.customerName || '-'}` : 'Own', rightColX + 65, y + 46);
+
+  y += 80;
+
+  // Trip Detail — every field the driver entered, as label:value rows
+  autoTable(doc, {
+    startY: y,
+    head: [['TRIP DETAIL', 'VALUE']],
+    body: [
+      ['Starting KM', Number(trip.startingKm || 0).toLocaleString('en-IN')],
+      ['Ending KM', Number(trip.endingKm || 0).toLocaleString('en-IN')],
+      ['Total KM Travelled', Number(trip.totalKm || 0).toLocaleString('en-IN')],
+      ...(trip.distance ? [['Distance (as noted)', trip.distance]] : []),
+      ['Starting Time', trip.startingTime || '—'],
+      ['Ending Time', trip.endingTime || '—'],
+      ['Load Name', trip.loadName || '—'],
+      ['Load Weight', trip.loadWeight || '—'],
+      ['Place', trip.place || '—'],
+    ],
+    margin: { left: marginX, right: marginX },
+    styles: { fontSize: 9, cellPadding: 6, textColor: DARK, lineColor: BORDER, lineWidth: 0.5 },
+    headStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: LIGHT_ROW },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 180 }, 1: { halign: 'right' } },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 16;
+
+  // Financial line
+  autoTable(doc, {
+    startY: y,
+    head: [['FINANCIAL', 'AMOUNT (RS)']],
+    body: [['Diesel Fare', Number(trip.dieselFare || 0).toLocaleString('en-IN')]],
+    margin: { left: marginX, right: marginX },
+    styles: { fontSize: 9, cellPadding: 6, textColor: DARK, lineColor: BORDER, lineWidth: 0.5 },
+    headStyles: { fillColor: BRAND_RED, textColor: [255, 255, 255], fontStyle: 'bold' },
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 180 }, 1: { halign: 'right' } },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 36;
+
+  // Signatures Block
+  const sigBoxWidth = (pageWidth - marginX * 2 - 40) / 2;
+
+  doc.setDrawColor(...BORDER);
+  doc.line(marginX, y + 20, marginX + sigBoxWidth, y + 20);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(...GREY);
+  doc.text('DRIVER SIGNATURE', marginX, y + 34);
+
+  doc.line(pageWidth - marginX - sigBoxWidth, y + 20, pageWidth - marginX, y + 20);
+  doc.text('VERIFIED BY (ADMIN / ACCOUNTS)', pageWidth - marginX - sigBoxWidth, y + 34);
+
+  const cleanDriver = (trip.driverName || 'driver').toLowerCase().replace(/[^a-z0-9]/g, '-');
+  const filename = `driver-trip-${cleanDriver}-${trip.date}.pdf`;
+  return { doc, filename };
+};
+
 // Instant browser download, no dialog.
 export const downloadPdfReport = async ({ doc, filename }: ReportDoc) => {
   doc.save(filename);

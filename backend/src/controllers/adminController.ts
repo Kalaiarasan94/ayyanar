@@ -316,18 +316,36 @@ export const adminController = {
   },
 
   // Compiles CRM metrics and site-by-site material/fuel logs for charts
+  // Optional ?from=/?to= — narrows both the leads-by-source counts and the
+  // site expense breakdown to that range; omitted filters mean lifetime.
   getAnalyticsOverview: async (req: Request, res: Response): Promise<void> => {
     try {
-      const leadsMetrics = await db.query(`
-        SELECT 
+      const { from, to } = req.query;
+      const leadsWhere: string[] = [];
+      const leadsParams: any[] = [];
+      if (from) { leadsWhere.push('DATE(created_at) >= ?'); leadsParams.push(from); }
+      if (to) { leadsWhere.push('DATE(created_at) <= ?'); leadsParams.push(to); }
+      const leadsClause = leadsWhere.length ? `WHERE ${leadsWhere.join(' AND ')}` : '';
+
+      // Date filter lives in the LEFT JOIN's ON clause, not a WHERE, so sites
+      // with zero expenses in range still appear (with all-zero totals).
+      const ledgerWhere: string[] = [];
+      const ledgerParams: any[] = [];
+      if (from) { ledgerWhere.push('l.date >= ?'); ledgerParams.push(from); }
+      if (to) { ledgerWhere.push('l.date <= ?'); ledgerParams.push(to); }
+      const ledgerClause = ledgerWhere.length ? ` AND ${ledgerWhere.join(' AND ')}` : '';
+
+      const leadsMetrics = await db.query(
+        `SELECT
           COUNT(*) as total_leads,
           COUNT(IF(status = 'Converted Client', 1, NULL)) as converted_leads,
           source
-        FROM leads GROUP BY source
-      `);
+        FROM leads ${leadsClause} GROUP BY source`,
+        leadsParams
+      );
 
-      const expenseMatrix = await db.query(`
-        SELECT 
+      const expenseMatrix = await db.query(
+        `SELECT
           s.id,
           s.name as site_name,
           COALESCE(SUM(IF(l.category NOT IN ('Fuel', 'Petty Cash'), l.amount, 0)), 0) as material_costs,
@@ -337,9 +355,10 @@ export const adminController = {
           COALESCE(SUM(IF(l.payment_mode = 'Indirect', l.amount, 0)), 0) as indirect_expenses,
           COALESCE(SUM(l.amount), 0) as total_expenses
         FROM sites s
-        LEFT JOIN ledger l ON s.id = l.site_id AND l.type = 'DEBIT'
-        GROUP BY s.id, s.name
-      `);
+        LEFT JOIN ledger l ON s.id = l.site_id AND l.type = 'DEBIT'${ledgerClause}
+        GROUP BY s.id, s.name`,
+        ledgerParams
+      );
 
       res.status(200).json({
         leadsChannelPerformance: leadsMetrics.rows,
