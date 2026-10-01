@@ -138,6 +138,16 @@ export default function AdminPanelScreen() {
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string | number, boolean>>({});
   const [editingStaffId, setEditingStaffId] = useState<string | number | null>(null);
 
+  const [popup, setPopup] = useState<{
+    title: string;
+    message: string;
+    type?: 'danger' | 'warning' | 'info' | 'success';
+    confirmText?: string;
+    cancelText?: string;
+    icon?: keyof typeof MaterialIcons.glyphMap;
+    onConfirm?: () => void | Promise<void>;
+  } | null>(null);
+
   const [newSiteName, setNewSiteName] = useState('');
   const [newSiteLocation, setNewSiteLocation] = useState('');
   const [editingSiteId, setEditingSiteId] = useState<string | number | null>(null);
@@ -363,37 +373,43 @@ export default function AdminPanelScreen() {
   };
 
   const handleDeleteStaff = (id: string) => {
-    const confirmDelete = async () => {
-      setLoading(true);
-      try {
-        await adminService.deleteStaff(id);
-        await loadTab('TEAM');
-      } catch (err: any) {
-        if (Platform.OS === 'web') {
-          window.alert(err?.message || 'Unable to delete staff account.');
-        } else {
-          Alert.alert('Remove Failed', err?.message || 'Unable to delete staff account.');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
+    const staffMember = staffList.find((s) => String(s.id) === String(id));
+    const staffName = staffMember?.name || 'this staff account';
 
-    if (Platform.OS === 'web') {
-      if (window.confirm('Delete this staff account?')) {
-        confirmDelete();
-      }
-    } else {
-      Alert.alert('Remove Staff', 'Delete this staff account?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-      ]);
-    }
+    setPopup({
+      title: 'Delete Staff Account',
+      message: `Are you sure you want to remove "${staffName}"? This will delete the account and clear any assigned project sites.`,
+      type: 'danger',
+      icon: 'person-remove',
+      confirmText: 'Delete Staff',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          await adminService.deleteStaff(id);
+          await loadTab('TEAM');
+        } catch (err: any) {
+          setPopup({
+            title: 'Delete Failed',
+            message: err?.message || 'Unable to delete staff account.',
+            type: 'danger',
+            icon: 'error-outline',
+          });
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
   const handleAddSite = async () => {
     if (!newSiteName || !newSiteLocation) {
-      Alert.alert('Missing Details', 'Enter project site name and location.');
+      setPopup({
+        title: 'Missing Details',
+        message: 'Enter project site name and location.',
+        type: 'info',
+        icon: 'info',
+      });
       return;
     }
     setLoading(true);
@@ -403,7 +419,12 @@ export default function AdminPanelScreen() {
       setNewSiteLocation('');
       await loadTab('PROJECTS');
     } catch {
-      Alert.alert('Project Error', 'Unable to create project site.');
+      setPopup({
+        title: 'Project Error',
+        message: 'Unable to create project site.',
+        type: 'danger',
+        icon: 'error-outline',
+      });
     } finally {
       setLoading(false);
     }
@@ -423,7 +444,12 @@ export default function AdminPanelScreen() {
 
   const handleSaveSiteChanges = async () => {
     if (!editingSiteId || !newSiteName || !newSiteLocation) {
-      Alert.alert('Missing Details', 'Enter project site name and location.');
+      setPopup({
+        title: 'Missing Details',
+        message: 'Enter project site name and location.',
+        type: 'info',
+        icon: 'info',
+      });
       return;
     }
     setLoading(true);
@@ -431,76 +457,89 @@ export default function AdminPanelScreen() {
       await adminService.updateSite(editingSiteId, { name: newSiteName, location: newSiteLocation });
       handleCancelEditSite();
       await loadTab('PROJECTS');
-      Alert.alert('Success', 'Project site updated.');
+      setPopup({
+        title: 'Project Updated',
+        message: 'Project site details saved successfully.',
+        type: 'success',
+        icon: 'check-circle',
+      });
     } catch {
-      Alert.alert('Project Error', 'Unable to update project site.');
+      setPopup({
+        title: 'Project Error',
+        message: 'Unable to update project site.',
+        type: 'danger',
+        icon: 'error-outline',
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteSite = (id: string) => {
-    const confirmDelete = async () => {
-      setLoading(true);
-      try {
-        await adminService.deleteSite(id);
-        await loadTab('PROJECTS');
-      } catch (err: any) {
-        if (Platform.OS === 'web') {
-          window.alert(err?.message || 'Unable to delete project site.');
-        } else {
-          Alert.alert('Delete Failed', err?.message || 'Unable to delete project site.');
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
+    const siteObj = sitesList.find((s) => String(s.id) === String(id));
+    const siteName = siteObj?.name || 'this project site';
 
-    if (Platform.OS === 'web') {
-      if (window.confirm('Delete this project site? This will remove the site and unassign any active supervisor.')) {
-        confirmDelete();
-      }
-    } else {
-      Alert.alert('Delete Project', 'Remove this project site? This will remove the site and unassign any active supervisor.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-      ]);
-    }
+    setPopup({
+      title: 'Delete Project Site',
+      message: `Are you sure you want to delete "${siteName}"? This will delete the site and unassign any active supervisor.`,
+      type: 'danger',
+      icon: 'delete-outline',
+      confirmText: 'Delete Project',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          await adminService.deleteSite(id);
+          await loadTab('PROJECTS');
+        } catch (err: any) {
+          setPopup({
+            title: 'Delete Failed',
+            message: err?.message || 'Unable to delete project site.',
+            type: 'danger',
+            icon: 'error-outline',
+          });
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
   const handleRemoveSupervisor = (siteId: string, siteName: string, supervisorName?: string) => {
-    const confirmRemove = async () => {
-      setLoading(true);
-      try {
-        await adminService.allocateSupervisor('none', siteId);
-        await loadTab('PROJECTS');
-      } catch (err: any) {
-        if (Platform.OS === 'web') {
-          window.alert(err?.message || 'Unable to remove supervisor.');
-        } else {
-          Alert.alert('Error', err?.message || 'Unable to remove supervisor.');
+    setPopup({
+      title: 'Remove Supervisor',
+      message: `Remove supervisor ${supervisorName ? `"${supervisorName}"` : ''} from "${siteName}"? This will clear their active site.`,
+      type: 'danger',
+      icon: 'person-remove',
+      confirmText: 'Remove Active Site',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          await adminService.allocateSupervisor('none', siteId);
+          await loadTab('PROJECTS');
+        } catch (err: any) {
+          setPopup({
+            title: 'Error',
+            message: err?.message || 'Unable to remove supervisor.',
+            type: 'danger',
+            icon: 'error-outline',
+          });
+        } finally {
+          setLoading(false);
         }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    const message = `Remove supervisor ${supervisorName ? `"${supervisorName}"` : ''} from "${siteName}"? This will clear their active site.`;
-    if (Platform.OS === 'web') {
-      if (window.confirm(message)) {
-        confirmRemove();
-      }
-    } else {
-      Alert.alert('Remove Supervisor', message, [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: confirmRemove },
-      ]);
-    }
+      },
+    });
   };
 
   const handleAllocateSupervisor = async () => {
     if (!selectedSiteForAllocation) {
-      Alert.alert('Select Details', 'Choose a project site.');
+      setPopup({
+        title: 'Select Project',
+        message: 'Choose a project site first.',
+        type: 'info',
+        icon: 'info',
+      });
       return;
     }
     setLoading(true);
@@ -510,13 +549,19 @@ export default function AdminPanelScreen() {
       setSelectedSiteForAllocation(null);
       setSelectedSupervisorForAllocation(null);
       await loadTab('PROJECTS');
-      if (Platform.OS === 'web') {
-        window.alert(isUnassigning ? 'Supervisor removed from project site.' : 'Supervisor allocation updated.');
-      } else {
-        Alert.alert('Success', isUnassigning ? 'Supervisor removed from project site.' : 'Supervisor allocation updated.');
-      }
+      setPopup({
+        title: 'Success',
+        message: isUnassigning ? 'Supervisor removed from project site.' : 'Supervisor allocation updated.',
+        type: 'success',
+        icon: 'check-circle',
+      });
     } catch {
-      Alert.alert('Allocation Error', 'Unable to update supervisor allocation.');
+      setPopup({
+        title: 'Allocation Error',
+        message: 'Unable to update supervisor allocation.',
+        type: 'danger',
+        icon: 'error-outline',
+      });
     } finally {
       setLoading(false);
     }
@@ -562,18 +607,18 @@ export default function AdminPanelScreen() {
   };
 
   const handleDeleteLead = (id: string) => {
-    const confirmDelete = async () => {
-      await adminService.deleteLead(id);
-      loadTab('LEADS');
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm('Delete this lead?')) confirmDelete();
-    } else {
-      Alert.alert('Delete Lead', 'Remove this lead?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-      ]);
-    }
+    setPopup({
+      title: 'Delete Lead',
+      message: 'Remove this lead record? This action cannot be undone.',
+      type: 'danger',
+      icon: 'delete-outline',
+      confirmText: 'Delete Lead',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        await adminService.deleteLead(id);
+        loadTab('LEADS');
+      },
+    });
   };
 
   // ---------- Leads report (by day or month, PDF + Excel) ----------
@@ -736,18 +781,18 @@ export default function AdminPanelScreen() {
   };
 
   const handleDeleteBill = (id: string | number) => {
-    const confirmDelete = async () => {
-      await fieldService.deleteExpense(id);
-      await fetchReportData(reportSiteId);
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm('Delete this bill entry?')) confirmDelete();
-    } else {
-      Alert.alert('Delete Bill', 'Remove this bill entry?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-      ]);
-    }
+    setPopup({
+      title: 'Delete Bill Entry',
+      message: 'Remove this bill entry from the site ledger?',
+      type: 'danger',
+      icon: 'delete-outline',
+      confirmText: 'Delete Bill',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        await fieldService.deleteExpense(id);
+        await fetchReportData(reportSiteId);
+      },
+    });
   };
 
   // ---------- Driver diesel bills: download / share / delete ----------
@@ -775,19 +820,19 @@ export default function AdminPanelScreen() {
   };
 
   const handleDeleteDriverBill = (id: string | number) => {
-    const confirmDelete = async () => {
-      await fieldService.deleteDriverBill(id);
-      setDriverBillDetail(null);
-      setDriverBills(await fieldService.getDriverBills());
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm('Delete this diesel bill?')) confirmDelete();
-    } else {
-      Alert.alert('Delete Bill', 'Remove this diesel bill?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-      ]);
-    }
+    setPopup({
+      title: 'Delete Diesel Bill',
+      message: 'Remove this diesel fuel bill record and attachment?',
+      type: 'danger',
+      icon: 'delete-outline',
+      confirmText: 'Delete Bill',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        await fieldService.deleteDriverBill(id);
+        setDriverBillDetail(null);
+        setDriverBills(await fieldService.getDriverBills());
+      },
+    });
   };
 
   // ---------- Driver trip record edit / delete ----------
@@ -834,18 +879,18 @@ export default function AdminPanelScreen() {
   };
 
   const handleDeleteDriverRecord = (id: string | number) => {
-    const confirmDelete = async () => {
-      await fieldService.deleteDriverRecord(id);
-      setDriverRecords(await fieldService.getDriverRecords());
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm('Delete this trip record?')) confirmDelete();
-    } else {
-      Alert.alert('Delete Record', 'Remove this trip record?', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
-      ]);
-    }
+    setPopup({
+      title: 'Delete Trip Record',
+      message: 'Remove this driver trip record?',
+      type: 'danger',
+      icon: 'delete-outline',
+      confirmText: 'Delete Record',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        await fieldService.deleteDriverRecord(id);
+        setDriverRecords(await fieldService.getDriverRecords());
+      },
+    });
   };
 
   const fetchIoReport = async (role = ioRole, from = ioFrom, to = ioTo, supervisorId = ioSupervisorId) => {
@@ -2495,6 +2540,80 @@ export default function AdminPanelScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Universal In-App Confirmation & Alert Popup Modal */}
+      <Modal visible={!!popup} transparent animationType="fade" onRequestClose={() => setPopup(null)}>
+        <View style={styles.popupBackdrop}>
+          <View style={styles.popupCard}>
+            <View
+              style={[
+                styles.popupIconCircle,
+                popup?.type === 'danger'
+                  ? styles.popupIconDanger
+                  : popup?.type === 'success'
+                  ? styles.popupIconSuccess
+                  : styles.popupIconInfo,
+              ]}
+            >
+              <MaterialIcons
+                name={
+                  popup?.icon ||
+                  (popup?.type === 'danger'
+                    ? 'delete-outline'
+                    : popup?.type === 'success'
+                    ? 'check-circle'
+                    : 'info')
+                }
+                size={30}
+                color={
+                  popup?.type === 'danger'
+                    ? COLORS.primary
+                    : popup?.type === 'success'
+                    ? COLORS.success
+                    : '#0284c7'
+                }
+              />
+            </View>
+            <Text style={styles.popupTitle}>{popup?.title}</Text>
+            <Text style={styles.popupMessage}>{popup?.message}</Text>
+            <View style={styles.popupActions}>
+              {popup?.onConfirm ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.popupCancelButton}
+                    onPress={() => setPopup(null)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.popupCancelButtonText}>{popup.cancelText || 'Cancel'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.popupConfirmButton,
+                      popup.type === 'danger' ? styles.popupConfirmButtonDanger : styles.popupConfirmButtonPrimary,
+                    ]}
+                    onPress={async () => {
+                      const action = popup.onConfirm;
+                      setPopup(null);
+                      if (action) await action();
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.popupConfirmButtonText}>{popup.confirmText || 'Confirm'}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.popupConfirmButton, styles.popupConfirmButtonPrimary, { flex: 1 }]}
+                  onPress={() => setPopup(null)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.popupConfirmButtonText}>OK</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -3243,5 +3362,94 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontWeight: '900',
     fontSize: 14,
+  },
+  popupBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(11, 13, 16, 0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  popupCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.xl,
+    width: '100%',
+    maxWidth: 440,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  popupIconCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+  },
+  popupIconDanger: {
+    backgroundColor: '#fee2e2',
+  },
+  popupIconSuccess: {
+    backgroundColor: '#dcfce7',
+  },
+  popupIconInfo: {
+    backgroundColor: '#e0f2fe',
+  },
+  popupTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: COLORS.text,
+    textAlign: 'center',
+    marginBottom: SPACING.sm,
+  },
+  popupMessage: {
+    fontSize: 14,
+    color: COLORS.textLight,
+    textAlign: 'center',
+    lineHeight: 21,
+    marginBottom: SPACING.xl,
+  },
+  popupActions: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    width: '100%',
+  },
+  popupCancelButton: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: '#f1f5f9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  popupCancelButtonText: {
+    color: COLORS.textLight,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  popupConfirmButton: {
+    flex: 1,
+    paddingVertical: 13,
+    borderRadius: BORDER_RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  popupConfirmButtonDanger: {
+    backgroundColor: COLORS.primary,
+  },
+  popupConfirmButtonPrimary: {
+    backgroundColor: COLORS.primary,
+  },
+  popupConfirmButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: '900',
   },
 });
