@@ -242,7 +242,7 @@ export const adminService = {
     request<ApiResponse>(`/sites/${id}`, {
       method: 'DELETE',
     }),
-  allocateSupervisor: (supervisorId: string | number, siteId: string | number) =>
+  allocateSupervisor: (supervisorId: string | number | null, siteId: string | number) =>
     request<ApiResponse>('/allocations', {
       method: 'POST',
       body: JSON.stringify({ supervisorId, siteId }),

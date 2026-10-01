@@ -48,10 +48,15 @@ export const adminApi = {
   getAttendanceOverview: (params?: { date?: string; from?: string; to?: string; all?: boolean }) =>
     request<any>(`/attendance/overview${qs({ ...params, all: params?.all ? 1 : undefined })}`),
   getSites: () => request<any[]>('/sites'),
-  createSite: (data: { name: string; location?: string }) =>
+  createSite: (data: { name: string; location?: string; supervisor_id?: any }) =>
     request<{ success: boolean; message?: string }>('/sites', { method: 'POST', body: JSON.stringify(data) }),
-  updateSite: (id: string | number, data: { name: string; location?: string }) =>
+  updateSite: (id: string | number, data: { name: string; location?: string; supervisor_id?: any }) =>
     request<{ success: boolean; message?: string }>(`/sites/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  allocateSupervisor: (supervisorId: string | number | null, siteId: string | number) =>
+    request<{ success: boolean; message?: string }>('/allocations', {
+      method: 'POST',
+      body: JSON.stringify({ supervisorId, siteId }),
+    }),
   deleteSite: (id: string | number) =>
     request<{ success: boolean; message?: string }>(`/sites/${id}`, { method: 'DELETE' }),
   getStaff: () => request<any[]>('/staff'),

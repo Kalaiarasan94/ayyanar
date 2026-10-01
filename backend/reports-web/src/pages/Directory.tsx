@@ -16,6 +16,7 @@ export default function Directory() {
   const [editingSite, setEditingSite] = useState<any | null>(null);
   const [siteName, setSiteName] = useState('');
   const [siteLocation, setSiteLocation] = useState('');
+  const [siteSupervisorId, setSiteSupervisorId] = useState<string>('none');
   const [savingSite, setSavingSite] = useState(false);
 
   const loadData = () => {
@@ -36,6 +37,7 @@ export default function Directory() {
     setEditingSite(null);
     setSiteName('');
     setSiteLocation('');
+    setSiteSupervisorId('none');
     setShowSiteModal(true);
   };
 
@@ -43,6 +45,7 @@ export default function Directory() {
     setEditingSite(site);
     setSiteName(site.name || '');
     setSiteLocation(site.location || '');
+    setSiteSupervisorId(site.supervisor_id ? String(site.supervisor_id) : 'none');
     setShowSiteModal(true);
   };
 
@@ -53,10 +56,15 @@ export default function Directory() {
     }
     setSavingSite(true);
     try {
+      const payload = {
+        name: siteName.trim(),
+        location: siteLocation.trim(),
+        supervisor_id: siteSupervisorId === 'none' ? null : siteSupervisorId,
+      };
       if (editingSite) {
-        await adminApi.updateSite(editingSite.id, { name: siteName.trim(), location: siteLocation.trim() });
+        await adminApi.updateSite(editingSite.id, payload);
       } else {
-        await adminApi.createSite({ name: siteName.trim(), location: siteLocation.trim() });
+        await adminApi.createSite(payload);
       }
       setShowSiteModal(false);
       const updated = await adminApi.getSites();
@@ -65,6 +73,16 @@ export default function Directory() {
       alert(err?.message || 'Failed to save project site.');
     } finally {
       setSavingSite(false);
+    }
+  };
+
+  const handleRemoveSupervisor = async (site: any) => {
+    if (!window.confirm(`Remove supervisor "${site.supervisor_name}" from "${site.name}"? This will clear their active site.`)) return;
+    try {
+      await adminApi.allocateSupervisor(null, site.id);
+      loadData();
+    } catch (err: any) {
+      alert(err?.message || 'Failed to remove supervisor.');
     }
   };
 
@@ -176,7 +194,24 @@ export default function Directory() {
               columns={[
                 { header: 'Name', render: (s: any) => <b>{s.name}</b> },
                 { header: 'Location', render: (s: any) => s.location || '—' },
-                { header: 'Supervisor', render: (s: any) => s.supervisor_name || 'Unassigned' },
+                {
+                  header: 'Supervisor',
+                  render: (s: any) => (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span>{s.supervisor_name || 'Unassigned'}</span>
+                      {s.supervisor_id && (
+                        <button
+                          className="icon-btn danger"
+                          style={{ padding: '2px 6px', fontSize: 11, height: 'auto', lineHeight: 'normal' }}
+                          onClick={() => handleRemoveSupervisor(s)}
+                          title="Remove supervisor active site"
+                        >
+                          Unassign
+                        </button>
+                      )}
+                    </div>
+                  ),
+                },
                 { header: 'Status', render: (s: any) => <span className="text-success">{s.status || 'Active'}</span> },
                 {
                   header: 'Actions',
@@ -247,6 +282,22 @@ export default function Directory() {
               value={siteLocation}
               onChange={(e) => setSiteLocation(e.target.value)}
             />
+
+            <div className="field-label">Assigned Supervisor</div>
+            <select
+              className="input"
+              value={siteSupervisorId}
+              onChange={(e) => setSiteSupervisorId(e.target.value)}
+            >
+              <option value="none">None (Unassigned / Clear Active Site)</option>
+              {staff
+                .filter((st) => st.role === 'Supervisor' || st.role === 'Site Engineer')
+                .map((st) => (
+                  <option key={st.id} value={st.id}>
+                    {st.name} ({st.role})
+                  </option>
+                ))}
+            </select>
 
             <div className="modal-actions">
               <button className="btn secondary" onClick={() => setShowSiteModal(false)}>

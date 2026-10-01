@@ -52,8 +52,21 @@ export const adminController = {
 
   createSite: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { name, location } = req.body;
-      await db.query('INSERT INTO sites (name, location) VALUES (?, ?)', [name, location]);
+      const { name, location, supervisor_id } = req.body;
+      const cleanSupervisorId =
+        supervisor_id && supervisor_id !== 'none' && supervisor_id !== 'unassigned' && supervisor_id !== 0
+          ? Number(supervisor_id)
+          : null;
+      const result = await db.query(
+        'INSERT INTO sites (name, location, supervisor_id) VALUES (?, ?, ?)',
+        [name, location, cleanSupervisorId]
+      );
+      const newSiteId = result.rows?.insertId;
+      if (newSiteId && cleanSupervisorId) {
+        try {
+          await db.query('INSERT IGNORE INTO site_allocations (user_id, site_id) VALUES (?, ?)', [cleanSupervisorId, newSiteId]);
+        } catch {}
+      }
       res.status(201).json({ success: true, message: 'Site created successfully.' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
@@ -63,8 +76,24 @@ export const adminController = {
   updateSite: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      const { name, location } = req.body;
-      await db.query('UPDATE sites SET name = ?, location = ? WHERE id = ?', [name, location, id]);
+      const { name, location, supervisor_id } = req.body;
+      if (supervisor_id !== undefined) {
+        const cleanSupervisorId =
+          supervisor_id && supervisor_id !== 'none' && supervisor_id !== 'unassigned' && supervisor_id !== 0
+            ? Number(supervisor_id)
+            : null;
+        await db.query('UPDATE sites SET name = ?, location = ?, supervisor_id = ? WHERE id = ?', [name, location, cleanSupervisorId, id]);
+        try {
+          await db.query('DELETE FROM site_allocations WHERE site_id = ?', [id]);
+          if (cleanSupervisorId) {
+            await db.query('INSERT IGNORE INTO site_allocations (user_id, site_id) VALUES (?, ?)', [cleanSupervisorId, id]);
+          }
+        } catch (allocErr) {
+          console.warn('site_allocations sync warning:', allocErr);
+        }
+      } else {
+        await db.query('UPDATE sites SET name = ?, location = ? WHERE id = ?', [name, location, id]);
+      }
       res.status(200).json({ success: true, message: 'Site updated successfully.' });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
@@ -74,17 +103,42 @@ export const adminController = {
   deleteSite: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
-      // Safely unlink or clean up child table references so foreign keys don't block deletion
-      try { await db.query('UPDATE ledger SET site_id = NULL WHERE site_id = ?', [id]); } catch {}
-      try { await db.query('UPDATE attendance SET site_id = NULL WHERE site_id = ?', [id]); } catch {}
-      try { await db.query('UPDATE supervisor_attendance SET site_id = NULL WHERE site_id = ?', [id]); } catch {}
-      try { await db.query('UPDATE site_photos SET site_id = NULL WHERE site_id = ?', [id]); } catch {}
-      try { await db.query('DELETE FROM site_allocations WHERE site_id = ?', [id]); } catch {}
-      try { await db.query('DELETE FROM daily_sheets WHERE site_id = ?', [id]); } catch {}
 
+      // 1. Unlink supervisor from this site first to clear the supervisor's active site
+      try { await db.query('UPDATE sites SET supervisor_id = NULL WHERE id = ?', [id]); } catch (e) {
+        console.warn('Error clearing supervisor_id on site:', e);
+      }
+
+      // 2. Remove supervisor allocations for this site
+      try { await db.query('DELETE FROM site_allocations WHERE site_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing site_allocations:', e);
+      }
+
+      // 3. Clean up all child table records referencing this site so foreign keys don't block deletion
+      try { await db.query('DELETE FROM daily_sheets WHERE site_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing daily_sheets:', e);
+      }
+      try { await db.query('DELETE FROM attendance_categories WHERE site_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing attendance_categories:', e);
+      }
+      try { await db.query('DELETE FROM attendance WHERE site_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing attendance:', e);
+      }
+      try { await db.query('DELETE FROM supervisor_attendance WHERE site_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing supervisor_attendance:', e);
+      }
+      try { await db.query('DELETE FROM site_photos WHERE site_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing site_photos:', e);
+      }
+      try { await db.query('DELETE FROM ledger WHERE site_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing ledger:', e);
+      }
+
+      // 4. Finally delete the site itself
       await db.query('DELETE FROM sites WHERE id = ?', [id]);
-      res.status(200).json({ success: true, message: 'Project site deleted successfully.' });
+      res.status(200).json({ success: true, message: 'Project site and supervisor assignment deleted successfully.' });
     } catch (error: any) {
+      console.error('deleteSite Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   },
@@ -92,20 +146,51 @@ export const adminController = {
   deleteStaff: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+      // Unlink from any sites they supervise before deleting
+      try { await db.query('UPDATE sites SET supervisor_id = NULL WHERE supervisor_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing supervisor_id on sites:', e);
+      }
+      try { await db.query('DELETE FROM site_allocations WHERE user_id = ?', [id]); } catch (e) {
+        console.warn('Error clearing site_allocations for user:', e);
+      }
       await db.query('DELETE FROM users WHERE id = ?', [id]);
       res.status(200).json({ success: true, message: 'Staff deleted successfully.' });
     } catch (error: any) {
+      console.error('deleteStaff Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   },
 
-  // Deploy an existing supervisor to a specific construction site location
+  // Deploy an existing supervisor to a specific construction site location, or unassign (remove active site)
   allocateSite: async (req: Request, res: Response): Promise<void> => {
     try {
       const { supervisorId, siteId } = req.body;
-      await db.query('UPDATE sites SET supervisor_id = ? WHERE id = ?', [supervisorId, siteId]);
-      res.status(200).json({ success: true, message: 'Supervisor allocation updated.' });
+      const cleanSupervisorId =
+        supervisorId && supervisorId !== 'none' && supervisorId !== 'unassigned' && supervisorId !== 0
+          ? Number(supervisorId)
+          : null;
+
+      await db.query('UPDATE sites SET supervisor_id = ? WHERE id = ?', [cleanSupervisorId, siteId]);
+
+      // Sync site_allocations table
+      try {
+        await db.query('DELETE FROM site_allocations WHERE site_id = ?', [siteId]);
+        if (cleanSupervisorId) {
+          await db.query('INSERT IGNORE INTO site_allocations (user_id, site_id) VALUES (?, ?)', [
+            cleanSupervisorId,
+            siteId,
+          ]);
+        }
+      } catch (allocErr) {
+        console.warn('site_allocations sync warning:', allocErr);
+      }
+
+      res.status(200).json({
+        success: true,
+        message: cleanSupervisorId ? 'Supervisor allocation updated.' : 'Supervisor removed from project site.',
+      });
     } catch (error: any) {
+      console.error('allocateSite Error:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   },

@@ -363,17 +363,32 @@ export default function AdminPanelScreen() {
   };
 
   const handleDeleteStaff = (id: string) => {
-    Alert.alert('Remove Staff', 'Delete this staff account?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await adminService.deleteStaff(id);
-          loadTab('TEAM');
-        },
-      },
-    ]);
+    const confirmDelete = async () => {
+      setLoading(true);
+      try {
+        await adminService.deleteStaff(id);
+        await loadTab('TEAM');
+      } catch (err: any) {
+        if (Platform.OS === 'web') {
+          window.alert(err?.message || 'Unable to delete staff account.');
+        } else {
+          Alert.alert('Remove Failed', err?.message || 'Unable to delete staff account.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this staff account?')) {
+        confirmDelete();
+      }
+    } else {
+      Alert.alert('Remove Staff', 'Delete this staff account?', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]);
+    }
   };
 
   const handleAddSite = async () => {
@@ -425,30 +440,81 @@ export default function AdminPanelScreen() {
   };
 
   const handleDeleteSite = (id: string) => {
-    Alert.alert('Delete Project', 'Remove this project site?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: async () => {
-          await adminService.deleteSite(id);
-          loadTab('PROJECTS');
-        },
-      },
-    ]);
+    const confirmDelete = async () => {
+      setLoading(true);
+      try {
+        await adminService.deleteSite(id);
+        await loadTab('PROJECTS');
+      } catch (err: any) {
+        if (Platform.OS === 'web') {
+          window.alert(err?.message || 'Unable to delete project site.');
+        } else {
+          Alert.alert('Delete Failed', err?.message || 'Unable to delete project site.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('Delete this project site? This will remove the site and unassign any active supervisor.')) {
+        confirmDelete();
+      }
+    } else {
+      Alert.alert('Delete Project', 'Remove this project site? This will remove the site and unassign any active supervisor.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: confirmDelete },
+      ]);
+    }
+  };
+
+  const handleRemoveSupervisor = (siteId: string, siteName: string, supervisorName?: string) => {
+    const confirmRemove = async () => {
+      setLoading(true);
+      try {
+        await adminService.allocateSupervisor('none', siteId);
+        await loadTab('PROJECTS');
+      } catch (err: any) {
+        if (Platform.OS === 'web') {
+          window.alert(err?.message || 'Unable to remove supervisor.');
+        } else {
+          Alert.alert('Error', err?.message || 'Unable to remove supervisor.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const message = `Remove supervisor ${supervisorName ? `"${supervisorName}"` : ''} from "${siteName}"? This will clear their active site.`;
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) {
+        confirmRemove();
+      }
+    } else {
+      Alert.alert('Remove Supervisor', message, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: confirmRemove },
+      ]);
+    }
   };
 
   const handleAllocateSupervisor = async () => {
-    if (!selectedSiteForAllocation || !selectedSupervisorForAllocation) {
-      Alert.alert('Select Details', 'Choose a project and supervisor.');
+    if (!selectedSiteForAllocation) {
+      Alert.alert('Select Details', 'Choose a project site.');
       return;
     }
     setLoading(true);
     try {
-      await adminService.allocateSupervisor(selectedSupervisorForAllocation, selectedSiteForAllocation);
+      const isUnassigning = !selectedSupervisorForAllocation || selectedSupervisorForAllocation === 'none';
+      await adminService.allocateSupervisor(isUnassigning ? 'none' : selectedSupervisorForAllocation, selectedSiteForAllocation);
       setSelectedSiteForAllocation(null);
       setSelectedSupervisorForAllocation(null);
       await loadTab('PROJECTS');
+      if (Platform.OS === 'web') {
+        window.alert(isUnassigning ? 'Supervisor removed from project site.' : 'Supervisor allocation updated.');
+      } else {
+        Alert.alert('Success', isUnassigning ? 'Supervisor removed from project site.' : 'Supervisor allocation updated.');
+      }
     } catch {
       Alert.alert('Allocation Error', 'Unable to update supervisor allocation.');
     } finally {
@@ -1398,8 +1464,27 @@ export default function AdminPanelScreen() {
 
       <View style={styles.card}>
         <Text style={styles.formTitle}>Supervisor Allocation</Text>
-        <ChipSelect items={sitesList.map((site) => ({ id: site.id, label: site.name }))} value={selectedSiteForAllocation} onChange={setSelectedSiteForAllocation} />
-        <ChipSelect items={supervisors.map((staff) => ({ id: staff.id, label: staff.name }))} value={selectedSupervisorForAllocation} onChange={setSelectedSupervisorForAllocation} />
+        <ChipSelect
+          items={sitesList.map((site) => ({ id: site.id, label: site.name }))}
+          value={selectedSiteForAllocation}
+          onChange={(siteId) => {
+            setSelectedSiteForAllocation(siteId);
+            const foundSite = sitesList.find((s) => s.id === siteId);
+            if (foundSite && foundSite.supervisor_id) {
+              setSelectedSupervisorForAllocation(foundSite.supervisor_id);
+            } else {
+              setSelectedSupervisorForAllocation('none');
+            }
+          }}
+        />
+        <ChipSelect
+          items={[
+            { id: 'none', label: '✕ None (Unassigned / Remove Active Site)' },
+            ...supervisors.map((staff) => ({ id: staff.id, label: staff.name })),
+          ]}
+          value={selectedSupervisorForAllocation}
+          onChange={setSelectedSupervisorForAllocation}
+        />
         <PrimaryButton label="Update Allocation" icon="sync-alt" onPress={handleAllocateSupervisor} />
       </View>
 
@@ -1410,7 +1495,29 @@ export default function AdminPanelScreen() {
           <View style={styles.listContent}>
             <Text style={styles.rowTitle}>{site.name}</Text>
             <Text style={styles.rowMeta}>{site.location}</Text>
-            <Text style={styles.assignmentText}>{site.supervisor_name ? `Supervisor: ${site.supervisor_name}` : 'Supervisor not assigned'}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 4, flexWrap: 'wrap', gap: 6 }}>
+              <Text style={styles.assignmentText}>
+                {site.supervisor_name ? `Supervisor: ${site.supervisor_name}` : 'Supervisor not assigned'}
+              </Text>
+              {site.supervisor_id ? (
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: '#fee2e2',
+                    paddingHorizontal: 8,
+                    paddingVertical: 2,
+                    borderRadius: 6,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 3,
+                  }}
+                  onPress={() => handleRemoveSupervisor(site.id, site.name, site.supervisor_name)}
+                  accessibilityLabel="Remove supervisor from project site"
+                >
+                  <MaterialIcons name="person-remove" size={13} color={COLORS.primary} />
+                  <Text style={{ color: COLORS.primary, fontSize: 11, fontWeight: '800' }}>Remove</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
           </View>
           <TouchableOpacity style={[styles.iconButton, { marginRight: 8 }]} onPress={() => handleStartEditSite(site)}>
             <MaterialIcons name="edit" size={22} color={COLORS.success} />
