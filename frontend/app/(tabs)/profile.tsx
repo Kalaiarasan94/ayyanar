@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, BORDER_RADIUS, SPACING } from '../../constants/Theme';
 import LogoutButton from '../../components/LogoutButton';
+import InstallAppButton from '../../components/InstallAppButton';
 import AppBackground from '../components/AppBackground';
 
 export default function ProfileScreen() {
@@ -67,6 +68,11 @@ export default function ProfileScreen() {
             <Text style={styles.menuText}>About App</Text>
             <MaterialIcons name="chevron-right" size={24} color={COLORS.textLight} />
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>PWA Application</Text>
+          <InstallAppButton variant="menu" />
         </View>
 
         <View style={styles.logoutButton}>

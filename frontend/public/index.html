@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- Mobile PWA Viewport: prevent accidental zoom and fit notch/safe-areas -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <title>%WEB_TITLE%</title>
+    <meta name="description" content="Ayyanar Infra Engineering — Construction CRM for sites, staff, drivers and accounts." />
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Theme and App Colors -->
+    <meta name="theme-color" content="#CB202D" />
+    <meta name="msapplication-TileColor" content="#CB202D" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="Ayyanar Construction CRM" />
+    
+    <!-- Apple iOS PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ayyanar CRM" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    
+    <!-- Favicons -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/favicon.png" />
+    
+    <!-- PWA Styles & Responsive Shell -->
+    <style id="expo-reset">
+      /* Full height root setup */
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overscroll-behavior-y: none;
+        -webkit-overflow-scrolling: touch;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      body {
+        overflow: hidden;
+        background: #F7F5F5;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        min-height: 100%;
+        flex: 1;
+        background: #F7F5F5;
+      }
+
+      /* iPhone safe area insets variables */
+      :root {
+        --sat: env(safe-area-inset-top, 0px);
+        --sar: env(safe-area-inset-right, 0px);
+        --sab: env(safe-area-inset-bottom, 0px);
+        --sal: env(safe-area-inset-left, 0px);
+      }
+
+      /* TABLET (768px - 1023px): comfortable centered shell */
+      @media (min-width: 768px) {
+        body {
+          background: radial-gradient(1400px 700px at 50% -150px, #2A2D31 0%, #111317 65%);
+        }
+        #root {
+          height: 100vh;
+          box-shadow: 0 0 50px rgba(0, 0, 0, 0.4);
+        }
+      }
+
+      /* DESKTOP (>= 1024px): centered responsive application container */
+      @media (min-width: 1024px) {
+        #root {
+          max-width: 1180px;
+          margin: 0 auto;
+        }
+      }
+
+      /* Standalone PWA mode tweaks */
+      @media all and (display-mode: standalone) {
+        html, body {
+          user-select: none;
+          -webkit-user-select: none;
+        }
+        input, textarea {
+          user-select: text;
+          -webkit-user-select: text;
+        }
+      }
+    </style>
+
+    <!-- Safe Service Worker Registration -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then(function(reg) {
+              console.log('[PWA] Service Worker registered with scope:', reg.scope);
+            })
+            .catch(function(err) {
+              console.warn('[PWA] Service Worker registration failed:', err);
+            });
+        });
+      }
+    </script>
+  </head>
+
+  <body>
+    <!-- Fallback if JavaScript is disabled -->
+    <noscript>
+      <div style="padding: 24px; text-align: center; font-family: sans-serif;">
+        <h2>JavaScript Required</h2>
+        <p>Please enable JavaScript to run Ayyanar Construction CRM.</p>
+      </div>
+    </noscript>
+    
+    <!-- React Native Web Root Element -->
+    <div id="root"></div>
+  </body>
+</html>

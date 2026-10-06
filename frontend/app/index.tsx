@@ -6,6 +6,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import ScreenWrapper from './components/ScreenWrapper';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
 import { api as authService } from '../services/api';
+import InstallAppButton from '../components/InstallAppButton';
 
 // The welcome splash should only appear on app launch — never again after logout.
 let welcomeAlreadyShown = false;
@@ -193,6 +194,10 @@ export default function LoginScreen() {
               {loading ? 'Authenticating...' : 'LOGIN TO DASHBOARD'}
             </Text>
           </TouchableOpacity>
+
+          <View style={{ marginTop: SPACING.md }}>
+            <InstallAppButton variant="solid" />
+          </View>
         </View>
         </View>
       </ScrollView>

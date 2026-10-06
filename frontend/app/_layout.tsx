@@ -4,7 +4,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { COLORS } from '../constants/Theme';
-import LogoutButton from '../components/LogoutButton';
+import HeaderRightActions from '../components/HeaderRightActions';
+import PWAUpdateBanner from '../components/PWAUpdateBanner';
 
 // Keep the splash screen visible while we fetch resources
 SplashScreen.preventAutoHideAsync().catch(() => {
@@ -28,7 +29,7 @@ export default function RootLayout() {
           headerStyle: { backgroundColor: COLORS.headerBackground },
           headerTintColor: COLORS.white,
           headerTitleStyle: { fontWeight: '800' },
-          headerRight: () => <LogoutButton />,
+          headerRight: () => <HeaderRightActions />,
           contentStyle: { backgroundColor: COLORS.background },
         }}
       >
@@ -46,6 +47,7 @@ export default function RootLayout() {
         <Stack.Screen name="total-accounts" options={{ title: 'Total Accounts' }} />
         <Stack.Screen name="admin-panel" options={{ title: 'Admin Control Panel' }} />
       </Stack>
+      <PWAUpdateBanner />
     </SafeAreaProvider>
   );
 }

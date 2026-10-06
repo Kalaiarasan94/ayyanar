@@ -5,7 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Platform } from 'react-native';
 import { COLORS } from '../../constants/Theme';
-import LogoutButton from '../../components/LogoutButton';
+import HeaderRightActions from '../../components/HeaderRightActions';
 
 export default function TabsLayout() {
   const [role, setRole] = useState<string | null>(null);
@@ -42,7 +42,7 @@ export default function TabsLayout() {
         headerTitleStyle: {
           fontWeight: '800',
         },
-        headerRight: () => <LogoutButton />,
+        headerRight: () => <HeaderRightActions />,
       }}
     >
       <Tabs.Screen
