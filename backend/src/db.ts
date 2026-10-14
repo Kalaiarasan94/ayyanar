@@ -283,6 +283,17 @@ export const initDb = async () => {
       console.log('Added indirect-bill approval columns to ledger.');
     }
 
+    // Migrate any legacy 'Daily Sheet' category in account_transactions to 'Site Expenses'
+    try {
+      await db.query(`
+        UPDATE account_transactions 
+        SET category = 'Site Expenses' 
+        WHERE category = 'Daily Sheet';
+      `);
+    } catch (e) {
+      console.warn('Migration note (Daily Sheet -> Site Expenses):', e);
+    }
+
     console.log('MySQL Database initialized successfully.');
   } catch (error) {
     console.error('Failed to initialize database schema:', error);

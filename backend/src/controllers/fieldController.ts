@@ -745,6 +745,7 @@ export const fieldController = {
         return;
       }
 
+      const cleanAmountReceived = req.body.amountReceived ? parseFloat(req.body.amountReceived.toString()) : 0;
       const labourSalaryTotal = (labourSalary || []).reduce(
         (sum: number, l: any) => sum + (parseFloat(l.amount) || 0),
         0
@@ -768,7 +769,7 @@ export const fieldController = {
           date,
           workDescription || null,
           JSON.stringify(attendance || []),
-          0,
+          cleanAmountReceived,
           parseFloat(billsNormal) || 0,
           parseFloat(billsGst) || 0,
           parseFloat(billsCredit) || 0,
@@ -779,7 +780,7 @@ export const fieldController = {
         ]
       );
 
-      // Automatically post OUT transaction into that particular supervisor's accounts output!
+      // Automatically post OUT transaction into that particular supervisor's accounts output (Supervisor IO)!
       if (totalAmount > 0) {
         let siteName = 'Site';
         let supervisorName: string | null = null;
@@ -795,7 +796,7 @@ export const fieldController = {
         await db.query(
           `INSERT INTO account_transactions 
             (role, user_id, entered_by_name, flow, category, party_name, payment_method, description, amount, date)
-           VALUES ('Supervisor', ?, ?, 'OUT', 'Daily Sheet', ?, 'Cash', ?, ?, ?)`,
+           VALUES ('Supervisor', ?, ?, 'OUT', 'Site Expenses', ?, 'Cash', ?, ?, ?)`,
           [
             cleanUserId,
             supervisorName,
