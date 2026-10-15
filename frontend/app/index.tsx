@@ -125,6 +125,8 @@ export default function LoginScreen() {
     }
   };
 
+  const [focusedInput, setFocusedInput] = useState<'username' | 'password' | null>(null);
+
   if (showWelcome) {
     return (
       <View style={styles.welcomeScreen}>
@@ -138,70 +140,135 @@ export default function LoginScreen() {
     );
   }
 
-  return (<ScreenWrapper>
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <StatusBar barStyle="dark-content" />
-      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-        <View style={styles.loginColumn}>
-        <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Image source={require('../assets/ayyanar-logo.jpg')} style={styles.logo} resizeMode="contain" />
-          </View>
-          <Text style={styles.title}>Construction CRM</Text>
-          <Text style={styles.subtitle}>Infra Engineering Operations</Text>
-        </View>
+  return (
+    <ScreenWrapper>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.container}
+      >
+        <StatusBar barStyle="dark-content" />
+        <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+          <View style={styles.loginColumn}>
+            
+            {/* Header / Brand Area */}
+            <View style={styles.header}>
+              <View style={styles.logoCard}>
+                <Image source={require('../assets/ayyanar-logo.jpg')} style={styles.logo} resizeMode="contain" />
+              </View>
+              
+              <View style={styles.portalBadge}>
+                <View style={styles.portalDot} />
+                <Text style={styles.portalBadgeText}>ENTERPRISE PORTAL</Text>
+              </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>USERNAME</Text>
-          <View style={styles.inputContainer}>
-            <MaterialIcons name="person" size={20} color={COLORS.textLight} />
-            <TextInput 
-              style={styles.input}
-              placeholder="Enter your username"
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              placeholderTextColor={COLORS.textLight}
-            />
-          </View>
+              <Text style={styles.title}>Construction CRM</Text>
+              <Text style={styles.subtitle}>Infra Operations & Management Suite</Text>
+            </View>
 
-          <Text style={styles.label}>PASSWORD</Text>
-          <View style={styles.inputContainer}>
-            <MaterialIcons name="lock" size={20} color={COLORS.textLight} />
-            <TextInput 
-              style={styles.input}
-              placeholder="Enter your password"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              placeholderTextColor={COLORS.textLight}
-            />
-            <TouchableOpacity onPress={() => setShowPassword(prev => !prev)} style={{ padding: 4 }}>
-              <MaterialIcons name={showPassword ? "visibility" : "visibility-off"} size={20} color={COLORS.textLight} />
-            </TouchableOpacity>
-          </View>
+            {/* Login Form Card */}
+            <View style={styles.formCard}>
+              <Text style={styles.cardHeading}>Sign In</Text>
+              <Text style={styles.cardSubheading}>Access your field operations dashboard</Text>
 
-          <TouchableOpacity 
-            style={styles.loginButton}
-            onPress={handleLogin}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.loginButtonText}>
-              {loading ? 'Authenticating...' : 'LOGIN TO DASHBOARD'}
-            </Text>
-          </TouchableOpacity>
+              {/* Username Field */}
+              <Text style={styles.inputLabel}>USERNAME</Text>
+              <View style={[
+                styles.inputWrapper,
+                focusedInput === 'username' && styles.inputWrapperFocused
+              ]}>
+                <View style={[styles.inputIconContainer, focusedInput === 'username' && styles.inputIconContainerFocused]}>
+                  <MaterialIcons 
+                    name="person-outline" 
+                    size={20} 
+                    color={focusedInput === 'username' ? COLORS.primary : COLORS.textLight} 
+                  />
+                </View>
+                <TextInput 
+                  style={styles.input}
+                  placeholder="Enter your username"
+                  value={username}
+                  onChangeText={setUsername}
+                  onFocus={() => setFocusedInput('username')}
+                  onBlur={() => setFocusedInput(null)}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholderTextColor="#A89496"
+                />
+              </View>
 
-          <View style={{ marginTop: SPACING.md }}>
-            <InstallAppButton variant="solid" />
+              {/* Password Field with Eye Toggle Icon */}
+              <Text style={styles.inputLabel}>PASSWORD</Text>
+              <View style={[
+                styles.inputWrapper,
+                focusedInput === 'password' && styles.inputWrapperFocused
+              ]}>
+                <View style={[styles.inputIconContainer, focusedInput === 'password' && styles.inputIconContainerFocused]}>
+                  <MaterialIcons 
+                    name="lock-outline" 
+                    size={20} 
+                    color={focusedInput === 'password' ? COLORS.primary : COLORS.textLight} 
+                  />
+                </View>
+                <TextInput 
+                  style={styles.input}
+                  placeholder="Enter your password"
+                  value={password}
+                  onChangeText={setPassword}
+                  onFocus={() => setFocusedInput('password')}
+                  onBlur={() => setFocusedInput(null)}
+                  secureTextEntry={!showPassword}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  placeholderTextColor="#A89496"
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(prev => !prev)} 
+                  style={styles.eyeButton}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                  accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                >
+                  <MaterialIcons 
+                    name={showPassword ? "visibility" : "visibility-off"} 
+                    size={22} 
+                    color={showPassword ? COLORS.primary : COLORS.textLight} 
+                  />
+                </TouchableOpacity>
+              </View>
+
+              {/* Login Button */}
+              <TouchableOpacity 
+                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                onPress={handleLogin}
+                disabled={loading}
+                activeOpacity={0.85}
+              >
+                <MaterialIcons 
+                  name={loading ? "hourglass-empty" : "login"} 
+                  size={20} 
+                  color="#FFFFFF" 
+                  style={{ marginRight: 8 }} 
+                />
+                <Text style={styles.loginButtonText}>
+                  {loading ? 'Authenticating…' : 'SIGN IN TO DASHBOARD'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Install PWA Button if available */}
+              <View style={{ marginTop: SPACING.md }}>
+                <InstallAppButton variant="solid" />
+              </View>
+            </View>
+
+            {/* Footer */}
+            <View style={styles.footerNote}>
+              <MaterialIcons name="security" size={14} color={COLORS.textLight} style={{ marginRight: 4 }} />
+              <Text style={styles.footerText}>Secure Ayyanar Infra System · Authorized Access Only</Text>
+            </View>
+
           </View>
-        </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenWrapper>
   );
 }
@@ -215,137 +282,187 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: SPACING.md,
+    paddingVertical: SPACING.xl,
   },
-  // Centered login card on desktop web; identical full-width on phones
+  // Centered login column on desktop web; full-width on mobile
   loginColumn: {
     width: '100%',
-    maxWidth: 460,
+    maxWidth: 420,
     alignSelf: 'center',
   },
   header: {
     alignItems: 'center',
-    marginBottom: SPACING.xl,
+    marginBottom: SPACING.lg,
   },
-  logoContainer: {
+  logoCard: {
     width: '100%',
-    maxWidth: 320,
-    height: 86,
+    maxWidth: 290,
+    height: 80,
     backgroundColor: '#FFFFFF',
-    borderRadius: BORDER_RADIUS.lg,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
-    elevation: 5,
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 6 },
+    borderWidth: 1.5,
+    borderColor: 'rgba(226, 55, 68, 0.14)',
+    elevation: 8,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
-    shadowRadius: 12,
+    shadowRadius: 16,
     paddingHorizontal: SPACING.md,
   },
   logo: {
     width: '100%',
-    height: 58,
+    height: 52,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: COLORS.primary,
-    letterSpacing: 0,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: COLORS.textLight,
-    marginTop: 4,
-    letterSpacing: 0,
-    fontWeight: '600',
-  },
-  form: {
-    backgroundColor: COLORS.glassBg,
-    padding: SPACING.lg,
-    borderRadius: BORDER_RADIUS.xl,
-    elevation: 4,
-    shadowColor: COLORS.black,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
-  },
-  label: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: COLORS.primary,
-    marginBottom: SPACING.xs,
-    marginLeft: 4,
-    letterSpacing: 0,
-  },
-  inputContainer: {
+  portalBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.steel,
-    borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.lg,
+    backgroundColor: '#FCE9E9',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 20,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#F4C6C8',
+  },
+  portalDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+    marginRight: 6,
+  },
+  portalBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: COLORS.primary,
+    letterSpacing: 0.8,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#26191A',
+    letterSpacing: -0.3,
+  },
+  subtitle: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginTop: 3,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    padding: SPACING.lg,
+    borderRadius: 22,
+    elevation: 6,
+    shadowColor: '#26191A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 55, 68, 0.12)',
+  },
+  cardHeading: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#26191A',
+    marginBottom: 2,
+  },
+  cardSubheading: {
+    fontSize: 12.5,
+    color: COLORS.textLight,
+    fontWeight: '500',
+    marginBottom: SPACING.lg,
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#26191A',
+    marginBottom: 6,
+    letterSpacing: 0.4,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAFAFB',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#EAE6E7',
+    marginBottom: SPACING.md,
+    paddingHorizontal: 6,
+    height: 52,
+  },
+  inputWrapperFocused: {
+    borderColor: COLORS.primary,
+    backgroundColor: '#FFFFFF',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  inputIconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 4,
+  },
+  inputIconContainerFocused: {
+    backgroundColor: '#FCE9E9',
   },
   input: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 10,
     paddingHorizontal: 10,
-    fontSize: 16,
-    color: COLORS.text,
+    fontSize: 15,
+    color: '#26191A',
+    fontWeight: '500',
+  },
+  eyeButton: {
+    padding: 8,
+    marginRight: 4,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loginButton: {
+    flexDirection: 'row',
     backgroundColor: COLORS.primary,
-    paddingVertical: 16,
-    borderRadius: BORDER_RADIUS.md,
+    height: 52,
+    borderRadius: 12,
+    justifyContent: 'center',
     alignItems: 'center',
     marginTop: SPACING.sm,
     elevation: 6,
-    shadowColor: COLORS.secondary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28,
+    shadowRadius: 12,
+  },
+  loginButtonDisabled: {
+    opacity: 0.7,
   },
   loginButtonText: {
     color: '#FFFFFF',
     fontWeight: '800',
-    fontSize: 16,
-    letterSpacing: 0.5,
+    fontSize: 14.5,
+    letterSpacing: 0.6,
   },
-  credentialBox: {
-    marginTop: SPACING.xl,
-    padding: SPACING.md,
-  },
-  credentialTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.textLight,
-    marginBottom: SPACING.sm,
-    textAlign: 'center',
-  },
-  chipRow: {
+  footerNote: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    marginTop: SPACING.lg,
   },
-  chip: {
-    backgroundColor: COLORS.white,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: COLORS.glassBorder,
-  },
-  chipText: {
-    fontSize: 12,
-    color: COLORS.primary,
-    fontWeight: '700',
-    textTransform: 'capitalize',
+  footerText: {
+    fontSize: 11.5,
+    color: COLORS.textLight,
+    fontWeight: '600',
   },
   welcomeScreen: {
     flex: 1,

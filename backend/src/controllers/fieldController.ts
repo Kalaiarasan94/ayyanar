@@ -14,17 +14,15 @@ export const fieldController = {
       console.log('--- LOG EXPENSE ATTEMPT ---');
       console.log('Payload:', { cleanSiteId, cleanUserId, type, category, amount, paymentMode, imageUrl: imageUrl ? 'Present' : 'Missing' });
       
-      // Indirect (credit) bills are settled later — they start Pending and only
-      // reduce the supervisor's cash balance once Admin/Owner approves the
-      // settlement (see approveIndirectBill). Direct bills are cash-in-hand
-      // paid immediately, so they're Approved from the moment they're logged.
-      const approvalStatus = paymentMode === 'Indirect' ? 'Pending' : 'Approved';
+      // Both Direct and Indirect bills are approved automatically now
+      // (no approval required for supervisor indirect bills).
+      const approvalStatus = 'Approved';
 
       const queryText = `
         INSERT INTO ledger (site_id, user_id, type, category, description, amount, date, payment_mode, is_gst, image_url, approval_status)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
       `;
-      await db.query(queryText, [
+      const ledgerResult = await db.query(queryText, [
         cleanSiteId,
         cleanUserId,
         type,
@@ -37,29 +35,38 @@ export const fieldController = {
         imageUrl || null,
         approvalStatus
       ]);
+      const ledgerId = (ledgerResult.rows as any)?.insertId;
 
-      // If the bill is Direct (Cash) and uploaded by a supervisor/user,
-      // automatically record it in account_transactions to reduce their cash balance.
-      if (paymentMode === 'Direct' && cleanUserId) {
+      // Automatically record all supervisor bills (Direct & Indirect) into account_transactions as OUT.
+      // Direct bills are tagged under 'Site Expenses', Indirect bills are tagged under category 'Indirect'.
+      // In both cases, party_name is set to the site name so reports know which site the expense was for.
+      if (cleanUserId) {
         const userRes = await db.query('SELECT role FROM users WHERE id = ?', [cleanUserId]);
         const siteRes = await db.query('SELECT name FROM sites WHERE id = ?', [cleanSiteId]);
         
         if (userRes.rows.length > 0 && siteRes.rows.length > 0) {
           const userRole = userRes.rows[0].role;
           const siteName = siteRes.rows[0].name;
+          const txCategory = paymentMode === 'Indirect' ? 'Indirect' : 'Site Expenses';
+          const defaultDesc = paymentMode === 'Indirect' ? 'Indirect Bill Payment' : 'Direct Bill Payment';
           
-          await db.query(
+          const txRes = await db.query(
             `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
-             VALUES (?, ?, 'OUT', 'Site Expenses', ?, 'Cash', ?, ?, ?)`,
+             VALUES (?, ?, 'OUT', ?, ?, 'Cash', ?, ?, ?)`,
             [
               userRole,
               cleanUserId,
+              txCategory,
               siteName,
-              description || 'Direct Bill Payment',
+              description || defaultDesc,
               parseFloat(amount.toString()),
               date || new Date().toISOString().split('T')[0]
             ]
           );
+          const txId = (txRes.rows as any)?.insertId;
+          if (txId && ledgerId) {
+            await db.query('UPDATE ledger SET linked_transaction_id = ? WHERE id = ?', [txId, ledgerId]);
+          }
         }
       }
       
@@ -79,6 +86,15 @@ export const fieldController = {
         'UPDATE ledger SET category = ?, description = ?, amount = ?, payment_mode = ?, date = ? WHERE id = ?',
         [category, description || null, amount, paymentMode || 'Direct', date, id]
       );
+      // Keep linked account_transactions in sync
+      const billRes = await db.query('SELECT linked_transaction_id FROM ledger WHERE id = ?', [id]);
+      if (billRes.rows[0]?.linked_transaction_id) {
+        const txCategory = paymentMode === 'Indirect' ? 'Indirect' : 'Site Expenses';
+        await db.query(
+          'UPDATE account_transactions SET category = ?, description = ?, amount = ?, date = ? WHERE id = ?',
+          [txCategory, description || null, parseFloat(amount.toString()), date, billRes.rows[0].linked_transaction_id]
+        );
+      }
       res.status(200).json({ success: true, message: 'Bill updated.' });
     } catch (error: any) {
       console.error('updateExpense Error:', error);
@@ -90,6 +106,10 @@ export const fieldController = {
   deleteExpense: async (req: Request, res: Response): Promise<void> => {
     try {
       const { id } = req.params;
+      const billRes = await db.query('SELECT linked_transaction_id FROM ledger WHERE id = ?', [id]);
+      if (billRes.rows[0]?.linked_transaction_id) {
+        await db.query('DELETE FROM account_transactions WHERE id = ?', [billRes.rows[0].linked_transaction_id]);
+      }
       await db.query('DELETE FROM ledger WHERE id = ?', [id]);
       res.status(200).json({ success: true, message: 'Bill deleted.' });
     } catch (error: any) {
@@ -193,8 +213,8 @@ export const fieldController = {
 
       const inserted = await db.query(
         `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
-         VALUES (?, ?, 'OUT', 'Indirect Bill Settlement', ?, 'Cash', ?, ?, ?)`,
-        [userRole, bill.user_id, siteName, notes || bill.description || 'Indirect Bill Settlement', cleanAmount, date]
+         VALUES (?, ?, 'OUT', 'Indirect', ?, 'Cash', ?, ?, ?)`,
+        [userRole, bill.user_id, siteName, notes || bill.description || 'Indirect Bill Payment', cleanAmount, date]
       );
       const transactionId = (inserted.rows as any).insertId;
 

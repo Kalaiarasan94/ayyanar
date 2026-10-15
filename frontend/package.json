@@ -7,8 +7,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build:web": "expo export -p web",
-    "export": "expo export -p web"
+    "build:reports": "npm --prefix ../backend/reports-web run build && mkdir -p public/reports && cp -r ../backend/reports-web/dist/* public/reports/",
+    "build:web": "npm run build:reports && expo export -p web",
+    "export": "npm run build:web"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",

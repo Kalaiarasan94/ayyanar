@@ -16,7 +16,7 @@ const todayIso = () => new Date().toISOString().split('T')[0];
 type Status = 'Pending' | 'Approved';
 
 export default function IndirectBillsReport() {
-  const [status, setStatus] = useState<Status>('Pending');
+  const [status, setStatus] = useState<Status>('Approved');
   const [sites, setSites] = useState<any[]>([]);
   const [siteId, setSiteId] = useState<string | null>(null);
   const [supervisors, setSupervisors] = useState<{ id: any; name: string }[]>([]);

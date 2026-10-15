@@ -254,9 +254,9 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
       .catch(() => setSupervisors([]));
   }, []);
 
-  // Load the created sites so Site Expenses can be tagged to a real site
+  // Load the created sites so Site Expenses / Indirect can be tagged to a real site
   useEffect(() => {
-    if (!outputTargets.includes('Site Expenses')) return;
+    if (!outputTargets.includes('Site Expenses') && !outputTargets.includes('Indirect')) return;
     if (role === 'Supervisor') {
       if (!userLoaded || !loggedInUserId) return;
       fieldService
@@ -339,7 +339,7 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
         description,
         amount: cleanAmount,
         date: entryDate,
-        siteId: category === 'Site Expenses' ? selectedSite?.id || null : null,
+        siteId: (category === 'Site Expenses' || category === 'Indirect') ? selectedSite?.id || null : null,
       });
       setEntryVisible(false);
       Alert.alert('Success', response?.message || 'Entry saved.');
@@ -818,8 +818,8 @@ export default function AccountsModule({ role, heading, inputSources, outputTarg
               })}
             </View>
 
-            {/* Site Expenses: pick which created site the money was spent on */}
-            {!isInput && category === 'Site Expenses' && sites.length > 0 && (
+            {/* Site Expenses / Indirect: pick which created site the money was spent on */}
+            {!isInput && (category === 'Site Expenses' || category === 'Indirect') && sites.length > 0 && (
               <>
                 <Text style={styles.fieldLabel}>SELECT SITE</Text>
                 <View style={styles.chipRow}>

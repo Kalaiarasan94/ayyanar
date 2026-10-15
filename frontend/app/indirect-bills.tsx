@@ -49,7 +49,7 @@ const initial = (name?: string) => (name || '?').trim().charAt(0).toUpperCase();
 // A Pending bill has no effect on the supervisor's cash balance yet; approving
 // it registers the actual output (see backend fieldController.approveIndirectBill).
 export default function IndirectBillsScreen() {
-  const [statusFilter, setStatusFilter] = useState<'Pending' | 'Approved'>('Pending');
+  const [statusFilter, setStatusFilter] = useState<'Pending' | 'Approved'>('Approved');
   const [sites, setSites] = useState<any[]>([]);
   const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
   const [supervisors, setSupervisors] = useState<{ id: any; name: string }[]>([]);

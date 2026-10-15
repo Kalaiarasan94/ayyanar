@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowDownCircle, ArrowUpCircle, Download, Share2, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, CreditCard, Download, Share2, Wallet } from 'lucide-react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { accountsApi, adminApi } from '../api';
 import DataTable from '../components/DataTable';
@@ -75,6 +75,7 @@ export default function IoReport() {
         summaryBoxes: [
           { label: 'Total Input', value: rupees(report.totals.input), color: '#15803d' },
           { label: 'Total Output', value: rupees(report.totals.output), color: '#e23744' },
+          ...(role === 'Supervisor' ? [{ label: 'Total Indirect', value: rupees(report.totals.indirect || report.indirect?.total || 0), color: '#8c7576' }] : []),
           { label: 'Closing Balance', value: rupees(report.totals.closing) },
         ],
         tables: [
@@ -90,10 +91,32 @@ export default function IoReport() {
           },
           {
             title: `All Outputs (${outputRows.length})`,
-            head: ['Date', 'Party', 'Category', 'Output (Rs)'],
-            body: outputRows.map((r: any) => [dateLabel(r.date), r.party || r.description || '-', r.category || '-', Number(r.amount).toLocaleString('en-IN')]),
-            foot: ['TOTAL OUTPUT', '', '', Number(report.totals.output).toLocaleString('en-IN')],
-            columnStyles: { 3: { halign: 'right' as const } },
+            head: role === 'Supervisor'
+              ? ['Date', 'Site / Party', 'Category', 'Indirect (Rs)', 'Output (Rs)']
+              : ['Date', 'Party', 'Category', 'Output (Rs)'],
+            body: outputRows.map((r: any) => {
+              const isInd = r.category === 'Indirect' || r.category === 'Indirect Bill Settlement';
+              return role === 'Supervisor'
+                ? [
+                    dateLabel(r.date),
+                    r.party || r.description || '-',
+                    r.category || '-',
+                    isInd ? Number(r.amount).toLocaleString('en-IN') : '-',
+                    Number(r.amount).toLocaleString('en-IN')
+                  ]
+                : [
+                    dateLabel(r.date),
+                    r.party || r.description || '-',
+                    r.category || '-',
+                    Number(r.amount).toLocaleString('en-IN')
+                  ];
+            }),
+            foot: role === 'Supervisor'
+              ? ['TOTAL OUTPUT', '', '', Number(report.totals.indirect || report.indirect?.total || 0).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN')]
+              : ['TOTAL OUTPUT', '', '', Number(report.totals.output).toLocaleString('en-IN')],
+            columnStyles: role === 'Supervisor'
+              ? { 3: { halign: 'right' as const }, 4: { halign: 'right' as const } }
+              : { 3: { halign: 'right' as const } },
           },
           ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
             ? [
@@ -112,6 +135,7 @@ export default function IoReport() {
             body: [
               ...(mode !== 'all' ? [['Opening Balance', Number(report.opening).toLocaleString('en-IN')]] : []),
               ['Total Input', Number(report.totals.input).toLocaleString('en-IN')],
+              ...(role === 'Supervisor' ? [['Total Indirect', Number(report.totals.indirect || report.indirect?.total || 0).toLocaleString('en-IN')]] : []),
               ['Total Output', Number(report.totals.output).toLocaleString('en-IN')],
             ],
             foot: ['Closing Balance', Number(report.totals.closing).toLocaleString('en-IN')],
@@ -136,6 +160,7 @@ export default function IoReport() {
         summaryBoxes: [
           { label: 'Total Input', value: rupees(report.totals.input), color: '#15803d' },
           { label: 'Total Output', value: rupees(report.totals.output), color: '#e23744' },
+          ...(role === 'Supervisor' ? [{ label: 'Total Indirect', value: rupees(report.totals.indirect || report.indirect?.total || 0), color: '#8c7576' }] : []),
           { label: 'Closing Balance', value: rupees(report.totals.closing) },
         ],
         tables: [
@@ -151,10 +176,32 @@ export default function IoReport() {
           },
           {
             title: `All Outputs (${outputRows.length})`,
-            head: ['Date', 'Party', 'Category', 'Output (Rs)'],
-            body: outputRows.map((r: any) => [dateLabel(r.date), r.party || r.description || '-', r.category || '-', Number(r.amount).toLocaleString('en-IN')]),
-            foot: ['TOTAL OUTPUT', '', '', Number(report.totals.output).toLocaleString('en-IN')],
-            columnStyles: { 3: { halign: 'right' as const } },
+            head: role === 'Supervisor'
+              ? ['Date', 'Site / Party', 'Category', 'Indirect (Rs)', 'Output (Rs)']
+              : ['Date', 'Party', 'Category', 'Output (Rs)'],
+            body: outputRows.map((r: any) => {
+              const isInd = r.category === 'Indirect' || r.category === 'Indirect Bill Settlement';
+              return role === 'Supervisor'
+                ? [
+                    dateLabel(r.date),
+                    r.party || r.description || '-',
+                    r.category || '-',
+                    isInd ? Number(r.amount).toLocaleString('en-IN') : '-',
+                    Number(r.amount).toLocaleString('en-IN')
+                  ]
+                : [
+                    dateLabel(r.date),
+                    r.party || r.description || '-',
+                    r.category || '-',
+                    Number(r.amount).toLocaleString('en-IN')
+                  ];
+            }),
+            foot: role === 'Supervisor'
+              ? ['TOTAL OUTPUT', '', '', Number(report.totals.indirect || report.indirect?.total || 0).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN')]
+              : ['TOTAL OUTPUT', '', '', Number(report.totals.output).toLocaleString('en-IN')],
+            columnStyles: role === 'Supervisor'
+              ? { 3: { halign: 'right' as const }, 4: { halign: 'right' as const } }
+              : { 3: { halign: 'right' as const } },
           },
           ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
             ? [
@@ -173,6 +220,7 @@ export default function IoReport() {
             body: [
               ...(mode !== 'all' ? [['Opening Balance', Number(report.opening).toLocaleString('en-IN')]] : []),
               ['Total Input', Number(report.totals.input).toLocaleString('en-IN')],
+              ...(role === 'Supervisor' ? [['Total Indirect', Number(report.totals.indirect || report.indirect?.total || 0).toLocaleString('en-IN')]] : []),
               ['Total Output', Number(report.totals.output).toLocaleString('en-IN')],
             ],
             foot: ['Closing Balance', Number(report.totals.closing).toLocaleString('en-IN')],
@@ -180,7 +228,7 @@ export default function IoReport() {
           },
         ],
       });
-      const text = `${supervisorName || role} I/O Report (${rangeTitle})\nInput: ${rupees(report.totals.input)}\nOutput: ${rupees(report.totals.output)}\nClosing Balance: ${rupees(report.totals.closing)}`;
+      const text = `${supervisorName || role} I/O Report (${rangeTitle})\nInput: ${rupees(report.totals.input)}\n${role === 'Supervisor' ? `Indirect: ${rupees(report.totals.indirect || report.indirect?.total || 0)}\n` : ''}Output: ${rupees(report.totals.output)}\nClosing Balance: ${rupees(report.totals.closing)}`;
       await sharePdfReportOnWhatsApp(pdf, text);
     } finally {
       setDownloading(false);
@@ -269,11 +317,25 @@ export default function IoReport() {
               rowKey={(r: any) => r.id}
               rows={outputRows}
               emptyText="No money paid in this range."
-              totalRow={['TOTAL OUTPUT', '', '', rupees(report.totals.output)]}
+              totalRow={role === 'Supervisor'
+                ? ['TOTAL OUTPUT', '', '', rupees(report.totals?.indirect || report.indirect?.total || 0), rupees(report.totals.output)]
+                : ['TOTAL OUTPUT', '', '', rupees(report.totals.output)]}
               columns={[
                 { header: 'Date', render: (r: any) => dateLabel(r.date) },
-                { header: 'Party', render: (r: any) => r.party || r.description || '—' },
+                { header: 'Site / Party', render: (r: any) => r.party || r.description || '—' },
                 { header: 'Category', render: (r: any) => r.category || '—' },
+                ...(role === 'Supervisor'
+                  ? [
+                      {
+                        header: 'Indirect',
+                        align: 'right' as const,
+                        render: (r: any) => {
+                          const isInd = r.category === 'Indirect' || r.category === 'Indirect Bill Settlement';
+                          return isInd ? <span style={{ color: '#8c7576', fontWeight: 600 }}>{rupees(r.amount)}</span> : '—';
+                        },
+                      },
+                    ]
+                  : []),
                 { header: 'Output', align: 'right', render: (r: any) => <span className="text-primary">{rupees(r.amount)}</span> },
               ]}
             />
@@ -283,12 +345,12 @@ export default function IoReport() {
             <div className="card">
               <h3 className="section-heading">Indirect Bills Output ({(report.indirect?.rows || []).length})</h3>
               <p className="text-muted" style={{ fontSize: 12.5, marginTop: -8, marginBottom: 12 }}>
-                Approved indirect-bill settlements only — already counted inside Output above, broken out here.
+                Indirect bills — already counted inside Output above, broken out here.
               </p>
               <DataTable<any>
                 rowKey={(r: any) => r.id}
                 rows={report.indirect?.rows || []}
-                emptyText="No indirect bills settled in this range."
+                emptyText="No indirect bills recorded in this range."
                 totalRow={report.indirect?.rows?.length ? ['', '', 'TOTAL', rupees(report.indirect.total)] : undefined}
                 columns={[
                   { header: 'Date', render: (r: any) => dateLabel(r.date) },
@@ -306,6 +368,9 @@ export default function IoReport() {
             <div className="summary-row" style={{ marginBottom: 0 }}>
               {mode !== 'all' && <SummaryCard label="Opening Balance" value={rupees(report.opening)} icon={Wallet} />}
               <SummaryCard label="Total Input" value={rupees(report.totals.input)} color="#15803d" icon={ArrowDownCircle} />
+              {role === 'Supervisor' && (
+                <SummaryCard label="Total Indirect" value={rupees(report.totals?.indirect || report.indirect?.total || 0)} color="#8c7576" icon={CreditCard} />
+              )}
               <SummaryCard label="Total Output" value={rupees(report.totals.output)} color="#e23744" icon={ArrowUpCircle} />
               <SummaryCard label="Closing Balance" value={rupees(report.totals.closing)} icon={Wallet} />
             </div>

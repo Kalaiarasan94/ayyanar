@@ -294,6 +294,56 @@ export const initDb = async () => {
       console.warn('Migration note (Daily Sheet -> Site Expenses):', e);
     }
 
+    // Auto-approve all indirect bills and migrate 'Indirect Bill Settlement' to 'Indirect'
+    try {
+      await db.query(`
+        UPDATE ledger 
+        SET approval_status = 'Approved' 
+        WHERE approval_status = 'Pending';
+      `);
+      await db.query(`
+        UPDATE account_transactions 
+        SET category = 'Indirect' 
+        WHERE category = 'Indirect Bill Settlement';
+      `);
+    } catch (e) {
+      console.warn('Migration note (Indirect auto-approve):', e);
+    }
+
+    // Ensure all indirect bills logged by supervisors have an entry in account_transactions
+    try {
+      const missingRes = await db.query(`
+        SELECT l.*, s.name as site_name, u.role as user_role
+        FROM ledger l
+        LEFT JOIN sites s ON l.site_id = s.id
+        LEFT JOIN users u ON l.user_id = u.id
+        WHERE l.payment_mode = 'Indirect'
+          AND l.user_id IS NOT NULL
+          AND l.linked_transaction_id IS NULL
+      `);
+      for (const bill of (missingRes.rows || [])) {
+        if (!bill.user_id || !bill.user_role) continue;
+        const insertedTx = await db.query(
+          `INSERT INTO account_transactions (role, user_id, flow, category, party_name, payment_method, description, amount, date)
+           VALUES (?, ?, 'OUT', 'Indirect', ?, 'Cash', ?, ?, ?)`,
+          [
+            bill.user_role,
+            bill.user_id,
+            bill.site_name || 'Site',
+            bill.description || 'Indirect Bill Payment',
+            parseFloat(bill.amount.toString()),
+            bill.date
+          ]
+        );
+        const txId = (insertedTx.rows as any)?.insertId;
+        if (txId) {
+          await db.query('UPDATE ledger SET linked_transaction_id = ? WHERE id = ?', [txId, bill.id]);
+        }
+      }
+    } catch (e) {
+      console.warn('Migration note (Sync indirect bills to account_transactions):', e);
+    }
+
     console.log('MySQL Database initialized successfully.');
   } catch (error) {
     console.error('Failed to initialize database schema:', error);

@@ -83,18 +83,20 @@ export const accountsController = {
       );
       const insertedId = (inserted.rows as any).insertId;
 
-      // Synchronize Site Expenses into the main general site ledger
-      if (flow === 'OUT' && category === 'Site Expenses' && req.body.siteId) {
+      // Synchronize Site Expenses and Indirect into the main general site ledger
+      if (flow === 'OUT' && (category === 'Site Expenses' || category === 'Indirect') && req.body.siteId) {
         await db.query(
-          `INSERT INTO ledger (site_id, user_id, type, category, description, amount, payment_mode, date)
-           VALUES (?, ?, 'DEBIT', ?, ?, ?, 'Indirect', ?)`,
+          `INSERT INTO ledger (site_id, user_id, type, category, description, amount, payment_mode, date, approval_status, linked_transaction_id)
+           VALUES (?, ?, 'DEBIT', ?, ?, ?, ?, ?, 'Approved', ?)`,
           [
             parseInt(req.body.siteId.toString()),
             cleanUserId,
-            'Site Expenses',
-            description || 'Supervisor Cash Expense',
+            category,
+            description || `${category} Payment`,
             cleanAmount,
-            cleanDate
+            category === 'Indirect' ? 'Indirect' : 'Direct',
+            cleanDate,
+            insertedId
           ]
         );
       }
@@ -309,7 +311,8 @@ export const accountsController = {
       let sql = `
         SELECT date,
           COALESCE(SUM(IF(flow = 'IN', amount, 0)), 0) AS input,
-          COALESCE(SUM(IF(flow = 'OUT', amount, 0)), 0) AS output
+          COALESCE(SUM(IF(flow = 'OUT', amount, 0)), 0) AS output,
+          COALESCE(SUM(IF(flow = 'OUT' AND category IN ('Indirect', 'Indirect Bill Settlement'), amount, 0)), 0) AS indirect
         FROM account_transactions WHERE role = ?`;
       const params: any[] = [role];
       if (req.query.userId) {
@@ -335,18 +338,17 @@ export const accountsController = {
           date: r.date,
           input: Number(r.input),
           output: Number(r.output),
+          indirect: Number(r.indirect || 0),
           balance,
         };
       });
 
-      // Indirect-bill settlements are one slice of the Output total above
-      // (they use the 'Indirect Bill Settlement' category — see
-      // fieldController.approveIndirectBill) — listed here separately so the
-      // I/O report can show Input, then Output, then this Indirect-Output
-      // breakdown, in that order.
+      // Indirect bills are part of the Output total above
+      // (using category 'Indirect' or legacy 'Indirect Bill Settlement')
+      // listed here separately for the breakdown table and summary.
       let indirectSql = `SELECT id, date, party_name, description, amount
          FROM account_transactions
-         WHERE role = ? AND flow = 'OUT' AND category = 'Indirect Bill Settlement'`;
+         WHERE role = ? AND flow = 'OUT' AND category IN ('Indirect', 'Indirect Bill Settlement')`;
       const indirectParams: any[] = [role];
       if (req.query.userId) {
         indirectSql += ' AND user_id = ?';
@@ -399,6 +401,7 @@ export const accountsController = {
         paymentMethod: r.payment_method,
         description: r.description,
         amount: Number(r.amount),
+        isIndirect: r.category === 'Indirect' || r.category === 'Indirect Bill Settlement',
       }));
 
       res.status(200).json({
@@ -409,6 +412,7 @@ export const accountsController = {
         totals: {
           input: rows.reduce((s: number, r: any) => s + r.input, 0),
           output: rows.reduce((s: number, r: any) => s + r.output, 0),
+          indirect: rows.reduce((s: number, r: any) => s + (r.indirect || 0), 0) || indirectTotal,
           closing: balance,
         },
         indirect: {

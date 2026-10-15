@@ -23,13 +23,13 @@ export default function AccountsTabScreen() {
           role: 'Admin' as const,
           heading: 'Admin Accounts',
           inputSources: ['Owner', 'Supervisors', 'Client'],
-          outputTargets: ['Supervisors', 'Company Expenses'],
+          outputTargets: ['Supervisors', 'Site Expenses', 'Indirect', 'Company Expenses'],
         }
       : {
           role: 'Supervisor' as const,
           heading: 'Supervisor Accounts',
           inputSources: ['Owner', 'Admin', 'Client'],
-          outputTargets: ['Site Expenses', 'Petrol', 'Company Expenses'],
+          outputTargets: ['Site Expenses', 'Indirect', 'Petrol', 'Company Expenses'],
         };
 
   return (
