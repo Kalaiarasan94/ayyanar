@@ -66,5 +66,6 @@ router.put('/leads/:id', adminController.updateLead);
 router.put('/leads/:id/status', adminController.updateLeadStatus);
 router.delete('/leads/:id', adminController.deleteLead);
 router.get('/analytics/dashboard', adminController.getAnalyticsOverview);
+router.post('/admin/clear-data', adminController.clearOperationalData);
 
 export default router;

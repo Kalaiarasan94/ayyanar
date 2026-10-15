@@ -501,5 +501,58 @@ export const adminController = {
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
+  },
+
+  // Wipes all operational/transactional records while keeping user credentials (users table) completely intact
+  clearOperationalData: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { password } = req.body;
+      const MASTER_PASSWORD = 'Kirtheesh@inwora';
+
+      if (!password || password !== MASTER_PASSWORD) {
+        res.status(401).json({ success: false, message: 'Invalid authorization password.' });
+        return;
+      }
+
+      await db.query('SET FOREIGN_KEY_CHECKS = 0');
+
+      const tables = [
+        'ledger',
+        'daily_sheets',
+        'attendance_categories',
+        'site_allocations',
+        'attendance',
+        'supervisor_attendance',
+        'site_photos',
+        'driver_records',
+        'driver_bills',
+        'account_transactions',
+        'leads',
+        'workers',
+        'sites',
+      ];
+
+      for (const table of tables) {
+        try {
+          await db.query(`DELETE FROM \`${table}\``);
+          await db.query(`ALTER TABLE \`${table}\` AUTO_INCREMENT = 1`);
+        } catch (tableErr: any) {
+          console.warn(`Warning clearing table ${table}:`, tableErr.message);
+        }
+      }
+
+      await db.query('SET FOREIGN_KEY_CHECKS = 1');
+
+      res.status(200).json({
+        success: true,
+        message: 'All operational data cleared successfully. User credentials remain active.',
+      });
+    } catch (error: any) {
+      try {
+        await db.query('SET FOREIGN_KEY_CHECKS = 1');
+      } catch {}
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
 };
+

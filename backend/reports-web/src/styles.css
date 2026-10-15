@@ -206,6 +206,65 @@ button {
   border-top: 1px solid var(--border);
 }
 
+.clear-data-btn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(226, 55, 68, 0.35);
+  background: rgba(226, 55, 68, 0.08);
+  color: #c9182b;
+  font-weight: 800;
+  font-size: 13px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.clear-data-btn:hover {
+  background: #c9182b;
+  color: #fff;
+  border-color: #c9182b;
+}
+
+.header-clear-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(226, 55, 68, 0.35);
+  background: rgba(226, 55, 68, 0.12);
+  color: #c9182b;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.header-clear-btn:hover {
+  background: #c9182b;
+  color: #fff;
+}
+
+.spin-animation {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .logout-btn {
   width: 100%;
   padding: 10px 12px;

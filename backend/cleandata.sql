@@ -31,11 +31,17 @@ ALTER TABLE site_photos AUTO_INCREMENT = 1;
 DELETE FROM driver_records;
 ALTER TABLE driver_records AUTO_INCREMENT = 1;
 
+DELETE FROM driver_bills;
+ALTER TABLE driver_bills AUTO_INCREMENT = 1;
+
 DELETE FROM account_transactions;
 ALTER TABLE account_transactions AUTO_INCREMENT = 1;
 
 DELETE FROM leads;
 ALTER TABLE leads AUTO_INCREMENT = 1;
+
+DELETE FROM workers;
+ALTER TABLE workers AUTO_INCREMENT = 1;
 
 DELETE FROM sites;
 ALTER TABLE sites AUTO_INCREMENT = 1;

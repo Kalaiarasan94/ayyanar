@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import { Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Menu, PanelLeftClose, PanelLeftOpen, Trash2 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
+import ClearDataModal from './components/ClearDataModal';
 import { getSession } from './auth';
 import Login from './pages/Login';
 import Overview from './pages/Overview';
@@ -21,6 +22,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   const session = getSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [clearModalOpen, setClearModalOpen] = useState(false);
   const location = useLocation();
 
   // Auto-close mobile drawer on route change
@@ -78,6 +80,15 @@ function RequireAuth({ children }: { children: ReactNode }) {
           <span className="header-brand-badge">AC</span>
           <span className="header-brand-title">Ayyanar Reports</span>
         </div>
+        <button
+          type="button"
+          className="header-clear-btn"
+          onClick={() => setClearModalOpen(true)}
+          title="Clear operational data (preserves logins)"
+        >
+          <Trash2 size={13} />
+          <span>Clear Data</span>
+        </button>
       </header>
 
       {sidebarOpen && <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />}
@@ -87,6 +98,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
         isCollapsed={sidebarCollapsed}
         onNavigate={() => setSidebarOpen(false)}
         onToggleCollapse={() => setSidebarCollapsed((prev) => !prev)}
+        onOpenClearModal={() => setClearModalOpen(true)}
       />
 
       <main className="main-content">
@@ -102,6 +114,8 @@ function RequireAuth({ children }: { children: ReactNode }) {
         )}
         {children}
       </main>
+
+      <ClearDataModal isOpen={clearModalOpen} onClose={() => setClearModalOpen(false)} />
     </div>
   );
 }

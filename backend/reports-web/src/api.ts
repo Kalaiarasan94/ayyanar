@@ -67,6 +67,11 @@ export const adminApi = {
     const q = typeof params === 'string' ? { date: params } : params;
     return request<any[]>(`/daily-sheets${qs(q || {})}`);
   },
+  clearOperationalData: (password: string) =>
+    request<{ success: boolean; message?: string }>('/admin/clear-data', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
 };
 
 export const fieldApi = {

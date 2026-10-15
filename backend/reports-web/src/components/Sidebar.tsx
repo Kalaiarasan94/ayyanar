@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { ChevronLeft, X } from 'lucide-react';
+import { ChevronLeft, Trash2, X } from 'lucide-react';
 import { clearSession, getSession } from '../auth';
 
 const LINKS = [
@@ -22,9 +22,10 @@ type SidebarProps = {
   isCollapsed?: boolean;
   onNavigate?: () => void;
   onToggleCollapse?: () => void;
+  onOpenClearModal?: () => void;
 };
 
-export default function Sidebar({ isOpen, isCollapsed, onNavigate, onToggleCollapse }: SidebarProps) {
+export default function Sidebar({ isOpen, isCollapsed, onNavigate, onToggleCollapse, onOpenClearModal }: SidebarProps) {
   const navigate = useNavigate();
   const session = getSession();
 
@@ -69,6 +70,20 @@ export default function Sidebar({ isOpen, isCollapsed, onNavigate, onToggleColla
 
       <div className="sidebar-footer">
         {session && <div className="sidebar-brand-subtitle" style={{ padding: '0 10px 8px' }}>{session.name}</div>}
+        {onOpenClearModal && (
+          <button
+            type="button"
+            className="clear-data-btn"
+            onClick={() => {
+              if (onNavigate) onNavigate();
+              onOpenClearModal();
+            }}
+            title="Clear all operational data (keeps logins)"
+          >
+            <Trash2 size={16} />
+            <span>Clear Data</span>
+          </button>
+        )}
         <button className="logout-btn" onClick={handleLogout}>
           Log out
         </button>
