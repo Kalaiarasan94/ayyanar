@@ -226,6 +226,8 @@ export default function DailySheetReport() {
         vehicleRental: sheet.vehicle_rental,
         labourSalary: sheet.labourSalary || [],
         totalAmount: sheet.total_amount,
+        billsNormalList: sheet.billsNormalList || [],
+        billsGstList: sheet.billsGstList || [],
       });
       await downloadPdfReport(pdf);
     } finally {
@@ -249,6 +251,8 @@ export default function DailySheetReport() {
         vehicleRental: sheet.vehicle_rental,
         labourSalary: sheet.labourSalary || [],
         totalAmount: sheet.total_amount,
+        billsNormalList: sheet.billsNormalList || [],
+        billsGstList: sheet.billsGstList || [],
       });
       const text = `*Ayyanar Builders — Daily Sheet Report*\nSupervisor: ${sheet.supervisor_name}\nSite: ${sheet.site_name}\nDate: ${dateLabel(sheet.date)}\nReceived: ${rupees(sheet.amount_received)}\nTotal Spent: ${rupees(sheet.total_amount)}`;
       await sharePdfReportOnWhatsApp(pdf, text);

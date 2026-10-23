@@ -123,6 +123,8 @@ export type SingleDailySheetInput = {
   vehicleRental?: number | string;
   labourSalary?: { name: string; amount: number | string }[];
   totalAmount?: number | string;
+  billsNormalList?: { amount: number | string; reason?: string; imageUrl?: string }[];
+  billsGstList?: { amount: number | string; reason?: string; imageUrl?: string }[];
 };
 
 // Generates a professional single Daily Sheet PDF matching the exact paper format:
@@ -250,6 +252,50 @@ export const buildSingleDailySheetPdfDoc = async (sheet: SingleDailySheetInput):
   });
 
   y = (doc as any).lastAutoTable.finalY + 16;
+
+  // Itemized Normal Bills if present
+  const normalList = sheet.billsNormalList || [];
+  if (normalList.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [['#', 'BILLS SPENT NORMAL — Reason / Details', 'Amount (Rs)']],
+      body: normalList.map((b: any, i: number) => [
+        i + 1,
+        b.reason || 'Normal Bill',
+        Number(b.amount || 0).toLocaleString('en-IN'),
+      ]),
+      foot: [['', 'TOTAL NORMAL BILLS', Number(normal).toLocaleString('en-IN')]],
+      margin: { left: marginX, right: marginX },
+      styles: { fontSize: 8.5, cellPadding: 5, textColor: DARK, lineColor: BORDER, lineWidth: 0.5 },
+      headStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
+      footStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: LIGHT_ROW },
+      columnStyles: { 2: { halign: 'right' } },
+    });
+    y = (doc as any).lastAutoTable.finalY + 16;
+  }
+
+  // Itemized GST Bills if present
+  const gstList = sheet.billsGstList || [];
+  if (gstList.length > 0) {
+    autoTable(doc, {
+      startY: y,
+      head: [['#', 'BILLS SPENT GST — Reason / Details', 'Amount (Rs)']],
+      body: gstList.map((b: any, i: number) => [
+        i + 1,
+        b.reason || 'GST Bill',
+        Number(b.amount || 0).toLocaleString('en-IN'),
+      ]),
+      foot: [['', 'TOTAL GST BILLS', Number(gst).toLocaleString('en-IN')]],
+      margin: { left: marginX, right: marginX },
+      styles: { fontSize: 8.5, cellPadding: 5, textColor: DARK, lineColor: BORDER, lineWidth: 0.5 },
+      headStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
+      footStyles: { fillColor: DARK, textColor: [255, 255, 255], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: LIGHT_ROW },
+      columnStyles: { 2: { halign: 'right' } },
+    });
+    y = (doc as any).lastAutoTable.finalY + 16;
+  }
 
   // 3. Labour Salary Detailed Breakdown Section
   const salaryRows = labourItems.map((l, i) => [

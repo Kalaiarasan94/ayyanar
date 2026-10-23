@@ -217,6 +217,8 @@ export default function AdminPanelScreen() {
     vehicleRental: Number(row.vehicle_rental) || 0,
     labourSalary: (row.labourSalary || []).map((l: any) => ({ name: l.name, amount: Number(l.amount) || 0 })),
     totalAmount: Number(row.total_amount) || 0,
+    billsNormalList: row.billsNormalList || [],
+    billsGstList: row.billsGstList || [],
   });
 
   const handleDownloadDailySheet = async (row: any) => {

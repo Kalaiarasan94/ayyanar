@@ -126,6 +126,8 @@ export type DailySheetInput = {
   vehicleRental: number;
   labourSalary: { name: string; amount: number }[];
   totalAmount: number;
+  billsNormalList?: { amount: number; reason?: string; imageUrl?: string }[];
+  billsGstList?: { amount: number; reason?: string; imageUrl?: string }[];
 };
 
 // Builds a real vector PDF for one Daily Sheet — used both from the Supervisor's
@@ -150,7 +152,7 @@ export const buildDailySheetPdfDoc = async (sheet: DailySheetInput): Promise<Rep
           : [['No attendance recorded', '', '']],
       },
       {
-        title: 'Bills & Expenses',
+        title: 'Bills & Expenses Summary',
         head: ['Type', 'Amount (Rs)'],
         body: [
           ['Bills Spent — Normal', Number(sheet.billsNormal).toLocaleString('en-IN')],
@@ -160,6 +162,28 @@ export const buildDailySheetPdfDoc = async (sheet: DailySheetInput): Promise<Rep
         ],
         foot: ['TOTAL BILLS & EXPENSES', (Number(sheet.billsNormal) + Number(sheet.billsGst) + Number(sheet.billsCredit) + Number(sheet.vehicleRental)).toLocaleString('en-IN')],
       },
+      ...(sheet.billsNormalList && sheet.billsNormalList.length > 0 ? [{
+        title: `Bills Spent — Normal (${sheet.billsNormalList.length})`,
+        head: ['#', 'Reason / Description', 'Amount (Rs)'],
+        body: sheet.billsNormalList.map((b: any, i: number) => [
+          i + 1,
+          b.reason || 'Normal Bill',
+          Number(b.amount || 0).toLocaleString('en-IN'),
+        ]),
+        foot: ['', 'TOTAL NORMAL BILLS', Number(sheet.billsNormal).toLocaleString('en-IN')],
+        columnStyles: { 2: { halign: 'right' as const } },
+      }] : []),
+      ...(sheet.billsGstList && sheet.billsGstList.length > 0 ? [{
+        title: `Bills Spent — GST (${sheet.billsGstList.length})`,
+        head: ['#', 'Reason / Description', 'Amount (Rs)'],
+        body: sheet.billsGstList.map((b: any, i: number) => [
+          i + 1,
+          b.reason || 'GST Bill',
+          Number(b.amount || 0).toLocaleString('en-IN'),
+        ]),
+        foot: ['', 'TOTAL GST BILLS', Number(sheet.billsGst).toLocaleString('en-IN')],
+        columnStyles: { 2: { halign: 'right' as const } },
+      }] : []),
       {
         title: `Labour Salary (${sheet.labourSalary.length})`,
         head: ['Worker Name', 'Amount (Rs)'],

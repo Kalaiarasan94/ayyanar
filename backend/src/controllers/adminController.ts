@@ -496,6 +496,12 @@ export const adminController = {
         labourSalary: (() => {
           try { return JSON.parse(r.labour_salary_json || '[]'); } catch { return []; }
         })(),
+        billsNormalList: (() => {
+          try { return JSON.parse(r.bills_normal_json || '[]'); } catch { return []; }
+        })(),
+        billsGstList: (() => {
+          try { return JSON.parse(r.bills_gst_json || '[]'); } catch { return []; }
+        })(),
       }));
       res.status(200).json(rows);
     } catch (error: any) {

@@ -256,11 +256,27 @@ export const initDb = async () => {
           labour_salary_json TEXT NULL,
           labour_salary_total DECIMAL(12, 2) DEFAULT 0,
           total_amount DECIMAL(12, 2) DEFAULT 0,
+          bills_normal_json LONGTEXT NULL,
+          bills_gst_json LONGTEXT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE,
           FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       );
     `);
+
+    try {
+      const [dsCols] = await pool.execute("SHOW COLUMNS FROM daily_sheets LIKE 'bills_normal_json'");
+      if ((dsCols as any[]).length === 0) {
+        await db.query(`
+          ALTER TABLE daily_sheets
+          ADD COLUMN bills_normal_json LONGTEXT NULL,
+          ADD COLUMN bills_gst_json LONGTEXT NULL;
+        `);
+        console.log('Added bills_normal_json and bills_gst_json columns to daily_sheets.');
+      }
+    } catch (e) {
+      console.warn('Migration check for daily_sheets bills json:', e);
+    }
 
     // Indirect (credit) bills are settled later, not the moment they're logged —
     // so they shouldn't reduce the supervisor's cash balance until an Admin/Owner

@@ -948,7 +948,7 @@ export const fieldController = {
       const {
         siteId, userId, date, workDescription,
         attendance, billsNormal, billsGst, billsCredit, vehicleRental,
-        labourSalary,
+        labourSalary, billsNormalList, billsGstList,
       } = req.body;
 
       const cleanSiteId = siteId ? parseInt(siteId.toString()) : null;
@@ -963,9 +963,22 @@ export const fieldController = {
         (sum: number, l: any) => sum + (parseFloat(l.amount) || 0),
         0
       );
+
+      const normalFromList = (billsNormalList || []).reduce(
+        (sum: number, b: any) => sum + (parseFloat(b.amount) || 0),
+        0
+      );
+      const cleanBillsNormal = normalFromList > 0 ? normalFromList : (parseFloat(billsNormal) || 0);
+
+      const gstFromList = (billsGstList || []).reduce(
+        (sum: number, b: any) => sum + (parseFloat(b.amount) || 0),
+        0
+      );
+      const cleanBillsGst = gstFromList > 0 ? gstFromList : (parseFloat(billsGst) || 0);
+
       const totalAmount =
-        (parseFloat(billsNormal) || 0) +
-        (parseFloat(billsGst) || 0) +
+        cleanBillsNormal +
+        cleanBillsGst +
         (parseFloat(billsCredit) || 0) +
         (parseFloat(vehicleRental) || 0) +
         labourSalaryTotal;
@@ -974,8 +987,8 @@ export const fieldController = {
         `INSERT INTO daily_sheets
           (site_id, user_id, date, work_description, attendance_json, amount_received,
            bills_normal, bills_gst, bills_credit, vehicle_rental, labour_salary_json,
-           labour_salary_total, total_amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           labour_salary_total, total_amount, bills_normal_json, bills_gst_json)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           cleanSiteId,
           cleanUserId,
@@ -983,13 +996,15 @@ export const fieldController = {
           workDescription || null,
           JSON.stringify(attendance || []),
           cleanAmountReceived,
-          parseFloat(billsNormal) || 0,
-          parseFloat(billsGst) || 0,
+          cleanBillsNormal,
+          cleanBillsGst,
           parseFloat(billsCredit) || 0,
           parseFloat(vehicleRental) || 0,
           JSON.stringify(labourSalary || []),
           labourSalaryTotal,
           totalAmount,
+          JSON.stringify(billsNormalList || []),
+          JSON.stringify(billsGstList || []),
         ]
       );
 
@@ -1055,6 +1070,12 @@ export const fieldController = {
         })(),
         labourSalary: (() => {
           try { return JSON.parse(r.labour_salary_json || '[]'); } catch { return []; }
+        })(),
+        billsNormalList: (() => {
+          try { return JSON.parse(r.bills_normal_json || '[]'); } catch { return []; }
+        })(),
+        billsGstList: (() => {
+          try { return JSON.parse(r.bills_gst_json || '[]'); } catch { return []; }
         })(),
       }));
       res.status(200).json(rows);
