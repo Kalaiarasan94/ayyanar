@@ -88,6 +88,9 @@ export default function DailySheetScreen() {
   // Full-size image preview modal
   const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
 
+  // Edit submitted daily sheet
+  const [editingSheetId, setEditingSheetId] = useState<string | number | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
   const [submittedList, setSubmittedList] = useState<any[]>([]);
   const [loadingSubmitted, setLoadingSubmitted] = useState(false);
@@ -277,6 +280,7 @@ export default function DailySheetScreen() {
     salaryTotal;
 
   const resetForm = () => {
+    setEditingSheetId(null);
     setWorkDescription('');
     setAttendance([]);
     setAmountReceived('');
@@ -291,6 +295,93 @@ export default function DailySheetScreen() {
     setBillsCredit('');
     setVehicleRental('');
     setSalary([]);
+  };
+
+  const cancelEdit = () => {
+    resetForm();
+  };
+
+  const handleEditSheet = (s: any) => {
+    setEditingSheetId(s.id);
+    if (s.site_id) {
+      setSelectedSiteId(s.site_id.toString());
+      if (s.site_name) setSelectedSiteName(s.site_name);
+    }
+    if (s.date) setDate(s.date);
+    setWorkDescription(s.work_description || '');
+    setAmountReceived(s.amount_received != null && Number(s.amount_received) > 0 ? String(s.amount_received) : '');
+
+    // Attendance
+    const attList = (s.attendance || []).map((a: any, idx: number) => ({
+      id: `${Date.now()}_att_${idx}`,
+      name: a.name || '',
+      category: a.category || '',
+      count: String(a.count ?? ''),
+    }));
+    setAttendance(attList);
+    setAttName('');
+    setAttCategory('');
+    setAttCount('');
+
+    // Normal Bills
+    const nList = (s.billsNormalList || []).map((b: any, idx: number) => ({
+      id: `${Date.now()}_norm_${idx}`,
+      amount: String(b.amount ?? ''),
+      reason: b.reason || '',
+      imageUrl: b.imageUrl || null,
+      imageUri: b.imageUrl || null,
+    }));
+    if (nList.length === 0 && Number(s.bills_normal) > 0) {
+      nList.push({
+        id: `${Date.now()}_norm_0`,
+        amount: String(s.bills_normal),
+        reason: 'Normal bill',
+        imageUrl: null,
+        imageUri: null,
+      });
+    }
+    setNormalBills(nList);
+    setNormalAmount('');
+    setNormalReason('');
+    setNormalImageUri(null);
+
+    // GST Bills
+    const gList = (s.billsGstList || []).map((b: any, idx: number) => ({
+      id: `${Date.now()}_gst_${idx}`,
+      amount: String(b.amount ?? ''),
+      reason: b.reason || '',
+      imageUrl: b.imageUrl || null,
+      imageUri: b.imageUrl || null,
+    }));
+    if (gList.length === 0 && Number(s.bills_gst) > 0) {
+      gList.push({
+        id: `${Date.now()}_gst_0`,
+        amount: String(s.bills_gst),
+        reason: 'GST bill',
+        imageUrl: null,
+        imageUri: null,
+      });
+    }
+    setGstBills(gList);
+    setGstAmount('');
+    setGstReason('');
+    setGstImageUri(null);
+
+    // Credit & Rental
+    setBillsCredit(s.bills_credit != null && Number(s.bills_credit) > 0 ? String(s.bills_credit) : '');
+    setVehicleRental(s.vehicle_rental != null && Number(s.vehicle_rental) > 0 ? String(s.vehicle_rental) : '');
+
+    // Labour salary
+    const salList = (s.labourSalary || []).map((l: any, idx: number) => ({
+      id: `${Date.now()}_sal_${idx}`,
+      name: l.name || '',
+      amount: String(l.amount ?? ''),
+    }));
+    setSalary(salList);
+    setSalaryName('');
+    setSalaryAmount('');
+
+    setView('entry');
   };
 
   // Normalizes a backend daily_sheets row into buildDailySheetPdfDoc's input shape
@@ -408,6 +499,55 @@ export default function DailySheetScreen() {
       const finalNormalTotal = uploadedNormalBills.reduce((s, b) => s + b.amount, 0);
       const finalGstTotal = uploadedGstBills.reduce((s, b) => s + b.amount, 0);
 
+      if (editingSheetId) {
+        await fieldService.updateDailySheet(editingSheetId, {
+          siteId: selectedSiteId,
+          userId,
+          date,
+          workDescription: workDescription.trim(),
+          attendance: attendance.map((a) => ({ name: a.name, category: a.category, count: parseInt(a.count) || 0 })),
+          amountReceived: parseFloat(amountReceived) || 0,
+          billsNormal: finalNormalTotal,
+          billsGst: finalGstTotal,
+          billsCredit: parseFloat(billsCredit) || 0,
+          vehicleRental: parseFloat(vehicleRental) || 0,
+          labourSalary: salary.map((s) => ({ name: s.name, amount: parseFloat(s.amount) || 0 })),
+          billsNormalList: uploadedNormalBills,
+          billsGstList: uploadedGstBills,
+        });
+
+        const updatedSnapshot = {
+          siteName: selectedSiteName || 'Site',
+          supervisorName: userName,
+          date,
+          workDescription: workDescription.trim(),
+          attendance: attendance.map((a) => ({ name: a.name, category: a.category, count: parseInt(a.count) || 0 })),
+          amountReceived: parseFloat(amountReceived) || 0,
+          billsNormal: finalNormalTotal,
+          billsGst: finalGstTotal,
+          billsCredit: parseFloat(billsCredit) || 0,
+          vehicleRental: parseFloat(vehicleRental) || 0,
+          labourSalary: salary.map((s) => ({ name: s.name, amount: parseFloat(s.amount) || 0 })),
+          totalAmount,
+          billsNormalList: uploadedNormalBills,
+          billsGstList: uploadedGstBills,
+        };
+
+        resetForm();
+        loadSubmitted();
+
+        Alert.alert(
+          'Updated',
+          `Daily sheet for ${updatedSnapshot.siteName} on ${date} has been updated successfully.`,
+          [
+            { text: 'Download PDF', onPress: () => handleDownloadSheet(updatedSnapshot) },
+            { text: 'View Submitted', onPress: () => setView('submitted') },
+            { text: 'OK' },
+          ]
+        );
+        return;
+      }
+
       await fieldService.submitDailySheet({
         siteId: selectedSiteId,
         userId,
@@ -462,6 +602,22 @@ export default function DailySheetScreen() {
 
   const renderEntry = () => (
     <>
+      {editingSheetId && (
+        <View style={styles.editingBanner}>
+          <View style={styles.editingBannerLeft}>
+            <MaterialIcons name="edit-note" size={24} color={COLORS.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.editingBannerTitle}>Editing Daily Sheet #{editingSheetId}</Text>
+              <Text style={styles.editingBannerSub}>Update the fields and tap "Save Changes" at the bottom</Text>
+            </View>
+          </View>
+          <TouchableOpacity style={styles.cancelEditBtn} onPress={cancelEdit}>
+            <MaterialIcons name="close" size={16} color={COLORS.primary} />
+            <Text style={styles.cancelEditBtnText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* SITE & DATE */}
       <View style={styles.card}>
         <View style={styles.cardHeader}>
@@ -861,8 +1017,10 @@ export default function DailySheetScreen() {
                 <ActivityIndicator color={COLORS.white} />
               ) : (
                 <>
-                  <MaterialIcons name="check-circle" size={19} color={COLORS.white} />
-                  <Text style={styles.primaryButtonText}>Submit Daily Sheet</Text>
+                  <MaterialIcons name={editingSheetId ? 'save' : 'check-circle'} size={19} color={COLORS.white} />
+                  <Text style={styles.primaryButtonText}>
+                    {editingSheetId ? 'Save Changes' : 'Submit Daily Sheet'}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -955,6 +1113,12 @@ export default function DailySheetScreen() {
                   )}
                 </View>
                 <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+                  <TouchableOpacity
+                    style={[styles.pdfIconButton, { backgroundColor: '#eff6ff', borderColor: '#bfdbfe' }]}
+                    onPress={() => handleEditSheet(s)}
+                  >
+                    <MaterialIcons name="edit" size={17} color={COLORS.primary} />
+                  </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.pdfIconButton}
                     onPress={() => handleDownloadSheet(toSheetInput(s))}
@@ -1370,5 +1534,48 @@ const styles = StyleSheet.create({
   fullModalImage: {
     width: '100%',
     height: '80%',
+  },
+  editingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff7ed',
+    borderWidth: 1.5,
+    borderColor: '#fed7aa',
+    borderRadius: BORDER_RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  editingBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    flex: 1,
+  },
+  editingBannerTitle: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    color: '#9a3412',
+  },
+  editingBannerSub: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#c2410c',
+    marginTop: 2,
+  },
+  cancelEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BORDER_RADIUS.sm,
+    backgroundColor: '#ffedd5',
+  },
+  cancelEditBtnText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#9a3412',
   },
 });

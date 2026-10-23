@@ -1043,6 +1043,144 @@ export const fieldController = {
     }
   },
 
+  // Updates an existing daily sheet and synchronizes the supervisor OUT transaction
+  updateDailySheet: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const cleanId = parseInt(id);
+      if (!cleanId) {
+        res.status(400).json({ success: false, error: 'Valid Daily Sheet ID is required.' });
+        return;
+      }
+
+      const existingRes = await db.query('SELECT * FROM daily_sheets WHERE id = ?', [cleanId]);
+      if (!existingRes.rows || existingRes.rows.length === 0) {
+        res.status(404).json({ success: false, error: 'Daily Sheet not found.' });
+        return;
+      }
+      const existing = existingRes.rows[0];
+
+      const {
+        siteId, date, workDescription,
+        attendance, billsNormal, billsGst, billsCredit, vehicleRental,
+        labourSalary, billsNormalList, billsGstList,
+      } = req.body;
+
+      const cleanSiteId = siteId ? parseInt(siteId.toString()) : existing.site_id;
+      const sheetDate = date || existing.date;
+      const cleanAmountReceived = req.body.amountReceived !== undefined ? parseFloat(req.body.amountReceived.toString()) || 0 : existing.amount_received;
+
+      const labourSalaryTotal = (labourSalary || []).reduce(
+        (sum: number, l: any) => sum + (parseFloat(l.amount) || 0),
+        0
+      );
+
+      const normalFromList = (billsNormalList || []).reduce(
+        (sum: number, b: any) => sum + (parseFloat(b.amount) || 0),
+        0
+      );
+      const cleanBillsNormal = normalFromList > 0 ? normalFromList : (parseFloat(billsNormal) || 0);
+
+      const gstFromList = (billsGstList || []).reduce(
+        (sum: number, b: any) => sum + (parseFloat(b.amount) || 0),
+        0
+      );
+      const cleanBillsGst = gstFromList > 0 ? gstFromList : (parseFloat(billsGst) || 0);
+
+      const totalAmount =
+        cleanBillsNormal +
+        cleanBillsGst +
+        (parseFloat(billsCredit) || 0) +
+        (parseFloat(vehicleRental) || 0) +
+        labourSalaryTotal;
+
+      await db.query(
+        `UPDATE daily_sheets SET
+          site_id = ?,
+          date = ?,
+          work_description = ?,
+          attendance_json = ?,
+          amount_received = ?,
+          bills_normal = ?,
+          bills_gst = ?,
+          bills_credit = ?,
+          vehicle_rental = ?,
+          labour_salary_json = ?,
+          labour_salary_total = ?,
+          total_amount = ?,
+          bills_normal_json = ?,
+          bills_gst_json = ?
+        WHERE id = ?`,
+        [
+          cleanSiteId,
+          sheetDate,
+          workDescription || null,
+          JSON.stringify(attendance || []),
+          cleanAmountReceived,
+          cleanBillsNormal,
+          cleanBillsGst,
+          parseFloat(billsCredit) || 0,
+          parseFloat(vehicleRental) || 0,
+          JSON.stringify(labourSalary || []),
+          labourSalaryTotal,
+          totalAmount,
+          JSON.stringify(billsNormalList || []),
+          JSON.stringify(billsGstList || []),
+          cleanId,
+        ]
+      );
+
+      // Keep Supervisor's account_transactions in sync with updated totalAmount
+      let siteName = 'Site';
+      let supervisorName: string | null = null;
+      try {
+        const siteRes = await db.query('SELECT name FROM sites WHERE id = ?', [cleanSiteId]);
+        if (siteRes.rows?.[0]?.name) siteName = siteRes.rows[0].name;
+      } catch {}
+      try {
+        const userRes = await db.query('SELECT name FROM users WHERE id = ?', [existing.user_id]);
+        if (userRes.rows?.[0]?.name) supervisorName = userRes.rows[0].name;
+      } catch {}
+
+      const newDesc = workDescription ? `Daily Sheet (${siteName}) - ${workDescription}` : `Daily Sheet (${siteName})`;
+
+      const txnRes = await db.query(
+        `SELECT id FROM account_transactions 
+         WHERE role = 'Supervisor' AND user_id = ? AND date = ? AND (description LIKE 'Daily Sheet (%' OR category = 'Site Expenses')
+         ORDER BY id DESC LIMIT 1`,
+        [existing.user_id, existing.date]
+      );
+
+      if (txnRes.rows && txnRes.rows.length > 0) {
+        await db.query(
+          `UPDATE account_transactions 
+           SET amount = ?, date = ?, description = ?, party_name = ?
+           WHERE id = ?`,
+          [totalAmount, sheetDate, newDesc, siteName, txnRes.rows[0].id]
+        );
+      } else if (totalAmount > 0) {
+        await db.query(
+          `INSERT INTO account_transactions 
+            (role, user_id, entered_by_name, flow, category, party_name, payment_method, description, amount, date)
+           VALUES ('Supervisor', ?, ?, 'OUT', 'Site Expenses', ?, 'Cash', ?, ?, ?)`,
+          [
+            existing.user_id,
+            supervisorName,
+            siteName,
+            newDesc,
+            totalAmount,
+            sheetDate,
+          ]
+        );
+      }
+
+      res.status(200).json({ success: true, message: 'Daily sheet updated successfully.' });
+    } catch (error: any) {
+      console.error('updateDailySheet Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   // Fetches submitted daily sheets for a site, optionally filtered by date, with
   // the attendance/labour-salary JSON parsed back into arrays for the client.
   getDailySheetsBySite: async (req: Request, res: Response): Promise<void> => {

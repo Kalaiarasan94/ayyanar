@@ -28,6 +28,7 @@ router.post('/supervisor-attendance', fieldController.submitSupervisorAttendance
 router.post('/site-photos', fieldController.uploadSitePhoto);
 router.get('/site-photos/recent', fieldController.getRecentSitePhotos);
 router.post('/daily-sheet', fieldController.submitDailySheet);
+router.put('/daily-sheet/:id', fieldController.updateDailySheet);
 router.get('/daily-sheet/site/:siteId', fieldController.getDailySheetsBySite);
 router.post('/driver-records', fieldController.saveDriverRecord);
 router.get('/driver-records', fieldController.getDriverRecords);

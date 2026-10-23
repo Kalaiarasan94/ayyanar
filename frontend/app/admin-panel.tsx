@@ -2573,10 +2573,26 @@ export default function AdminPanelScreen() {
                   <MaterialIcons name="receipt" size={18} color={COLORS.primary} />
                   <Text style={styles.detailLocationText}>Bills — Normal: {rupeesText(dailySheetDetail.bills_normal)}</Text>
                 </View>
+                {(dailySheetDetail.billsNormalList || []).map((b: any, bIdx: number) => (
+                  <View key={`n_${bIdx}`} style={[styles.detailLocationRow, { paddingLeft: SPACING.lg, paddingVertical: 2 }]}>
+                    <MaterialIcons name="subdirectory-arrow-right" size={16} color={COLORS.textLight} />
+                    <Text style={[styles.detailLocationText, { fontSize: 13, color: COLORS.textLight }]}>
+                      {b.reason ? `${b.reason} — ` : ''}{rupeesText(b.amount)}
+                    </Text>
+                  </View>
+                ))}
                 <View style={styles.detailLocationRow}>
                   <MaterialIcons name="receipt-long" size={18} color={COLORS.primary} />
                   <Text style={styles.detailLocationText}>Bills — GST: {rupeesText(dailySheetDetail.bills_gst)}</Text>
                 </View>
+                {(dailySheetDetail.billsGstList || []).map((b: any, bIdx: number) => (
+                  <View key={`g_${bIdx}`} style={[styles.detailLocationRow, { paddingLeft: SPACING.lg, paddingVertical: 2 }]}>
+                    <MaterialIcons name="subdirectory-arrow-right" size={16} color={COLORS.textLight} />
+                    <Text style={[styles.detailLocationText, { fontSize: 13, color: COLORS.textLight }]}>
+                      {b.reason ? `${b.reason} — ` : ''}{rupeesText(b.amount)}
+                    </Text>
+                  </View>
+                ))}
                 <View style={styles.detailLocationRow}>
                   <MaterialIcons name="credit-card" size={18} color={COLORS.primary} />
                   <Text style={styles.detailLocationText}>Bills — Under GST / Credit: {rupeesText(dailySheetDetail.bills_credit)}</Text>

@@ -409,6 +409,11 @@ export const fieldService = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  updateDailySheet: (id: string | number, payload: Record<string, any>) =>
+    request<ApiResponse>(`/daily-sheet/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }),
   getDailySheetsBySite: (siteId: string | number, date?: string) =>
     request<any[]>(`/daily-sheet/site/${siteId}${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   submitSupervisorAttendance: (attendance: Record<string, any>) =>
