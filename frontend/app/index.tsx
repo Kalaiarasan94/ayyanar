@@ -145,9 +145,16 @@ export default function LoginScreen() {
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.container}
+        enabled={Platform.OS !== 'web'}
       >
         <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+        >
           <View style={styles.loginColumn}>
             
             {/* Header / Brand Area */}
@@ -419,7 +426,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     paddingHorizontal: 10,
-    fontSize: 15,
+    fontSize: 16,
     color: '#26191A',
     fontWeight: '500',
   },

@@ -187,8 +187,16 @@ export default function DriverLogScreen() {
         style={styles.body}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={insets.top + 60}
+        enabled={Platform.OS !== 'web'}
       >
-      <ScrollView style={styles.body} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.body}
+        contentContainerStyle={[styles.content, { paddingBottom: 160 }]}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={true}
+      >
         {/* TRIP RECORD CARD */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>

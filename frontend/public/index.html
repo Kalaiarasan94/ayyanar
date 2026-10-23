@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <!-- Mobile PWA Viewport: prevent accidental zoom and fit notch/safe-areas -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!-- Mobile PWA Viewport: prevent accidental zoom, fit notch/safe-areas, and resize with virtual keyboard -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
     
     <title>%WEB_TITLE%</title>
     <meta name="description" content="Ayyanar Infra Engineering — Construction CRM for sites, staff, drivers and accounts." />
@@ -33,7 +33,9 @@
     <style id="expo-reset">
       /* Full height root setup */
       html, body {
+        width: 100%;
         height: 100%;
+        height: 100dvh;
         margin: 0;
         padding: 0;
         overscroll-behavior-y: none;
@@ -48,10 +50,14 @@
       }
       #root {
         display: flex;
+        flex-direction: column;
+        width: 100%;
         height: 100%;
+        height: 100dvh;
         min-height: 100%;
         flex: 1;
         background: #F7F5F5;
+        overflow: hidden;
       }
 
       /* iPhone safe area insets variables */
@@ -60,6 +66,36 @@
         --sar: env(safe-area-inset-right, 0px);
         --sab: env(safe-area-inset-bottom, 0px);
         --sal: env(safe-area-inset-left, 0px);
+      }
+
+      /* Universal Mobile Web Input Improvements:
+         - 16px font-size prevents iOS Safari from auto-zooming on focus
+         - text-size-adjust: 100% prevents mobile font inflation
+         - touch-action: manipulation eliminates 300ms tap delay
+      */
+      input, textarea, select {
+        font-size: 16px !important;
+        -webkit-text-size-adjust: 100%;
+        touch-action: manipulation;
+      }
+
+      /* Smooth momentum scrolling for all scroll containers */
+      [data-rnw-scrollview], [style*="overflow: auto"], [style*="overflow-y: auto"], [style*="overflow: scroll"], [style*="overflow-y: scroll"] {
+        -webkit-overflow-scrolling: touch !important;
+        overscroll-behavior-y: contain;
+      }
+
+      /* Clean subtle scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.15);
+        border-radius: 4px;
       }
 
       /* TABLET (768px - 1023px): comfortable centered shell */
@@ -78,6 +114,16 @@
         #root {
           max-width: 1180px;
           margin: 0 auto;
+        }
+      }
+
+      /* MOBILE (< 768px): true edge-to-edge mobile app */
+      @media (max-width: 767px) {
+        #root {
+          width: 100% !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          box-shadow: none !important;
         }
       }
 

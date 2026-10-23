@@ -11,8 +11,8 @@ export default function Root({ children }: PropsWithChildren) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        {/* Critical: Mobile PWA Viewport — prevents accidental zoom and fits iPhone notch/safe-areas */}
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        {/* Critical: Mobile PWA Viewport — prevents accidental zoom, fits notch/safe-areas, and resizes on virtual keyboard */}
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
         <title>Ayyanar Construction CRM</title>
         <meta name="description" content="Ayyanar Infra Engineering — Construction CRM for sites, staff, drivers and accounts." />
         
@@ -65,7 +65,9 @@ export default function Root({ children }: PropsWithChildren) {
 
 const responsiveShellCss = `
   html, body {
+    width: 100%;
     height: 100%;
+    height: 100dvh;
     margin: 0;
     padding: 0;
     overscroll-behavior-y: none;
@@ -76,13 +78,18 @@ const responsiveShellCss = `
   body {
     overflow: hidden;
     background: #F7F5F5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
   #root {
     display: flex;
+    flex-direction: column;
+    width: 100%;
     height: 100%;
+    height: 100dvh;
     min-height: 100%;
     flex: 1;
     background: #F7F5F5;
+    overflow: hidden;
   }
 
   /* Safe Area variables */
@@ -91,6 +98,36 @@ const responsiveShellCss = `
     --sar: env(safe-area-inset-right, 0px);
     --sab: env(safe-area-inset-bottom, 0px);
     --sal: env(safe-area-inset-left, 0px);
+  }
+
+  /* Universal Mobile Web Input Improvements:
+     - 16px font-size prevents iOS Safari from auto-zooming on focus
+     - text-size-adjust: 100% prevents mobile font inflation
+     - touch-action: manipulation eliminates 300ms tap delay
+  */
+  input, textarea, select {
+    font-size: 16px !important;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;
+  }
+
+  /* Smooth momentum scrolling for all scroll containers */
+  [data-rnw-scrollview], [style*="overflow: auto"], [style*="overflow-y: auto"], [style*="overflow: scroll"], [style*="overflow-y: scroll"] {
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-y: contain;
+  }
+
+  /* Clean subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.15);
+    border-radius: 4px;
   }
 
   /* TABLET (768px - 1023px): comfortable full-width web app */
@@ -109,6 +146,16 @@ const responsiveShellCss = `
     #root {
       max-width: 1180px;
       margin: 0 auto;
+    }
+  }
+
+  /* MOBILE (< 768px): true edge-to-edge mobile app */
+  @media (max-width: 767px) {
+    #root {
+      width: 100% !important;
+      max-width: 100% !important;
+      margin: 0 !important;
+      box-shadow: none !important;
     }
   }
 

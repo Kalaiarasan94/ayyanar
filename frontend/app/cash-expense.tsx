@@ -117,8 +117,20 @@ export default function CashExpenseScreen() {
 
   return (
     <View style={styles.screen}>
-      <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.body} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.body}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+        enabled={Platform.OS !== 'web'}
+      >
+        <ScrollView
+          style={styles.body}
+          contentContainerStyle={[styles.content, { paddingBottom: 160 }]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+        >
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardIconWrap}>
@@ -293,8 +305,8 @@ const styles = StyleSheet.create({
   },
   inputField: {
     flex: 1,
-    paddingVertical: 13,
-    fontSize: 14,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    fontSize: 16,
     color: COLORS.text,
     fontWeight: '600',
   },

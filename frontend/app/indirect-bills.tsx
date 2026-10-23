@@ -400,7 +400,12 @@ export default function IndirectBillsScreen() {
 
       {/* ─── Approve settlement ─── */}
       <Modal visible={approveVisible} transparent animationType="slide" onRequestClose={() => setApproveVisible(false)}>
-        <KeyboardAvoidingView style={styles.modalBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}>
+        <KeyboardAvoidingView
+          style={styles.modalBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+          enabled={Platform.OS !== 'web'}
+        >
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Approve Indirect Bill</Text>

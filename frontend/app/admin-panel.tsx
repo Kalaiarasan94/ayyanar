@@ -2412,11 +2412,18 @@ export default function AdminPanelScreen() {
         </ScrollView>
       </View>
 
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+        enabled={Platform.OS !== 'web'}
+      >
       <ScrollView
         style={styles.container}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: 160 }]}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        automaticallyAdjustKeyboardInsets={true}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[COLORS.primary]} tintColor={COLORS.primary} />}
       >
         {loading && !refreshing ? <ActivityIndicator color={COLORS.primary} style={styles.loader} /> : null}
@@ -2651,7 +2658,11 @@ export default function AdminPanelScreen() {
 
       {/* Edit a material/petty-cash bill */}
       <Modal visible={billEditVisible} transparent animationType="slide" onRequestClose={() => setBillEditVisible(false)}>
-        <KeyboardAvoidingView style={styles.detailBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          style={styles.detailBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          enabled={Platform.OS !== 'web'}
+        >
           <ScrollView style={styles.detailSheet} keyboardShouldPersistTaps="handled">
             <View style={styles.detailHandle} />
             <Text style={styles.detailName}>Edit Bill</Text>
@@ -2718,7 +2729,11 @@ export default function AdminPanelScreen() {
 
       {/* Edit a driver trip record */}
       <Modal visible={driverRecordEditVisible} transparent animationType="slide" onRequestClose={() => setDriverRecordEditVisible(false)}>
-        <KeyboardAvoidingView style={styles.detailBackdrop} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          style={styles.detailBackdrop}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          enabled={Platform.OS !== 'web'}
+        >
           <ScrollView style={styles.detailSheet} keyboardShouldPersistTaps="handled">
             <View style={styles.detailHandle} />
             <Text style={styles.detailName}>Edit Trip Record</Text>

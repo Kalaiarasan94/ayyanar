@@ -12,6 +12,7 @@ import {
   Platform,
   Image,
   Modal,
+  Keyboard,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -96,6 +97,22 @@ export default function DailySheetScreen() {
   const [loadingSubmitted, setLoadingSubmitted] = useState(false);
   const [view, setView] = useState<'entry' | 'submitted'>('entry');
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => setKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardVisible(false)
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -664,6 +681,22 @@ export default function DailySheetScreen() {
                 value={workDescription}
                 onChangeText={setWorkDescription}
                 placeholderTextColor={COLORS.textLight}
+                returnKeyType="done"
+                blurOnSubmit={true}
+              />
+            </View>
+
+            <Text style={styles.sectionLabel}>AMOUNT RECEIVED TODAY (CASH / ADVANCE)</Text>
+            <View style={styles.inputWrap}>
+              <MaterialIcons name="payments" size={18} color={COLORS.success} style={styles.inputIcon} />
+              <TextInput
+                style={styles.inputField}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                value={amountReceived}
+                onChangeText={setAmountReceived}
+                placeholderTextColor={COLORS.textLight}
               />
             </View>
           </View>
@@ -688,6 +721,7 @@ export default function DailySheetScreen() {
                 value={attName}
                 onChangeText={setAttName}
                 placeholderTextColor={COLORS.textLight}
+                returnKeyType="next"
               />
             </View>
             <View style={{ flexDirection: 'row', gap: 10, marginBottom: SPACING.md }}>
@@ -698,13 +732,16 @@ export default function DailySheetScreen() {
                   value={attCategory}
                   onChangeText={setAttCategory}
                   placeholderTextColor={COLORS.textLight}
+                  returnKeyType="next"
                 />
               </View>
               <View style={[styles.inputWrap, { flex: 1, marginBottom: 0 }]}>
                 <TextInput
                   style={styles.inputField}
                   placeholder="Count"
-                  keyboardType="numeric"
+                  keyboardType="number-pad"
+                  returnKeyType="done"
+                  onSubmitEditing={addAttendanceRow}
                   value={attCount}
                   onChangeText={setAttCount}
                   placeholderTextColor={COLORS.textLight}
@@ -787,7 +824,8 @@ export default function DailySheetScreen() {
                 <TextInput
                   style={styles.inputField}
                   placeholder="Bill Amount (e.g., 500)"
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
+                  returnKeyType="next"
                   value={normalAmount}
                   onChangeText={setNormalAmount}
                   placeholderTextColor={COLORS.textLight}
@@ -802,6 +840,8 @@ export default function DailySheetScreen() {
                   value={normalReason}
                   onChangeText={setNormalReason}
                   placeholderTextColor={COLORS.textLight}
+                  returnKeyType="done"
+                  onSubmitEditing={addNormalBill}
                 />
               </View>
 
@@ -890,7 +930,8 @@ export default function DailySheetScreen() {
                 <TextInput
                   style={styles.inputField}
                   placeholder="GST Bill Amount (e.g., 1200)"
-                  keyboardType="numeric"
+                  keyboardType="decimal-pad"
+                  returnKeyType="next"
                   value={gstAmount}
                   onChangeText={setGstAmount}
                   placeholderTextColor={COLORS.textLight}
@@ -905,6 +946,8 @@ export default function DailySheetScreen() {
                   value={gstReason}
                   onChangeText={setGstReason}
                   placeholderTextColor={COLORS.textLight}
+                  returnKeyType="done"
+                  onSubmitEditing={addGstBill}
                 />
               </View>
 
@@ -954,13 +997,29 @@ export default function DailySheetScreen() {
             <Text style={styles.sectionLabel}>BILLS UNDER GST / NO GST — IN CREDIT</Text>
             <View style={styles.inputWrap}>
               <MaterialIcons name="currency-rupee" size={18} color={COLORS.textLight} style={styles.inputIcon} />
-              <TextInput style={styles.inputField} placeholder="0.00" keyboardType="numeric" value={billsCredit} onChangeText={setBillsCredit} placeholderTextColor={COLORS.textLight} />
+              <TextInput
+                style={styles.inputField}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                value={billsCredit}
+                onChangeText={setBillsCredit}
+                placeholderTextColor={COLORS.textLight}
+              />
             </View>
 
             <Text style={styles.sectionLabel}>VEHICLE & RENTAL USE</Text>
             <View style={styles.inputWrap}>
               <MaterialIcons name="currency-rupee" size={18} color={COLORS.textLight} style={styles.inputIcon} />
-              <TextInput style={styles.inputField} placeholder="0.00" keyboardType="numeric" value={vehicleRental} onChangeText={setVehicleRental} placeholderTextColor={COLORS.textLight} />
+              <TextInput
+                style={styles.inputField}
+                placeholder="0.00"
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                value={vehicleRental}
+                onChangeText={setVehicleRental}
+                placeholderTextColor={COLORS.textLight}
+              />
             </View>
           </View>
 
@@ -978,10 +1037,26 @@ export default function DailySheetScreen() {
 
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <View style={[styles.inputWrap, { flex: 1.4 }]}>
-                <TextInput style={styles.inputField} placeholder="Worker name" value={salaryName} onChangeText={setSalaryName} placeholderTextColor={COLORS.textLight} />
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="Worker name"
+                  value={salaryName}
+                  onChangeText={setSalaryName}
+                  placeholderTextColor={COLORS.textLight}
+                  returnKeyType="next"
+                />
               </View>
               <View style={[styles.inputWrap, { flex: 1 }]}>
-                <TextInput style={styles.inputField} placeholder="Amount" keyboardType="numeric" value={salaryAmount} onChangeText={setSalaryAmount} placeholderTextColor={COLORS.textLight} />
+                <TextInput
+                  style={styles.inputField}
+                  placeholder="Amount"
+                  keyboardType="decimal-pad"
+                  returnKeyType="done"
+                  onSubmitEditing={addSalaryRow}
+                  value={salaryAmount}
+                  onChangeText={setSalaryAmount}
+                  placeholderTextColor={COLORS.textLight}
+                />
               </View>
             </View>
             <TouchableOpacity style={styles.secondaryButton} onPress={addSalaryRow}>
@@ -1162,11 +1237,38 @@ export default function DailySheetScreen() {
         )}
       </View>
 
-      <KeyboardAvoidingView style={styles.body} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView style={styles.body} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={styles.body}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+        enabled={Platform.OS !== 'web'}
+      >
+        <ScrollView
+          style={styles.body}
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: keyboardVisible ? 340 : 120 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          automaticallyAdjustKeyboardInsets={true}
+        >
           {view === 'entry' ? renderEntry() : renderSubmitted()}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Floating Hide Keyboard button when typing on mobile */}
+      {keyboardVisible && (
+        <TouchableOpacity
+          style={styles.hideKeyboardFab}
+          onPress={() => Keyboard.dismiss()}
+          activeOpacity={0.85}
+        >
+          <MaterialIcons name="keyboard-hide" size={18} color={COLORS.white} />
+          <Text style={styles.hideKeyboardFabText}>Done</Text>
+        </TouchableOpacity>
+      )}
 
       {/* Full-size Photo Preview Modal */}
       <Modal visible={!!previewImageUri} transparent animationType="fade" onRequestClose={() => setPreviewImageUri(null)}>
@@ -1425,11 +1527,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: BORDER_RADIUS.md,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: 12,
     marginBottom: SPACING.sm,
+    minHeight: 46,
   },
-  inputIcon: { marginRight: 6 },
-  inputField: { flex: 1, paddingVertical: 12, fontSize: 13.5, color: COLORS.text, fontWeight: '600' },
+  inputIcon: { marginRight: 8 },
+  inputField: {
+    flex: 1,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 8,
+    fontSize: 16, // Critical: 16px prevents iOS Safari from automatically zooming into the page on focus
+    color: COLORS.text,
+    fontWeight: '600',
+  },
   secondaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1577,5 +1686,28 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: '#9a3412',
+  },
+  hideKeyboardFab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    backgroundColor: COLORS.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
+    zIndex: 999,
+  },
+  hideKeyboardFabText: {
+    color: COLORS.white,
+    fontWeight: '800',
+    fontSize: 13,
   },
 });

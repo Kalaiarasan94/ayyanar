@@ -318,6 +318,7 @@ export default function SubmittedBills() {
           style={styles.modalBackdrop}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+          enabled={Platform.OS !== 'web'}
         >
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
