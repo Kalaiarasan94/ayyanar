@@ -67,17 +67,29 @@ export default function Ledger() {
         tables: [
           {
             title: `Received From — Input (${receivedRows.length})`,
-            head: ['#', 'Party', 'Category', 'Received (Rs)', 'Entries', 'Last Activity'],
-            body: receivedRows.map((r, i) => [i + 1, r.party || '-', r.category, Number(r.receivedFrom || 0).toLocaleString('en-IN'), r.receivedEntries, dateLabel(r.receivedLastDate)]),
-            columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } },
-            foot: ['', '', 'TOTAL', totalReceived.toLocaleString('en-IN'), '', ''],
+            head: ['#', 'Date', 'Party / Site', 'Category', 'Amount (Rs)'],
+            body: receivedRows.map((r, i) => [
+              i + 1,
+              dateLabel(r.receivedLastDate || r.lastDate),
+              r.party || '-',
+              r.category || '-',
+              Number(r.receivedFrom || 0).toLocaleString('en-IN'),
+            ]),
+            columnStyles: { 4: { halign: 'right' } },
+            foot: ['', '', '', 'TOTAL', totalReceived.toLocaleString('en-IN')],
           },
           {
             title: `Paid To — Output (${paidRows.length})`,
-            head: ['#', 'Party', 'Category', 'Paid (Rs)', 'Entries', 'Last Activity'],
-            body: paidRows.map((r, i) => [i + 1, r.party || '-', r.category, Number(r.paidTo || 0).toLocaleString('en-IN'), r.paidEntries, dateLabel(r.paidLastDate)]),
-            columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } },
-            foot: ['', '', 'TOTAL', totalPaid.toLocaleString('en-IN'), '', ''],
+            head: ['#', 'Date', 'Party / Site', 'Category', 'Amount (Rs)'],
+            body: paidRows.map((r, i) => [
+              i + 1,
+              dateLabel(r.paidLastDate || r.lastDate),
+              r.party || '-',
+              r.category || '-',
+              Number(r.paidTo || 0).toLocaleString('en-IN'),
+            ]),
+            columnStyles: { 4: { halign: 'right' } },
+            foot: ['', '', '', 'TOTAL', totalPaid.toLocaleString('en-IN')],
           },
         ],
       });
@@ -103,15 +115,29 @@ export default function Ledger() {
         tables: [
           {
             title: `Received From — Input (${receivedRows.length})`,
-            head: ['#', 'Party', 'Category', 'Received (Rs)', 'Entries', 'Last Activity'],
-            body: receivedRows.map((r, i) => [i + 1, r.party || '-', r.category, Number(r.receivedFrom || 0).toLocaleString('en-IN'), r.receivedEntries, dateLabel(r.receivedLastDate)]),
-            columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } },
+            head: ['#', 'Date', 'Party / Site', 'Category', 'Amount (Rs)'],
+            body: receivedRows.map((r, i) => [
+              i + 1,
+              dateLabel(r.receivedLastDate || r.lastDate),
+              r.party || '-',
+              r.category || '-',
+              Number(r.receivedFrom || 0).toLocaleString('en-IN'),
+            ]),
+            columnStyles: { 4: { halign: 'right' } },
+            foot: ['', '', '', 'TOTAL', totalReceived.toLocaleString('en-IN')],
           },
           {
             title: `Paid To — Output (${paidRows.length})`,
-            head: ['#', 'Party', 'Category', 'Paid (Rs)', 'Entries', 'Last Activity'],
-            body: paidRows.map((r, i) => [i + 1, r.party || '-', r.category, Number(r.paidTo || 0).toLocaleString('en-IN'), r.paidEntries, dateLabel(r.paidLastDate)]),
-            columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } },
+            head: ['#', 'Date', 'Party / Site', 'Category', 'Amount (Rs)'],
+            body: paidRows.map((r, i) => [
+              i + 1,
+              dateLabel(r.paidLastDate || r.lastDate),
+              r.party || '-',
+              r.category || '-',
+              Number(r.paidTo || 0).toLocaleString('en-IN'),
+            ]),
+            columnStyles: { 4: { halign: 'right' } },
+            foot: ['', '', '', 'TOTAL', totalPaid.toLocaleString('en-IN')],
           },
         ],
       });
@@ -125,12 +151,16 @@ export default function Ledger() {
   const handleExport = () => {
     const lines: string[] = [];
     lines.push('RECEIVED FROM — INPUT');
-    lines.push(['Party', 'Category', 'Received', 'Entries', 'Last Date'].join(','));
-    receivedRows.forEach((r) => lines.push([r.party || '', r.category, r.receivedFrom, r.receivedEntries, r.receivedLastDate].map(csvCell).join(',')));
+    lines.push(['Date', 'Party / Site', 'Category', 'Amount'].join(','));
+    receivedRows.forEach((r) =>
+      lines.push([dateLabel(r.receivedLastDate || r.lastDate), r.party || '', r.category, r.receivedFrom].map(csvCell).join(','))
+    );
     lines.push('');
     lines.push('PAID TO — OUTPUT');
-    lines.push(['Party', 'Category', 'Paid', 'Entries', 'Last Date'].join(','));
-    paidRows.forEach((r) => lines.push([r.party || '', r.category, r.paidTo, r.paidEntries, r.paidLastDate].map(csvCell).join(',')));
+    lines.push(['Date', 'Party / Site', 'Category', 'Amount'].join(','));
+    paidRows.forEach((r) =>
+      lines.push([dateLabel(r.paidLastDate || r.lastDate), r.party || '', r.category, r.paidTo].map(csvCell).join(','))
+    );
     exportCsv('ledger.csv', lines.join('\n'));
   };
 
@@ -187,12 +217,12 @@ export default function Ledger() {
               rowKey={(r, i) => `in-${r.category}-${r.party}-${i}`}
               rows={receivedRows}
               emptyText="No money received yet."
+              totalRow={['TOTAL', '', '', rupees(totalReceived)]}
               columns={[
-                { header: 'Party', render: (r) => r.party || '—' },
-                { header: 'Category', render: (r) => r.category },
-                { header: 'Received', align: 'right', render: (r) => <span className="text-success">{rupees(r.receivedFrom)}</span> },
-                { header: 'Entries', align: 'right', render: (r) => r.receivedEntries },
-                { header: 'Last Activity', render: (r) => dateLabel(r.receivedLastDate) },
+                { header: 'Date', render: (r) => dateLabel(r.receivedLastDate || r.lastDate) },
+                { header: 'Party / Site', render: (r) => r.party || '—' },
+                { header: 'Category', render: (r) => r.category || '—' },
+                { header: 'Amount', align: 'right', render: (r) => <span className="text-success">{rupees(r.receivedFrom)}</span> },
               ]}
             />
           </div>
@@ -203,12 +233,12 @@ export default function Ledger() {
               rowKey={(r, i) => `out-${r.category}-${r.party}-${i}`}
               rows={paidRows}
               emptyText="No payments made yet."
+              totalRow={['TOTAL', '', '', rupees(totalPaid)]}
               columns={[
-                { header: 'Party', render: (r) => r.party || '—' },
-                { header: 'Category', render: (r) => r.category },
-                { header: 'Paid', align: 'right', render: (r) => <span className="text-primary">{rupees(r.paidTo)}</span> },
-                { header: 'Entries', align: 'right', render: (r) => r.paidEntries },
-                { header: 'Last Activity', render: (r) => dateLabel(r.paidLastDate) },
+                { header: 'Date', render: (r) => dateLabel(r.paidLastDate || r.lastDate) },
+                { header: 'Party / Site', render: (r) => r.party || '—' },
+                { header: 'Category', render: (r) => r.category || '—' },
+                { header: 'Amount', align: 'right', render: (r) => <span className="text-primary">{rupees(r.paidTo)}</span> },
               ]}
             />
           </div>

@@ -81,7 +81,7 @@ export default function IoReport() {
         tables: [
           {
             title: `All Inputs (${inputRows.length})`,
-            head: ['Date', 'Party', 'Category', 'Input (Rs)'],
+            head: ['Date', 'Party / Site', 'Category', 'Amount (Rs)'],
             body: [
               ...(mode !== 'all' ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
               ...inputRows.map((r: any) => [dateLabel(r.date), r.party || r.description || '-', r.category || '-', Number(r.amount).toLocaleString('en-IN')]),
@@ -91,32 +91,15 @@ export default function IoReport() {
           },
           {
             title: `All Outputs (${outputRows.length})`,
-            head: role === 'Supervisor'
-              ? ['Date', 'Site / Party', 'Category', 'Indirect (Rs)', 'Output (Rs)']
-              : ['Date', 'Party', 'Category', 'Output (Rs)'],
-            body: outputRows.map((r: any) => {
-              const isInd = r.category === 'Indirect' || r.category === 'Indirect Bill Settlement';
-              return role === 'Supervisor'
-                ? [
-                    dateLabel(r.date),
-                    r.party || r.description || '-',
-                    r.category || '-',
-                    isInd ? Number(r.amount).toLocaleString('en-IN') : '-',
-                    Number(r.amount).toLocaleString('en-IN')
-                  ]
-                : [
-                    dateLabel(r.date),
-                    r.party || r.description || '-',
-                    r.category || '-',
-                    Number(r.amount).toLocaleString('en-IN')
-                  ];
-            }),
-            foot: role === 'Supervisor'
-              ? ['TOTAL OUTPUT', '', '', Number(report.totals.indirect || report.indirect?.total || 0).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN')]
-              : ['TOTAL OUTPUT', '', '', Number(report.totals.output).toLocaleString('en-IN')],
-            columnStyles: role === 'Supervisor'
-              ? { 3: { halign: 'right' as const }, 4: { halign: 'right' as const } }
-              : { 3: { halign: 'right' as const } },
+            head: ['Date', 'Party / Site', 'Category', 'Amount (Rs)'],
+            body: outputRows.map((r: any) => [
+              dateLabel(r.date),
+              r.party || r.description || '-',
+              r.category || '-',
+              Number(r.amount).toLocaleString('en-IN'),
+            ]),
+            foot: ['TOTAL OUTPUT', '', '', Number(report.totals.output).toLocaleString('en-IN')],
+            columnStyles: { 3: { halign: 'right' as const } },
           },
           ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
             ? [
@@ -166,7 +149,7 @@ export default function IoReport() {
         tables: [
           {
             title: `All Inputs (${inputRows.length})`,
-            head: ['Date', 'Party', 'Category', 'Input (Rs)'],
+            head: ['Date', 'Party / Site', 'Category', 'Amount (Rs)'],
             body: [
               ...(mode !== 'all' ? [['Opening Balance', '', '', Number(report.opening).toLocaleString('en-IN')]] : []),
               ...inputRows.map((r: any) => [dateLabel(r.date), r.party || r.description || '-', r.category || '-', Number(r.amount).toLocaleString('en-IN')]),
@@ -176,32 +159,15 @@ export default function IoReport() {
           },
           {
             title: `All Outputs (${outputRows.length})`,
-            head: role === 'Supervisor'
-              ? ['Date', 'Site / Party', 'Category', 'Indirect (Rs)', 'Output (Rs)']
-              : ['Date', 'Party', 'Category', 'Output (Rs)'],
-            body: outputRows.map((r: any) => {
-              const isInd = r.category === 'Indirect' || r.category === 'Indirect Bill Settlement';
-              return role === 'Supervisor'
-                ? [
-                    dateLabel(r.date),
-                    r.party || r.description || '-',
-                    r.category || '-',
-                    isInd ? Number(r.amount).toLocaleString('en-IN') : '-',
-                    Number(r.amount).toLocaleString('en-IN')
-                  ]
-                : [
-                    dateLabel(r.date),
-                    r.party || r.description || '-',
-                    r.category || '-',
-                    Number(r.amount).toLocaleString('en-IN')
-                  ];
-            }),
-            foot: role === 'Supervisor'
-              ? ['TOTAL OUTPUT', '', '', Number(report.totals.indirect || report.indirect?.total || 0).toLocaleString('en-IN'), Number(report.totals.output).toLocaleString('en-IN')]
-              : ['TOTAL OUTPUT', '', '', Number(report.totals.output).toLocaleString('en-IN')],
-            columnStyles: role === 'Supervisor'
-              ? { 3: { halign: 'right' as const }, 4: { halign: 'right' as const } }
-              : { 3: { halign: 'right' as const } },
+            head: ['Date', 'Party / Site', 'Category', 'Amount (Rs)'],
+            body: outputRows.map((r: any) => [
+              dateLabel(r.date),
+              r.party || r.description || '-',
+              r.category || '-',
+              Number(r.amount).toLocaleString('en-IN'),
+            ]),
+            foot: ['TOTAL OUTPUT', '', '', Number(report.totals.output).toLocaleString('en-IN')],
+            columnStyles: { 3: { halign: 'right' as const } },
           },
           ...(role === 'Supervisor' && (report.indirect?.rows || []).length > 0
             ? [
@@ -303,9 +269,9 @@ export default function IoReport() {
               totalRow={['TOTAL INPUT', '', '', rupees(report.totals.input)]}
               columns={[
                 { header: 'Date', render: (r: any) => dateLabel(r.date) },
-                { header: 'Party', render: (r: any) => r.party || r.description || '—' },
+                { header: 'Party / Site', render: (r: any) => r.party || r.description || '—' },
                 { header: 'Category', render: (r: any) => r.category || '—' },
-                { header: 'Input', align: 'right', render: (r: any) => <span className="text-success">{rupees(r.amount)}</span> },
+                { header: 'Amount', align: 'right', render: (r: any) => <span className="text-success">{rupees(r.amount)}</span> },
               ]}
             />
           </div>
@@ -317,26 +283,12 @@ export default function IoReport() {
               rowKey={(r: any) => r.id}
               rows={outputRows}
               emptyText="No money paid in this range."
-              totalRow={role === 'Supervisor'
-                ? ['TOTAL OUTPUT', '', '', rupees(report.totals?.indirect || report.indirect?.total || 0), rupees(report.totals.output)]
-                : ['TOTAL OUTPUT', '', '', rupees(report.totals.output)]}
+              totalRow={['TOTAL OUTPUT', '', '', rupees(report.totals.output)]}
               columns={[
                 { header: 'Date', render: (r: any) => dateLabel(r.date) },
-                { header: 'Site / Party', render: (r: any) => r.party || r.description || '—' },
+                { header: 'Party / Site', render: (r: any) => r.party || r.description || '—' },
                 { header: 'Category', render: (r: any) => r.category || '—' },
-                ...(role === 'Supervisor'
-                  ? [
-                      {
-                        header: 'Indirect',
-                        align: 'right' as const,
-                        render: (r: any) => {
-                          const isInd = r.category === 'Indirect' || r.category === 'Indirect Bill Settlement';
-                          return isInd ? <span style={{ color: '#8c7576', fontWeight: 600 }}>{rupees(r.amount)}</span> : '—';
-                        },
-                      },
-                    ]
-                  : []),
-                { header: 'Output', align: 'right', render: (r: any) => <span className="text-primary">{rupees(r.amount)}</span> },
+                { header: 'Amount', align: 'right', render: (r: any) => <span className="text-primary">{rupees(r.amount)}</span> },
               ]}
             />
           </div>

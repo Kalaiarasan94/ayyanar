@@ -90,7 +90,8 @@ export default function AdminPanelScreen() {
   const [staffList, setStaffList] = useState<Staff[]>([]);
   const [sitesList, setSitesList] = useState<Site[]>([]);
   const [leadsList, setLeadsList] = useState<Lead[]>([]);
-  const [reportSiteId, setReportSiteId] = useState<string | null>(null);
+  const [reportSiteId, setReportSiteId] = useState<string | null>('all');
+  const [siteReportComprehensive, setSiteReportComprehensive] = useState<any>(null);
   const [reportData, setReportData] = useState<any[]>([]);
   const [reportType, setReportType] = useState<'SITE' | 'DRIVER' | 'IO'>('SITE');
   const [driverRecords, setDriverRecords] = useState<any[]>([]);
@@ -253,8 +254,15 @@ export default function AdminPanelScreen() {
 
   const fetchReportData = async (siteId = reportSiteId) => {
     if (!siteId) return;
-    const data = await fieldService.getLedgerBySite(siteId);
-    setReportData(data);
+    try {
+      const comp = await fieldService.getSiteExpensesReport(siteId);
+      setSiteReportComprehensive(comp);
+      const bills = [...(comp?.directBills || []), ...(comp?.indirectBills || [])];
+      setReportData(bills);
+    } catch {
+      const data = await fieldService.getLedgerBySite(siteId);
+      setReportData(data);
+    }
   };
 
   const loadTab = async (tab = activeTab) => {
@@ -275,7 +283,7 @@ export default function AdminPanelScreen() {
         setSitesList(sites);
         setDriverRecords(drivers);
         setDriverBills(bills);
-        const selectedSite = reportSiteId || sites[0]?.id || null;
+        const selectedSite = reportSiteId || 'all';
         setReportSiteId(selectedSite);
         if (selectedSite) await fetchReportData(selectedSite);
       }
@@ -923,23 +931,12 @@ export default function AdminPanelScreen() {
         Number(r.amount).toLocaleString('en-IN'),
       ]),
     ];
-    const outputRows = outputEntries.map((r: any) => {
-      const isInd = r.category === 'Indirect' || r.category === 'Indirect Bill Settlement';
-      return ioRole === 'Supervisor'
-        ? [
-            new Date(r.date).toLocaleDateString('en-IN'),
-            r.party || r.description || '-',
-            r.category || '-',
-            isInd ? Number(r.amount).toLocaleString('en-IN') : '-',
-            Number(r.amount).toLocaleString('en-IN'),
-          ]
-        : [
-            new Date(r.date).toLocaleDateString('en-IN'),
-            r.party || r.description || '-',
-            r.category || '-',
-            Number(r.amount).toLocaleString('en-IN'),
-          ];
-    });
+    const outputRows = outputEntries.map((r: any) => [
+      new Date(r.date).toLocaleDateString('en-IN'),
+      r.party || r.description || '-',
+      r.category || '-',
+      Number(r.amount).toLocaleString('en-IN'),
+    ]);
     const indirectRows = (ioReport?.indirect?.rows || []).map((r: any) => [
       new Date(r.date).toLocaleDateString('en-IN'),
       r.site || '-',
@@ -959,23 +956,17 @@ export default function AdminPanelScreen() {
       tables: [
         {
           title: `All Inputs (${inputEntries.length})`,
-          head: ['Date', 'Party', 'Category', 'Input (Rs)'],
+          head: ['Date', 'Party / Site', 'Category', 'Amount (Rs)'],
           body: inputRows,
           foot: ['TOTAL INPUT', '', '', Number(ioReport?.totals?.input || 0).toLocaleString('en-IN')],
           columnStyles: { 3: { halign: 'right' as const } },
         },
         {
           title: `All Outputs (${outputEntries.length})`,
-          head: ioRole === 'Supervisor'
-            ? ['Date', 'Site / Party', 'Category', 'Indirect (Rs)', 'Output (Rs)']
-            : ['Date', 'Party', 'Category', 'Output (Rs)'],
+          head: ['Date', 'Party / Site', 'Category', 'Amount (Rs)'],
           body: outputRows,
-          foot: ioRole === 'Supervisor'
-            ? ['TOTAL OUTPUT', '', '', Number(ioReport?.totals?.indirect || ioReport?.indirect?.total || 0).toLocaleString('en-IN'), Number(ioReport?.totals?.output || 0).toLocaleString('en-IN')]
-            : ['TOTAL OUTPUT', '', '', Number(ioReport?.totals?.output || 0).toLocaleString('en-IN')],
-          columnStyles: ioRole === 'Supervisor'
-            ? { 3: { halign: 'right' as const }, 4: { halign: 'right' as const } }
-            : { 3: { halign: 'right' as const } },
+          foot: ['TOTAL OUTPUT', '', '', Number(ioReport?.totals?.output || 0).toLocaleString('en-IN')],
+          columnStyles: { 3: { halign: 'right' as const } },
         },
         ...(ioRole === 'Supervisor' && indirectRows.length > 0
           ? [
@@ -1030,72 +1021,161 @@ export default function AdminPanelScreen() {
     }
   };
 
-  // ---------- Site Expenses report (bills entered by supervisors) ----------
+  // ---------- Site Expenses report (direct, indirect, output, daily sheets) ----------
   const buildSitePdfDoc = () => {
-    const site = sitesList.find((s) => s.id === reportSiteId);
-    const direct = reportData.filter((item) => item.payment_mode === 'Direct');
-    const credit = reportData.filter((item) => item.payment_mode !== 'Direct');
-    const sum = (rows: any[]) => rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+    const isAllSites = reportSiteId === 'all';
+    const site = isAllSites ? { name: 'All Sites (Combined)', location: '' } : sitesList.find((s) => s.id === reportSiteId);
+    const comp = siteReportComprehensive;
+    const direct = comp?.directBills || reportData.filter((item) => item.payment_mode === 'Direct');
+    const credit = comp?.indirectBills || reportData.filter((item) => item.payment_mode !== 'Direct');
+    const outputList = comp?.outputTransactions || [];
+    const dsList = comp?.dailySheets || [];
+    const allSitesBreakdown = comp?.allSitesBreakdown || [];
+
+    const summary = comp?.summary || {
+      directTotal: direct.reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+      indirectTotal: credit.reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+      outputTotal: outputList.reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+      dailySheetTotal: dsList.reduce((s: number, r: any) => s + Number(r.total_amount || 0), 0),
+      grandTotal: 0,
+    };
+    const totalExpenses = summary.directTotal + summary.indirectTotal + summary.outputTotal + summary.dailySheetTotal;
+
+    const tables: any[] = [];
+
+    if (isAllSites && allSitesBreakdown.length > 0) {
+      tables.push({
+        title: `ALL SITES OVERVIEW BREAKDOWN (${allSitesBreakdown.length} sites)`,
+        head: ['#', 'Site Name', 'Direct (Rs)', 'Indirect (Rs)', 'Output (Rs)', 'Daily Sheet (Rs)', 'Total (Rs)'],
+        body: allSitesBreakdown.map((s: any, i: number) => [
+          i + 1,
+          s.site_name,
+          Number(s.direct_bills || 0).toLocaleString('en-IN'),
+          Number(s.indirect_bills || 0).toLocaleString('en-IN'),
+          Number(s.output_amount || 0).toLocaleString('en-IN'),
+          Number(s.daily_sheet_amount || 0).toLocaleString('en-IN'),
+          Number(s.total_expenses || 0).toLocaleString('en-IN'),
+        ]),
+        foot: [
+          '',
+          'TOTAL',
+          summary.directTotal.toLocaleString('en-IN'),
+          summary.indirectTotal.toLocaleString('en-IN'),
+          summary.outputTotal.toLocaleString('en-IN'),
+          summary.dailySheetTotal.toLocaleString('en-IN'),
+          totalExpenses.toLocaleString('en-IN'),
+        ],
+        columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { halign: 'right' } },
+      });
+    }
 
     const billRows = (rows: any[]) =>
       rows.map((r: any, i: number) => [
         i + 1,
         new Date(r.date).toLocaleDateString('en-IN'),
+        ...(isAllSites ? [r.site_name || '-'] : []),
         r.supervisor_name || 'System',
         r.category || '-',
         r.description || '-',
         Number(r.amount || 0).toLocaleString('en-IN'),
       ]);
 
+    tables.push({
+      title: `DIRECT CASH BILLS — ${direct.length} bill(s)`,
+      head: ['#', 'Date', ...(isAllSites ? ['Site'] : []), 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
+      body: billRows(direct),
+      foot: ['', ...(isAllSites ? [''] : []), '', '', '', 'TOTAL', summary.directTotal.toLocaleString('en-IN')],
+      columnStyles: { [isAllSites ? 6 : 5]: { halign: 'right' } },
+    });
+
+    tables.push({
+      title: `INDIRECT / CREDIT BILLS — ${credit.length} bill(s)`,
+      head: ['#', 'Date', ...(isAllSites ? ['Site'] : []), 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
+      body: billRows(credit),
+      foot: ['', ...(isAllSites ? [''] : []), '', '', '', 'TOTAL', summary.indirectTotal.toLocaleString('en-IN')],
+      columnStyles: { [isAllSites ? 6 : 5]: { halign: 'right' } },
+    });
+
+    if (outputList.length > 0) {
+      tables.push({
+        title: `OUTPUT EXPENSES (Account Out) — ${outputList.length} entry/entries`,
+        head: ['#', 'Date', ...(isAllSites ? ['Site'] : []), 'Entered By', 'Category', 'Mode', 'Description / Party', 'Amount (Rs)'],
+        body: outputList.map((r: any, i: number) => [
+          i + 1,
+          new Date(r.date).toLocaleDateString('en-IN'),
+          ...(isAllSites ? [r.site_name || r.party_name || '-'] : []),
+          r.entered_by_name || r.role || '-',
+          r.category || '-',
+          r.payment_method || 'Cash',
+          r.description || r.party_name || '-',
+          Number(r.amount || 0).toLocaleString('en-IN'),
+        ]),
+        foot: ['', ...(isAllSites ? [''] : []), '', '', '', '', 'TOTAL', summary.outputTotal.toLocaleString('en-IN')],
+        columnStyles: { [isAllSites ? 7 : 6]: { halign: 'right' } },
+      });
+    }
+
+    if (dsList.length > 0) {
+      tables.push({
+        title: `DAILY SHEET EXPENSES — ${dsList.length} sheet(s)`,
+        head: ['#', 'Date', ...(isAllSites ? ['Site'] : []), 'Supervisor', 'Work Description', 'Salary (Rs)', 'Vehicle (Rs)', 'Total (Rs)'],
+        body: dsList.map((r: any, i: number) => [
+          i + 1,
+          new Date(r.date).toLocaleDateString('en-IN'),
+          ...(isAllSites ? [r.site_name || '-'] : []),
+          r.supervisor_name || '-',
+          r.work_description || '-',
+          Number(r.labour_salary_total || 0).toLocaleString('en-IN'),
+          Number(r.vehicle_rental || 0).toLocaleString('en-IN'),
+          Number(r.total_amount || 0).toLocaleString('en-IN'),
+        ]),
+        foot: ['', ...(isAllSites ? [''] : []), '', '', '', '', 'TOTAL', summary.dailySheetTotal.toLocaleString('en-IN')],
+        columnStyles: { [isAllSites ? 7 : 6]: { halign: 'right' } },
+      });
+    }
+
     return buildPdfReport({
-      filename: `Site_Expenses_${site?.name || 'Report'}.pdf`,
+      filename: `Site_Expenses_${isAllSites ? 'All_Sites' : site?.name || 'Report'}.pdf`,
       title: 'Site Expenses Report',
-      subtitle: `Site: ${site?.name || '-'} (${site?.location || ''}) • Bills entered by supervisors`,
+      subtitle: `Site: ${site?.name || '-'} ${site?.location ? `(${site?.location})` : ''} • Comprehensive site-wise expenses`,
       summaryBoxes: [
-        { label: 'Direct Bills', value: rupeesText(sum(direct)) },
-        { label: 'Indirect / Credit', value: rupeesText(sum(credit)) },
-        { label: 'Total Site Expense', value: rupeesText(sum(direct) + sum(credit)), color: '#E23744' },
+        { label: 'Direct Bills', value: rupeesText(summary.directTotal) },
+        { label: 'Indirect Bills', value: rupeesText(summary.indirectTotal) },
+        { label: 'Output (Account)', value: rupeesText(summary.outputTotal) },
+        { label: 'Daily Sheet', value: rupeesText(summary.dailySheetTotal) },
+        { label: 'Total Site Expense', value: rupeesText(totalExpenses), color: '#E23744' },
       ],
-      tables: [
-        {
-          title: `DIRECT BILLS (Cash) — ${direct.length} bill(s)`,
-          head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
-          body: billRows(direct),
-          foot: ['', '', '', '', 'TOTAL', sum(direct).toLocaleString('en-IN')],
-          columnStyles: { 5: { halign: 'right' } },
-        },
-        {
-          title: `INDIRECT / CREDIT BILLS (Vendor) — ${credit.length} bill(s)`,
-          head: ['#', 'Date', 'Supervisor', 'Category', 'Description', 'Amount (Rs)'],
-          body: billRows(credit),
-          foot: ['', '', '', '', 'TOTAL', sum(credit).toLocaleString('en-IN')],
-          columnStyles: { 5: { halign: 'right' } },
-        },
-      ],
+      tables,
     });
   };
 
   const handleSitePdf = async (viaWhatsApp: boolean) => {
-    if (reportData.length === 0) {
-      Alert.alert('No Data', 'There are no expense bills for this site yet.');
+    const comp = siteReportComprehensive;
+    const isAllSites = reportSiteId === 'all';
+    const site = isAllSites ? { name: 'All Sites (Combined)' } : sitesList.find((s) => s.id === reportSiteId);
+    const grandTotal = comp?.summary?.grandTotal || reportData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    if (!comp && reportData.length === 0) {
+      Alert.alert('No Data', 'There are no expense records for this site selection yet.');
       return;
     }
     setGeneratingPdf(true);
     try {
       if (viaWhatsApp) {
-        const site = sitesList.find((s) => s.id === reportSiteId);
-        const total = reportData.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-        const directBills = reportData.filter((r: any) => r.payment_mode === 'Direct');
-        const creditBills = reportData.filter((r: any) => r.payment_mode !== 'Direct');
-        const directSum = directBills.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-        const creditSum = creditBills.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+        const s = comp?.summary || {
+          directTotal: 0,
+          indirectTotal: 0,
+          outputTotal: 0,
+          dailySheetTotal: 0,
+          grandTotal,
+        };
         const summary =
           `*Ayyanar Construction - Site Expenses Report*\n` +
           `Site: ${site?.name || '-'}\n` +
-          `Total Bills: ${reportData.length}\n` +
-          `Direct (Cash): ${rupeesText(directSum)} (${directBills.length} bills)\n` +
-          `Indirect (Credit): ${rupeesText(creditSum)} (${creditBills.length} bills)\n` +
-          `Grand Total: ${rupeesText(total)}`;
+          `Direct (Cash): ${rupeesText(s.directTotal)}\n` +
+          `Indirect (Credit): ${rupeesText(s.indirectTotal)}\n` +
+          `Output (Account): ${rupeesText(s.outputTotal)}\n` +
+          `Daily Sheet: ${rupeesText(s.dailySheetTotal)}\n` +
+          `*Grand Total: ${rupeesText(s.grandTotal || grandTotal)}*`;
         await sharePdfReportOnWhatsApp(await buildSitePdfDoc(), summary);
       } else {
         await downloadPdfReport(await buildSitePdfDoc());
@@ -1826,15 +1906,28 @@ export default function AdminPanelScreen() {
   );
 
   const renderSiteReports = () => {
-    const direct = reportData.filter((item) => item.payment_mode === 'Direct');
-    const credit = reportData.filter((item) => item.payment_mode !== 'Direct');
-    const directTotal = direct.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-    const creditTotal = credit.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-    const grandTotal = directTotal + creditTotal;
+    const isAllSites = reportSiteId === 'all';
+    const comp = siteReportComprehensive;
+    const direct = comp?.directBills || reportData.filter((item) => item.payment_mode === 'Direct');
+    const credit = comp?.indirectBills || reportData.filter((item) => item.payment_mode !== 'Direct');
+    const outputList = comp?.outputTransactions || [];
+    const dsList = comp?.dailySheets || [];
+    const allSitesBreakdown = comp?.allSitesBreakdown || [];
+
+    const summary = comp?.summary || {
+      directTotal: direct.reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+      indirectTotal: credit.reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+      outputTotal: outputList.reduce((s: number, r: any) => s + Number(r.amount || 0), 0),
+      dailySheetTotal: dsList.reduce((s: number, r: any) => s + Number(r.total_amount || 0), 0),
+      grandTotal: 0,
+    };
+    const totalExpenses = summary.directTotal + summary.indirectTotal + summary.outputTotal + summary.dailySheetTotal;
+
     return (
       <View>
         <View style={styles.inlinePickerContainer}>
           <Picker selectedValue={reportSiteId as any} onValueChange={(v) => selectReportSite(v as string)} style={styles.inlinePicker}>
+            <Picker.Item label="🌐 All Sites (Combined)" value="all" />
             {sitesList.map((site) => (
               <Picker.Item key={site.id} label={site.name} value={site.id} />
             ))}
@@ -1842,36 +1935,50 @@ export default function AdminPanelScreen() {
         </View>
 
         {/* Summary totals */}
-        {reportData.length > 0 && (
-          <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-            <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F4C6C8' }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#8C0F16', letterSpacing: 0.5 }}>DIRECT (CASH)</Text>
-              <Text style={{ fontSize: 17, fontWeight: '800', color: '#8C0F16', marginTop: 4 }}>
-                ₹{directTotal.toLocaleString()}
-              </Text>
-              <Text style={{ fontSize: 10, color: '#8C0F16', marginTop: 2 }}>{direct.length} bill(s)</Text>
-            </View>
-            <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F4C6C8' }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#CB202D', letterSpacing: 0.5 }}>INDIRECT (CREDIT)</Text>
-              <Text style={{ fontSize: 17, fontWeight: '800', color: '#CB202D', marginTop: 4 }}>
-                ₹{creditTotal.toLocaleString()}
-              </Text>
-              <Text style={{ fontSize: 10, color: '#CB202D', marginTop: 2 }}>{credit.length} bill(s)</Text>
-            </View>
-            <View style={{ flex: 1, backgroundColor: '#FCE9E9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F4C6C8' }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#CB202D', letterSpacing: 0.5 }}>GRAND TOTAL</Text>
-              <Text style={{ fontSize: 17, fontWeight: '800', color: '#CB202D', marginTop: 4 }}>
-                ₹{grandTotal.toLocaleString()}
-              </Text>
-              <Text style={{ fontSize: 10, color: '#CB202D', marginTop: 2 }}>{reportData.length} bill(s)</Text>
-            </View>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+          <View style={{ flex: 1, minWidth: '45%', backgroundColor: '#FCE9E9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F4C6C8' }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#8C0F16', letterSpacing: 0.5 }}>DIRECT (CASH)</Text>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: '#8C0F16', marginTop: 4 }}>
+              ₹{summary.directTotal.toLocaleString()}
+            </Text>
+            <Text style={{ fontSize: 10, color: '#8C0F16', marginTop: 2 }}>{direct.length} bill(s)</Text>
           </View>
-        )}
+          <View style={{ flex: 1, minWidth: '45%', backgroundColor: '#FCE9E9', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#F4C6C8' }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#8C7576', letterSpacing: 0.5 }}>INDIRECT (CREDIT)</Text>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: '#8C7576', marginTop: 4 }}>
+              ₹{summary.indirectTotal.toLocaleString()}
+            </Text>
+            <Text style={{ fontSize: 10, color: '#8C7576', marginTop: 2 }}>{credit.length} bill(s)</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: '45%', backgroundColor: '#FFFBEB', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#FDE68A' }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#B45309', letterSpacing: 0.5 }}>OUTPUT (ACCOUNT)</Text>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: '#B45309', marginTop: 4 }}>
+              ₹{summary.outputTotal.toLocaleString()}
+            </Text>
+            <Text style={{ fontSize: 10, color: '#B45309', marginTop: 2 }}>{outputList.length} payment(s)</Text>
+          </View>
+          <View style={{ flex: 1, minWidth: '45%', backgroundColor: '#EFF6FF', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#BFDBFE' }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#1D4ED8', letterSpacing: 0.5 }}>DAILY SHEET</Text>
+            <Text style={{ fontSize: 17, fontWeight: '800', color: '#1D4ED8', marginTop: 4 }}>
+              ₹{summary.dailySheetTotal.toLocaleString()}
+            </Text>
+            <Text style={{ fontSize: 10, color: '#1D4ED8', marginTop: 2 }}>{dsList.length} sheet(s)</Text>
+          </View>
+          <View style={{ width: '100%', backgroundColor: '#F0FDF4', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#BBF7D0' }}>
+            <Text style={{ fontSize: 10, fontWeight: '700', color: '#15803D', letterSpacing: 0.5 }}>TOTAL SITE EXPENSES (ALL INCLUSIVE)</Text>
+            <Text style={{ fontSize: 20, fontWeight: '800', color: '#15803D', marginTop: 4 }}>
+              ₹{totalExpenses.toLocaleString()}
+            </Text>
+            <Text style={{ fontSize: 10, color: '#15803D', marginTop: 2 }}>
+              Direct Bills + Indirect Bills + Output + Daily Sheet
+            </Text>
+          </View>
+        </View>
 
         <View style={styles.pdfActionsRow}>
           <TouchableOpacity style={[styles.pdfButton, generatingPdf && { opacity: 0.6 }]} onPress={() => handleSitePdf(false)} disabled={generatingPdf}>
             {generatingPdf ? <ActivityIndicator color={COLORS.white} size="small" /> : <MaterialIcons name="picture-as-pdf" size={18} color={COLORS.white} />}
-            <Text style={styles.pdfButtonText}>Download PDF</Text>
+            <Text style={styles.pdfButtonText}>{isAllSites ? 'Download All Sites PDF' : 'Download Site PDF'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.pdfButton, styles.whatsappButton, generatingPdf && { opacity: 0.6 }]} onPress={() => handleSitePdf(true)} disabled={generatingPdf}>
             <MaterialIcons name="share" size={18} color={COLORS.white} />
@@ -1879,8 +1986,31 @@ export default function AdminPanelScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* All Sites Matrix Overview */}
+        {isAllSites && allSitesBreakdown.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <SectionTitle title={`🏢 All Sites Overview (${allSitesBreakdown.length} sites)`} />
+            <View style={styles.card}>
+              {allSitesBreakdown.map((s: any) => (
+                <View key={`site-mat-${s.site_id}`} style={{ paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F5E6E6' }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontWeight: '800', fontSize: 14, color: COLORS.text }}>{s.site_name}</Text>
+                    <Text style={{ fontWeight: '800', fontSize: 15, color: '#15803D' }}>₹{Number(s.total_expenses || 0).toLocaleString()}</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+                    <Text style={{ fontSize: 11, color: '#8C0F16' }}>Direct: ₹{Number(s.direct_bills || 0).toLocaleString()}</Text>
+                    <Text style={{ fontSize: 11, color: '#8C7576' }}>Indirect: ₹{Number(s.indirect_bills || 0).toLocaleString()}</Text>
+                    <Text style={{ fontSize: 11, color: '#B45309' }}>Output: ₹{Number(s.output_amount || 0).toLocaleString()}</Text>
+                    <Text style={{ fontSize: 11, color: '#1D4ED8' }}>Daily Sheet: ₹{Number(s.daily_sheet_amount || 0).toLocaleString()}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         <SectionTitle title={`💵 Direct Cash Bills (${direct.length})`} />
-        <LedgerList data={direct} empty="No direct cash bills recorded for this site." onEdit={handleStartEditBill} onDelete={handleDeleteBill} />
+        <LedgerList data={direct} empty="No direct cash bills recorded for this selection." onEdit={handleStartEditBill} onDelete={handleDeleteBill} />
 
         <SectionTitle title={`💳 Indirect / Credit Bills (${credit.length})`} />
         <TouchableOpacity
@@ -1890,7 +2020,52 @@ export default function AdminPanelScreen() {
           <MaterialIcons name="fact-check" size={18} color="#FFF" />
           <Text style={{ color: '#FFF', fontWeight: '800', fontSize: 13 }}>Review & Approve Indirect Bills</Text>
         </TouchableOpacity>
-        <LedgerList data={credit} empty="No indirect credit bills recorded for this site." onEdit={handleStartEditBill} onDelete={handleDeleteBill} />
+        <LedgerList data={credit} empty="No indirect credit bills recorded for this selection." onEdit={handleStartEditBill} onDelete={handleDeleteBill} />
+
+        <SectionTitle title={`📤 Output Expenses — Account Out (${outputList.length})`} />
+        <View style={styles.card}>
+          {outputList.map((item: any) => (
+            <View key={`out-${item.id}`} style={styles.ledgerCard}>
+              <View style={styles.pipelineHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{item.category || 'Output'}{item.site_name ? ` • ${item.site_name}` : ''}</Text>
+                  <Text style={styles.rowMeta}>{item.description || item.party_name || 'No description'}</Text>
+                  <Text style={styles.assignmentText}>
+                    {new Date(item.date).toLocaleDateString()}
+                    {item.entered_by_name ? ` • By: ${item.entered_by_name}` : ''}
+                    {item.payment_method ? ` • ${item.payment_method}` : ''}
+                  </Text>
+                </View>
+                <Text style={[styles.rowAmount, { color: '#B45309' }]}>Rs {Number(item.amount || 0).toLocaleString()}</Text>
+              </View>
+            </View>
+          ))}
+          {outputList.length === 0 && <EmptyState text="No output account payments recorded for this selection." />}
+        </View>
+
+        <SectionTitle title={`📋 Daily Sheet Expenses (${dsList.length})`} />
+        <View style={styles.card}>
+          {dsList.map((item: any) => (
+            <View key={`ds-${item.id}`} style={styles.ledgerCard}>
+              <View style={styles.pipelineHeader}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle}>{item.site_name || 'Site Daily Sheet'}</Text>
+                  <Text style={styles.rowMeta}>{item.work_description || 'Daily site report'}</Text>
+                  <Text style={styles.assignmentText}>
+                    {new Date(item.date).toLocaleDateString()}
+                    {item.supervisor_name ? ` • Supervisor: ${item.supervisor_name}` : ''}
+                  </Text>
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                    <Text style={{ fontSize: 10, color: COLORS.textLight }}>Salary: Rs {Number(item.labour_salary_total || 0).toLocaleString()}</Text>
+                    <Text style={{ fontSize: 10, color: COLORS.textLight }}>Vehicle: Rs {Number(item.vehicle_rental || 0).toLocaleString()}</Text>
+                  </View>
+                </View>
+                <Text style={[styles.rowAmount, { color: '#1D4ED8' }]}>Rs {Number(item.total_amount || 0).toLocaleString()}</Text>
+              </View>
+            </View>
+          ))}
+          {dsList.length === 0 && <EmptyState text="No daily sheets recorded for this selection." />}
+        </View>
       </View>
     );
   };
@@ -2062,31 +2237,32 @@ export default function AdminPanelScreen() {
       <View style={styles.card}>
         <View style={styles.ioHeaderRow}>
           <Text style={[styles.ioHeaderText, { flex: 1, textAlign: 'left' }]}>Date</Text>
-          <Text style={[styles.ioHeaderText, { flex: 1.4, textAlign: 'left' }]}>Party / Category</Text>
-          <Text style={styles.ioHeaderText}>Input</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1.3, textAlign: 'left' }]}>Party / Site</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1.1, textAlign: 'left' }]}>Category</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1, textAlign: 'right' }]}>Amount</Text>
         </View>
         {ioFrom ? (
           <View style={styles.ioRow}>
             <Text style={[styles.ioDateCell, { flex: 1, fontStyle: 'italic' }]}>Opening</Text>
-            <Text style={{ flex: 1.4 }} />
-            <Text style={[styles.ioCell, { fontWeight: '900', color: COLORS.text }]}>{Number(ioReport?.opening || 0).toLocaleString('en-IN')}</Text>
+            <Text style={{ flex: 1.3 }} />
+            <Text style={{ flex: 1.1 }} />
+            <Text style={[styles.ioCell, { flex: 1, textAlign: 'right', fontWeight: '900', color: COLORS.text }]}>{Number(ioReport?.opening || 0).toLocaleString('en-IN')}</Text>
           </View>
         ) : null}
         {(ioReport?.entries || []).filter((e: any) => e.flow === 'IN').map((r: any) => (
           <View key={r.id} style={styles.ioRow}>
             <Text style={[styles.ioDateCell, { flex: 1 }]}>{new Date(r.date).toLocaleDateString('en-IN')}</Text>
-            <Text style={{ flex: 1.4 }} numberOfLines={1}>
-              <Text style={{ color: COLORS.text, fontSize: 12.5, fontWeight: '700' }}>{r.party || r.description || '—'}</Text>
-              {r.category ? <Text style={styles.rowMeta}>{`  •  ${r.category}`}</Text> : null}
-            </Text>
-            <Text style={[styles.ioCell, { color: COLORS.success, fontWeight: '900' }]}>{Number(r.amount).toLocaleString('en-IN')}</Text>
+            <Text style={[styles.ioCell, { flex: 1.3, textAlign: 'left', fontWeight: '700' }]} numberOfLines={1}>{r.party || r.description || '—'}</Text>
+            <Text style={[styles.ioCell, { flex: 1.1, textAlign: 'left', color: COLORS.textLight }]} numberOfLines={1}>{r.category || '—'}</Text>
+            <Text style={[styles.ioCell, { flex: 1, textAlign: 'right', color: COLORS.success, fontWeight: '900' }]}>{Number(r.amount).toLocaleString('en-IN')}</Text>
           </View>
         ))}
         {ioReport && (ioReport.entries || []).filter((e: any) => e.flow === 'IN').length > 0 && (
           <View style={[styles.ioRow, styles.ioTotalRow]}>
             <Text style={[styles.ioDateCell, { flex: 1, fontWeight: '900' }]}>TOTAL INPUT</Text>
-            <Text style={{ flex: 1.4 }} />
-            <Text style={[styles.ioCell, { color: COLORS.success, fontWeight: '900' }]}>{Number(ioReport.totals.input).toLocaleString('en-IN')}</Text>
+            <Text style={{ flex: 1.3 }} />
+            <Text style={{ flex: 1.1 }} />
+            <Text style={[styles.ioCell, { flex: 1, textAlign: 'right', color: COLORS.success, fontWeight: '900' }]}>{Number(ioReport.totals.input).toLocaleString('en-IN')}</Text>
           </View>
         )}
         {(!ioReport || (ioReport.entries || []).filter((e: any) => e.flow === 'IN').length === 0) && <EmptyState text="No money received in this range." />}
@@ -2095,41 +2271,25 @@ export default function AdminPanelScreen() {
       <SectionTitle title={`All Outputs (${(ioReport?.entries || []).filter((e: any) => e.flow === 'OUT').length})`} />
       <View style={styles.card}>
         <View style={styles.ioHeaderRow}>
-          <Text style={[styles.ioHeaderText, { flex: ioRole === 'Supervisor' ? 0.9 : 1, textAlign: 'left' }]}>Date</Text>
-          <Text style={[styles.ioHeaderText, { flex: ioRole === 'Supervisor' ? 1.3 : 1.4, textAlign: 'left' }]}>
-            {ioRole === 'Supervisor' ? 'Site / Party' : 'Party / Category'}
-          </Text>
-          {ioRole === 'Supervisor' && <Text style={[styles.ioHeaderText, { flex: 0.9 }]}>Indirect</Text>}
-          <Text style={[styles.ioHeaderText, { flex: ioRole === 'Supervisor' ? 0.9 : 1 }]}>Output</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1, textAlign: 'left' }]}>Date</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1.3, textAlign: 'left' }]}>Party / Site</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1.1, textAlign: 'left' }]}>Category</Text>
+          <Text style={[styles.ioHeaderText, { flex: 1, textAlign: 'right' }]}>Amount</Text>
         </View>
-        {(ioReport?.entries || []).filter((e: any) => e.flow === 'OUT').map((r: any) => {
-          const isInd = r.category === 'Indirect' || r.category === 'Indirect Bill Settlement';
-          return (
-            <View key={r.id} style={styles.ioRow}>
-              <Text style={[styles.ioDateCell, { flex: ioRole === 'Supervisor' ? 0.9 : 1 }]}>{new Date(r.date).toLocaleDateString('en-IN')}</Text>
-              <Text style={{ flex: ioRole === 'Supervisor' ? 1.3 : 1.4 }} numberOfLines={1}>
-                <Text style={{ color: COLORS.text, fontSize: 12.5, fontWeight: '700' }}>{r.party || r.description || '—'}</Text>
-                {r.category ? <Text style={styles.rowMeta}>{`  •  ${r.category}`}</Text> : null}
-              </Text>
-              {ioRole === 'Supervisor' && (
-                <Text style={[styles.ioCell, { flex: 0.9, color: '#8c7576', fontWeight: '700' }]}>
-                  {isInd ? Number(r.amount).toLocaleString('en-IN') : '—'}
-                </Text>
-              )}
-              <Text style={[styles.ioCell, { flex: ioRole === 'Supervisor' ? 0.9 : 1, color: COLORS.primary, fontWeight: '900' }]}>{Number(r.amount).toLocaleString('en-IN')}</Text>
-            </View>
-          );
-        })}
+        {(ioReport?.entries || []).filter((e: any) => e.flow === 'OUT').map((r: any) => (
+          <View key={r.id} style={styles.ioRow}>
+            <Text style={[styles.ioDateCell, { flex: 1 }]}>{new Date(r.date).toLocaleDateString('en-IN')}</Text>
+            <Text style={[styles.ioCell, { flex: 1.3, textAlign: 'left', fontWeight: '700' }]} numberOfLines={1}>{r.party || r.description || '—'}</Text>
+            <Text style={[styles.ioCell, { flex: 1.1, textAlign: 'left', color: COLORS.textLight }]} numberOfLines={1}>{r.category || '—'}</Text>
+            <Text style={[styles.ioCell, { flex: 1, textAlign: 'right', color: COLORS.primary, fontWeight: '900' }]}>{Number(r.amount).toLocaleString('en-IN')}</Text>
+          </View>
+        ))}
         {ioReport && (ioReport.entries || []).filter((e: any) => e.flow === 'OUT').length > 0 && (
           <View style={[styles.ioRow, styles.ioTotalRow]}>
-            <Text style={[styles.ioDateCell, { flex: ioRole === 'Supervisor' ? 0.9 : 1, fontWeight: '900' }]}>TOTAL OUTPUT</Text>
-            <Text style={{ flex: ioRole === 'Supervisor' ? 1.3 : 1.4 }} />
-            {ioRole === 'Supervisor' && (
-              <Text style={[styles.ioCell, { flex: 0.9, color: '#8c7576', fontWeight: '900' }]}>
-                {Number(ioReport.totals?.indirect || ioReport.indirect?.total || 0).toLocaleString('en-IN')}
-              </Text>
-            )}
-            <Text style={[styles.ioCell, { flex: ioRole === 'Supervisor' ? 0.9 : 1, color: COLORS.primary, fontWeight: '900' }]}>{Number(ioReport.totals.output).toLocaleString('en-IN')}</Text>
+            <Text style={[styles.ioDateCell, { flex: 1, fontWeight: '900' }]}>TOTAL OUTPUT</Text>
+            <Text style={{ flex: 1.3 }} />
+            <Text style={{ flex: 1.1 }} />
+            <Text style={[styles.ioCell, { flex: 1, textAlign: 'right', color: COLORS.primary, fontWeight: '900' }]}>{Number(ioReport.totals.output).toLocaleString('en-IN')}</Text>
           </View>
         )}
         {(!ioReport || (ioReport.entries || []).filter((e: any) => e.flow === 'OUT').length === 0) && <EmptyState text="No money paid in this range." />}

@@ -75,6 +75,23 @@ export const adminApi = {
 };
 
 export const fieldApi = {
+  getSiteExpensesReport: (siteId?: string | number, date?: string, from?: string, to?: string) =>
+    request<{
+      site: any;
+      isAllSites: boolean;
+      summary: {
+        directTotal: number;
+        indirectTotal: number;
+        dailySheetTotal: number;
+        outputTotal: number;
+        grandTotal: number;
+      };
+      directBills: any[];
+      indirectBills: any[];
+      dailySheets: any[];
+      outputTransactions: any[];
+      allSitesBreakdown: any[];
+    }>(`/expenses/site-report${siteId ? `/${siteId}` : ''}${qs({ date, from, to })}`),
   getLedgerBySite: (siteId: string | number, date?: string, from?: string, to?: string) =>
     request<any[]>(`/expenses/site/${siteId}${qs({ date, from, to })}`),
   updateExpense: (id: string | number, expense: Record<string, any>) =>

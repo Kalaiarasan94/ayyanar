@@ -352,6 +352,15 @@ export const fieldService = {
       method: 'POST',
       body: JSON.stringify(expense),
     }),
+  getSiteExpensesReport: (siteId?: string | number, date?: string, from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const qs = params.toString();
+    const sitePath = siteId ? `/${siteId}` : '';
+    return request<any>(`/expenses/site-report${sitePath}${qs ? `?${qs}` : ''}`);
+  },
   getLedgerBySite: (siteId: string | number, date?: string) =>
     request<any[]>(`/expenses/site/${siteId}${date ? `?date=${encodeURIComponent(date)}` : ''}`),
   updateExpense: (id: string | number, expense: Record<string, any>) =>

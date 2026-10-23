@@ -401,23 +401,47 @@ export default function AccountsBookScreen() {
   const buildLedgerPdfDoc = () => {
     const rangeLabel = ldRange.from && ldRange.to ? `${ldRange.from}_to_${ldRange.to}` : ldRange.from || ldRange.to || 'all_time';
 
+    const receivedRows = ledger.filter((item: any) => Number(item.receivedFrom || 0) > 0);
+    const paidRows = ledger.filter((item: any) => Number(item.paidTo || 0) > 0);
+
+    const totalReceived = receivedRows.reduce((sum: number, r: any) => sum + Number(r.receivedFrom || 0), 0);
+    const totalPaid = paidRows.reduce((sum: number, r: any) => sum + Number(r.paidTo || 0), 0);
+
     return buildPdfReport({
       filename: `Ledger_Summary_${rangeLabel}.pdf`,
       title: 'Accounts Ledger Summary',
       subtitle: ledgerRangeLabel(),
+      summaryBoxes: [
+        { label: 'Total Received', value: rupees(totalReceived), color: '#15803d' },
+        { label: 'Total Paid', value: rupees(totalPaid), color: '#e23744' },
+        { label: 'Net Balance', value: rupees(totalReceived - totalPaid) },
+      ],
       tables: [
         {
-          head: ['#', 'Party / Account Name', 'Debit (Paid, Rs)', 'Credit (Received, Rs)', 'Net Balance', 'Vouchers', 'Last Transaction'],
-          body: ledger.map((item: any, index: number) => [
+          title: `Received From — Input (${receivedRows.length})`,
+          head: ['#', 'Date', 'Party / Site', 'Category', 'Amount (Rs)'],
+          body: receivedRows.map((item: any, index: number) => [
             index + 1,
-            `${item.party}${item.category && item.party !== item.category ? ` (${item.category})` : ''}`,
-            Number(item.paidTo).toLocaleString('en-IN'),
+            item.receivedLastDate || item.lastDate ? dateLabel(item.receivedLastDate || item.lastDate) : '-',
+            item.party || '-',
+            item.category || '-',
             Number(item.receivedFrom).toLocaleString('en-IN'),
-            drCr(item.net),
-            item.entries,
-            item.lastDate ? dateLabel(item.lastDate) : '-',
           ]),
-          columnStyles: { 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'center' }, 6: { halign: 'center' } },
+          columnStyles: { 4: { halign: 'right' } },
+          foot: ['', '', '', 'TOTAL', totalReceived.toLocaleString('en-IN')],
+        },
+        {
+          title: `Paid To — Output (${paidRows.length})`,
+          head: ['#', 'Date', 'Party / Site', 'Category', 'Amount (Rs)'],
+          body: paidRows.map((item: any, index: number) => [
+            index + 1,
+            item.paidLastDate || item.lastDate ? dateLabel(item.paidLastDate || item.lastDate) : '-',
+            item.party || '-',
+            item.category || '-',
+            Number(item.paidTo).toLocaleString('en-IN'),
+          ]),
+          columnStyles: { 4: { halign: 'right' } },
+          foot: ['', '', '', 'TOTAL', totalPaid.toLocaleString('en-IN')],
         },
       ],
     });

@@ -11,6 +11,8 @@ router.post('/login', authController.login);
 
 // Field Supervisor & Driver Routes
 router.post('/expenses', fieldController.logExpense);
+router.get('/expenses/site-report', fieldController.getSiteExpensesReport);
+router.get('/expenses/site-report/:siteId', fieldController.getSiteExpensesReport);
 router.get('/expenses/site/:siteId', fieldController.getLedgerBySite);
 router.get('/expenses/indirect', fieldController.getIndirectBills);
 router.put('/expenses/:id/approve', fieldController.approveIndirectBill);

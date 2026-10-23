@@ -271,6 +271,199 @@ export const fieldController = {
     }
   },
 
+  getSiteExpensesReport: async (req: Request, res: Response): Promise<void> => {
+    try {
+      const siteId = req.params.siteId || (req.query.siteId as string | undefined);
+      const dateFilter = req.query.date as string | undefined;
+      const fromFilter = req.query.from as string | undefined;
+      const toFilter = req.query.to as string | undefined;
+
+      const sitesRes = await db.query('SELECT id, name, location FROM sites ORDER BY name ASC');
+      const allSites = sitesRes.rows || [];
+
+      const isAllSites = !siteId || siteId === 'all';
+      const targetSite = isAllSites
+        ? null
+        : allSites.find(
+            (s: any) => s.id.toString() === siteId.toString() || s.name.toLowerCase() === siteId.toString().toLowerCase()
+          ) || null;
+
+      const buildDateClause = (col: string, params: any[]) => {
+        if (dateFilter) {
+          params.push(dateFilter);
+          return ` AND ${col} = ?`;
+        } else {
+          let clause = '';
+          if (fromFilter) {
+            params.push(fromFilter);
+            clause += ` AND ${col} >= ?`;
+          }
+          if (toFilter) {
+            params.push(toFilter);
+            clause += ` AND ${col} <= ?`;
+          }
+          return clause;
+        }
+      };
+
+      // 1. All Direct Bills across sites in date range
+      const directParams: any[] = [];
+      let directQuery = `
+        SELECT l.*, u.name AS supervisor_name, s.name AS site_name
+        FROM ledger l
+        LEFT JOIN users u ON l.user_id = u.id
+        LEFT JOIN sites s ON l.site_id = s.id
+        WHERE l.type = 'DEBIT' AND (l.payment_mode = 'Direct' OR l.payment_mode IS NULL)
+      `;
+      directQuery += buildDateClause('l.date', directParams);
+      directQuery += ' ORDER BY l.date DESC, l.id DESC';
+      const allDirectResult = await db.query(directQuery, directParams);
+      const allDirect = allDirectResult.rows || [];
+
+      // 2. All Indirect Bills across sites in date range
+      const indirectParams: any[] = [];
+      let indirectQuery = `
+        SELECT l.*, u.name AS supervisor_name, s.name AS site_name
+        FROM ledger l
+        LEFT JOIN users u ON l.user_id = u.id
+        LEFT JOIN sites s ON l.site_id = s.id
+        WHERE l.type = 'DEBIT' AND l.payment_mode = 'Indirect'
+      `;
+      indirectQuery += buildDateClause('l.date', indirectParams);
+      indirectQuery += ' ORDER BY l.date DESC, l.id DESC';
+      const allIndirectResult = await db.query(indirectQuery, indirectParams);
+      const allIndirect = allIndirectResult.rows || [];
+
+      // 3. All Daily Sheets across sites in date range
+      const dsParams: any[] = [];
+      let dsQuery = `
+        SELECT ds.*, s.name AS site_name, u.name AS supervisor_name
+        FROM daily_sheets ds
+        JOIN sites s ON ds.site_id = s.id
+        JOIN users u ON ds.user_id = u.id
+        WHERE 1=1
+      `;
+      dsQuery += buildDateClause('ds.date', dsParams);
+      dsQuery += ' ORDER BY ds.date DESC, ds.id DESC';
+      const allDsResult = await db.query(dsQuery, dsParams);
+      const allDs = allDsResult.rows || [];
+
+      // 4. All Output (Account Out) transactions across sites in date range
+      // Excludes:
+      // - rows mirrored from daily sheets (description starts with 'Daily Sheet')
+      // - rows mirrored from ledger bills (l.id IS NOT NULL where ledger.linked_transaction_id = a.id)
+      const outParams: any[] = [];
+      let outQuery = `
+        SELECT a.*,
+               COALESCE(s_linked.id, s_party.id) AS site_id,
+               COALESCE(s_linked.name, s_party.name, a.party_name) AS site_name
+        FROM account_transactions a
+        LEFT JOIN ledger l ON l.linked_transaction_id = a.id
+        LEFT JOIN sites s_linked ON l.site_id = s_linked.id
+        LEFT JOIN sites s_party ON LOWER(TRIM(a.party_name)) = LOWER(TRIM(s_party.name))
+        WHERE a.flow = 'OUT'
+          AND (a.description NOT LIKE 'Daily Sheet%' OR a.description IS NULL)
+          AND (l.id IS NULL)
+          AND (s_linked.id IS NOT NULL OR s_party.id IS NOT NULL)
+      `;
+      outQuery += buildDateClause('a.date', outParams);
+      outQuery += ' ORDER BY a.date DESC, a.id DESC';
+      const allOutResult = await db.query(outQuery, outParams);
+      const allOut = allOutResult.rows || [];
+
+      // Build site-by-site matrix for all sites
+      const allSitesBreakdown = allSites.map((s: any) => {
+        const sDirect = allDirect
+          .filter((r: any) => r.site_id?.toString() === s.id.toString() || r.site_name === s.name)
+          .reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+
+        const sIndirect = allIndirect
+          .filter((r: any) => r.site_id?.toString() === s.id.toString() || r.site_name === s.name)
+          .reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+
+        const sDailySheet = allDs
+          .filter((r: any) => r.site_id?.toString() === s.id.toString() || r.site_name === s.name)
+          .reduce((sum: number, r: any) => sum + Number(r.total_amount || 0), 0);
+
+        const sOutput = allOut
+          .filter(
+            (r: any) =>
+              r.site_id?.toString() === s.id.toString() ||
+              (r.site_name && r.site_name.toLowerCase() === s.name.toLowerCase()) ||
+              (r.party_name && r.party_name.toLowerCase() === s.name.toLowerCase())
+          )
+          .reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+
+        const sTotal = sDirect + sIndirect + sDailySheet + sOutput;
+
+        return {
+          site_id: s.id,
+          site_name: s.name,
+          location: s.location || '',
+          direct_bills: sDirect,
+          indirect_bills: sIndirect,
+          daily_sheet_amount: sDailySheet,
+          output_amount: sOutput,
+          total_expenses: sTotal,
+        };
+      });
+
+      // Filter rows if single site selected
+      const directBills = targetSite
+        ? allDirect.filter(
+            (r: any) => r.site_id?.toString() === targetSite.id.toString() || r.site_name === targetSite.name
+          )
+        : allDirect;
+
+      const indirectBills = targetSite
+        ? allIndirect.filter(
+            (r: any) => r.site_id?.toString() === targetSite.id.toString() || r.site_name === targetSite.name
+          )
+        : allIndirect;
+
+      const dailySheets = targetSite
+        ? allDs.filter(
+            (r: any) => r.site_id?.toString() === targetSite.id.toString() || r.site_name === targetSite.name
+          )
+        : allDs;
+
+      const outputTransactions = targetSite
+        ? allOut.filter(
+            (r: any) =>
+              r.site_id?.toString() === targetSite.id.toString() ||
+              (r.site_name && r.site_name.toLowerCase() === targetSite.name.toLowerCase()) ||
+              (r.party_name && r.party_name.toLowerCase() === targetSite.name.toLowerCase())
+          )
+        : allOut;
+
+      const directTotal = directBills.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+      const indirectTotal = indirectBills.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+      const dailySheetTotal = dailySheets.reduce((sum: number, r: any) => sum + Number(r.total_amount || 0), 0);
+      const outputTotal = outputTransactions.reduce((sum: number, r: any) => sum + Number(r.amount || 0), 0);
+      const grandTotal = directTotal + indirectTotal + dailySheetTotal + outputTotal;
+
+      res.status(200).json({
+        site: targetSite || { id: 'all', name: 'All Sites (Combined)' },
+        isAllSites,
+        summary: {
+          directTotal,
+          indirectTotal,
+          dailySheetTotal,
+          outputTotal,
+          grandTotal,
+        },
+        directBills,
+        indirectBills,
+        dailySheets,
+        outputTransactions,
+        allSitesBreakdown,
+      });
+    } catch (error: any) {
+      console.error('getSiteExpensesReport Error:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  },
+
   getSupervisorWallet: async (req: Request, res: Response): Promise<void> => {
     try {
       const { userId } = req.params;
