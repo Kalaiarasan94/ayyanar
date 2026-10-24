@@ -404,21 +404,28 @@ export default function LoginScreen() {
 
                 {/* Biometric One-Tap Button (if enabled) */}
                 {quickProfile.biometricEnabled && (
-                  <TouchableOpacity
-                    style={[styles.biometricUnlockBtn, biometricLoading && styles.loginButtonDisabled]}
-                    onPress={handleBiometricUnlock}
-                    disabled={biometricLoading || loading}
-                    activeOpacity={0.8}
-                  >
-                    {biometricLoading ? (
-                      <ActivityIndicator size="small" color={COLORS.white} style={{ marginRight: 8 }} />
-                    ) : (
-                      <MaterialIcons name="fingerprint" size={24} color={COLORS.white} style={{ marginRight: 8 }} />
+                  <>
+                    <TouchableOpacity
+                      style={[styles.biometricUnlockBtn, biometricLoading && styles.loginButtonDisabled]}
+                      onPress={handleBiometricUnlock}
+                      disabled={biometricLoading || loading}
+                      activeOpacity={0.8}
+                    >
+                      {biometricLoading ? (
+                        <ActivityIndicator size="small" color={COLORS.white} style={{ marginRight: 8 }} />
+                      ) : (
+                        <MaterialIcons name="fingerprint" size={24} color={COLORS.white} style={{ marginRight: 8 }} />
+                      )}
+                      <Text style={styles.biometricUnlockBtnText}>
+                        {biometricLoading ? 'Scanning Face / Fingerprint...' : 'Unlock with Face ID / Fingerprint'}
+                      </Text>
+                    </TouchableOpacity>
+                    {quickMpinError && !quickProfile.hasMpin && (
+                      <Text style={[styles.quickPinErrorText, { marginVertical: 8, textAlign: 'center' }]}>
+                        {quickMpinError}
+                      </Text>
                     )}
-                    <Text style={styles.biometricUnlockBtnText}>
-                      {biometricLoading ? 'Scanning Face / Fingerprint...' : 'Unlock with Face ID / Fingerprint'}
-                    </Text>
-                  </TouchableOpacity>
+                  </>
                 )}
 
                 {/* Divider between biometric & MPIN if both available */}

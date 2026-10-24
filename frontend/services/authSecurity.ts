@@ -61,6 +61,32 @@ export const checkBiometricHardwareSupport = async (): Promise<{ supported: bool
   return { supported: !!window.PublicKeyCredential };
 };
 
+// Safe base64url decoder that always pads correctly
+const base64UrlToBuffer = (base64url: string): Uint8Array => {
+  let base64 = base64url.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4;
+  if (pad === 2) base64 += '==';
+  else if (pad === 3) base64 += '=';
+  else if (pad === 1) base64 += '===';
+
+  const binary = window.atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+};
+
+// Safe buffer to base64url encoder
+const bufferToBase64Url = (buffer: ArrayBuffer | Uint8Array): string => {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+
 /**
  * Prompt biometric sensor to register a WebAuthn credential for the user (Touch ID / Face ID / Fingerprint).
  */
@@ -81,13 +107,14 @@ export const registerBiometricOnDevice = async (
     window.crypto.getRandomValues(challenge);
 
     const userIdBytes = new TextEncoder().encode(`ayyanar_user_${userId}`);
+    const rpId = window.location.hostname === 'localhost' ? undefined : window.location.hostname;
 
     const credential = (await navigator.credentials.create({
       publicKey: {
         challenge,
         rp: {
           name: 'Ayyanar CRM',
-          id: window.location.hostname === 'localhost' ? undefined : window.location.hostname,
+          id: rpId,
         },
         user: {
           id: userIdBytes,
@@ -99,19 +126,21 @@ export const registerBiometricOnDevice = async (
           { alg: -257, type: 'public-key' }, // RS256
         ],
         authenticatorSelection: {
-          authenticatorAttachment: 'platform', // Hardware device sensor
+          authenticatorAttachment: 'platform', // Hardware device sensor (Fingerprint / Face ID)
           userVerification: 'required',
+          residentKey: 'preferred', // Store as a discoverable Passkey on device / Google Password Manager / iCloud Keychain
         },
         timeout: 60000,
         attestation: 'none',
       },
     })) as PublicKeyCredential | null;
 
-    if (!credential || !credential.id) {
+    if (!credential) {
       return { success: false, error: 'Biometric registration was cancelled.' };
     }
 
-    return { success: true, credentialId: credential.id };
+    const savedId = credential.rawId ? bufferToBase64Url(credential.rawId) : credential.id;
+    return { success: true, credentialId: savedId };
   } catch (error: any) {
     console.error('registerBiometricOnDevice error:', error);
     if (error.name === 'NotAllowedError') {
@@ -138,31 +167,51 @@ export const verifyBiometricOnDevice = async (
   try {
     const challenge = new Uint8Array(32);
     window.crypto.getRandomValues(challenge);
+    const rpId = window.location.hostname === 'localhost' ? undefined : window.location.hostname;
 
     const getOptions: CredentialRequestOptions = {
       publicKey: {
         challenge,
+        rpId,
         userVerification: 'required',
         timeout: 60000,
       },
     };
 
-    // If we have a credentialId, try specifying it
-    if (credentialId) {
+    // If we have a credentialId, try specifying it with safe base64url padding
+    if (credentialId && credentialId.trim().length > 0) {
       try {
-        const rawId = Uint8Array.from(atob(credentialId.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+        const rawId = base64UrlToBuffer(credentialId.trim());
         getOptions.publicKey!.allowCredentials = [
           {
             id: rawId,
             type: 'public-key',
           },
         ];
-      } catch {
-        // Fall back to open prompt
+      } catch (e) {
+        console.warn('Could not parse credentialId into allowCredentials, using discoverable search:', e);
       }
     }
 
-    const assertion = await navigator.credentials.get(getOptions);
+    let assertion = await navigator.credentials.get(getOptions);
+
+    // If targeted allowCredentials failed or wasn't found, try discoverable passkeys fallback
+    if (!assertion && getOptions.publicKey?.allowCredentials) {
+      try {
+        const fallbackOptions: CredentialRequestOptions = {
+          publicKey: {
+            challenge,
+            rpId,
+            userVerification: 'required',
+            timeout: 60000,
+          },
+        };
+        assertion = await navigator.credentials.get(fallbackOptions);
+      } catch {
+        // Fallback failed or ignored
+      }
+    }
+
     if (assertion) {
       return { success: true };
     }
@@ -170,7 +219,7 @@ export const verifyBiometricOnDevice = async (
   } catch (error: any) {
     console.error('verifyBiometricOnDevice error:', error);
     if (error.name === 'NotAllowedError') {
-      return { success: false, error: 'Biometric verification was cancelled or not recognized.' };
+      return { success: false, error: 'Passkey not found or biometric scan was cancelled. Please sign in with password to re-register.' };
     }
     return { success: false, error: error.message || 'Biometric verification failed.' };
   }
