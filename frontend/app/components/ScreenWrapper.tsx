@@ -1,7 +1,5 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { SPACING } from '../../constants/Theme';
-import GlassCard from './GlassCard';
 import AppBackground from './AppBackground';
 
 type Props = { 
@@ -13,17 +11,18 @@ export default function ScreenWrapper({ children, style }: Props) {
   return (
     <View style={styles.bg}>
       <AppBackground />
-      <View style={styles.container}>
-        <GlassCard style={[styles.card, style]}>
-          {children}
-        </GlassCard>
+      <View style={[styles.container, style]}>
+        {children}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  bg: { flex: 1 },
-  container: { flex: 1, padding: SPACING.md, justifyContent: 'center' },
-  card: { flex: 1, padding: SPACING.lg },
+  bg: { flex: 1, width: '100%', height: '100%' },
+  container: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
 });

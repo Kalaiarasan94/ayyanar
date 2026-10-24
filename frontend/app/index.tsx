@@ -367,8 +367,8 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          automaticallyAdjustKeyboardInsets={true}
+          keyboardDismissMode={Platform.OS === 'web' ? 'none' : 'on-drag'}
+          automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         >
           <View style={styles.loginColumn}>
             {/* Header / Brand Area */}
@@ -617,6 +617,8 @@ export default function LoginScreen() {
                     onBlur={() => setFocusedInput(null)}
                     autoCapitalize="none"
                     autoCorrect={false}
+                    autoComplete="username"
+                    textContentType="username"
                     placeholderTextColor="#A89496"
                   />
                 </View>
@@ -653,6 +655,8 @@ export default function LoginScreen() {
                         secureTextEntry={!showPassword}
                         autoCapitalize="none"
                         autoCorrect={false}
+                        autoComplete="current-password"
+                        textContentType="password"
                         placeholderTextColor="#A89496"
                       />
                       <TouchableOpacity
@@ -720,6 +724,8 @@ export default function LoginScreen() {
                         keyboardType="number-pad"
                         secureTextEntry
                         maxLength={6}
+                        autoComplete="off"
+                        textContentType="password"
                         placeholderTextColor="#A89496"
                       />
                     </View>
@@ -769,8 +775,10 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
     justifyContent: 'center',
+    alignItems: 'center',
     padding: SPACING.md,
-    paddingVertical: SPACING.xl,
+    paddingVertical: SPACING.lg,
+    width: '100%',
   },
   loginColumn: {
     width: '100%',
@@ -851,6 +859,7 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(226, 55, 68, 0.12)',
+    width: '100%',
   },
   cardHeading: {
     fontSize: 20,
@@ -959,6 +968,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#26191A',
     fontWeight: '500',
+    backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        outlineStyle: 'none',
+        outlineWidth: 0,
+        outlineColor: 'transparent',
+      } as any,
+    }),
   },
   eyeButton: {
     padding: 8,

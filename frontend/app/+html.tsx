@@ -11,10 +11,13 @@ export default function Root({ children }: PropsWithChildren) {
       <head>
         <meta charSet="utf-8" />
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        {/* Critical: Mobile PWA Viewport — prevents accidental zoom, fits notch/safe-areas, and resizes on virtual keyboard */}
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+        {/* Critical: Mobile PWA Viewport — prevents accidental zoom, fits notch/safe-areas, and stable virtual keyboard behavior */}
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
         <title>Ayyanar Construction CRM</title>
         <meta name="description" content="Ayyanar Infra Engineering — Construction CRM for sites, staff, drivers and accounts." />
+        
+        {/* Force light color scheme so mobile browsers never inject dark-mode black boxes */}
+        <meta name="color-scheme" content="light" />
         
         {/* PWA Manifest */}
         <link rel="manifest" href="/manifest.json" />
@@ -64,19 +67,29 @@ export default function Root({ children }: PropsWithChildren) {
 }
 
 const responsiveShellCss = `
+  :root {
+    color-scheme: light;
+    --sat: env(safe-area-inset-top, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+  }
+
   html, body {
     width: 100%;
+    min-height: 100%;
     height: 100%;
-    height: 100dvh;
     margin: 0;
     padding: 0;
     overscroll-behavior-y: none;
     -webkit-overflow-scrolling: touch;
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    background: #F7F5F5;
+    color-scheme: light;
   }
   body {
-    overflow: hidden;
+    overflow-x: hidden;
     background: #F7F5F5;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   }
@@ -85,30 +98,43 @@ const responsiveShellCss = `
     flex-direction: column;
     width: 100%;
     height: 100%;
-    height: 100dvh;
     min-height: 100%;
     flex: 1;
     background: #F7F5F5;
-    overflow: hidden;
-  }
-
-  /* Safe Area variables */
-  :root {
-    --sat: env(safe-area-inset-top, 0px);
-    --sar: env(safe-area-inset-right, 0px);
-    --sab: env(safe-area-inset-bottom, 0px);
-    --sal: env(safe-area-inset-left, 0px);
   }
 
   /* Universal Mobile Web Input Improvements:
      - 16px font-size prevents iOS Safari from auto-zooming on focus
      - text-size-adjust: 100% prevents mobile font inflation
-     - touch-action: manipulation eliminates 300ms tap delay
+     - outline: none prevents browser black box focus rings
+     - background: transparent prevents dark mode user-agent black box
   */
   input, textarea, select {
     font-size: 16px !important;
     -webkit-text-size-adjust: 100%;
     touch-action: manipulation;
+    outline: none !important;
+    outline-style: none !important;
+    box-shadow: none !important;
+    background-color: transparent !important;
+    color: #26191A !important;
+    border-color: transparent;
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none !important;
+    outline-style: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Prevent Chrome autofill from painting inputs with black/yellow box */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover, 
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+    box-shadow: 0 0 0 1000px #FFFFFF inset !important;
+    -webkit-text-fill-color: #26191A !important;
+    transition: background-color 5000s ease-in-out 0s;
   }
 
   /* Smooth momentum scrolling for all scroll containers */
@@ -130,22 +156,27 @@ const responsiveShellCss = `
     border-radius: 4px;
   }
 
-  /* TABLET (768px - 1023px): comfortable full-width web app */
+  /* TABLET (768px - 1023px): clean responsive brand layout */
   @media (min-width: 768px) {
     body {
-      background: radial-gradient(1400px 700px at 50% -150px, #2A2D31 0%, #111317 65%);
+      background: #F3EFEF;
     }
     #root {
-      height: 100vh;
-      box-shadow: 0 0 50px rgba(0, 0, 0, 0.4);
+      min-height: 100vh;
+      box-shadow: 0 0 40px rgba(0, 0, 0, 0.08);
     }
   }
 
   /* DESKTOP / LAPTOP (>= 1024px): centered responsive application container */
   @media (min-width: 1024px) {
+    body {
+      background: #ECE8E8;
+    }
     #root {
       max-width: 1180px;
       margin: 0 auto;
+      min-height: 100vh;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.06);
     }
   }
 
