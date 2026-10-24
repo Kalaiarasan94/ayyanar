@@ -60,7 +60,11 @@ type ApiResponse = {
     name: string;
     role: string;
     phone?: string;
+    hasMpin?: boolean;
+    biometricEnabled?: boolean;
   };
+  hasMpin?: boolean;
+  biometricEnabled?: boolean;
   data?: any;
 };
 
@@ -104,6 +108,56 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
     });
+    return response.json();
+  },
+
+  loginWithMpin: async (params: { username?: string; userId?: string | number; mpin: string }): Promise<ApiResponse> => {
+    const response = await fetch(`${API_BASE_URL}/login-mpin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return response.json();
+  },
+
+  loginWithBiometric: async (params: { userId?: string | number; username?: string }): Promise<ApiResponse> => {
+    const response = await fetch(`${API_BASE_URL}/login-biometric`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    return response.json();
+  },
+
+  setMpin: async (userId: string | number, mpin: string): Promise<ApiResponse> => {
+    const response = await fetch(`${API_BASE_URL}/user/mpin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, mpin }),
+    });
+    return response.json();
+  },
+
+  removeMpin: async (userId: string | number): Promise<ApiResponse> => {
+    const response = await fetch(`${API_BASE_URL}/user/mpin`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    });
+    return response.json();
+  },
+
+  setBiometric: async (userId: string | number, enabled: boolean): Promise<ApiResponse> => {
+    const response = await fetch(`${API_BASE_URL}/user/biometric`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, enabled }),
+    });
+    return response.json();
+  },
+
+  getSecurityStatus: async (userId: string | number): Promise<{ success: boolean; hasMpin: boolean; biometricEnabled: boolean; message?: string }> => {
+    const response = await fetch(`${API_BASE_URL}/user/security/${userId}`);
     return response.json();
   },
 

@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
     role ENUM('Admin', 'Supervisor', 'Driver', 'Site Engineer', 'Accounts', 'Owner', 'TotalAccounts') NOT NULL,
     phone VARCHAR(20) NOT NULL,
     password VARCHAR(255) NOT NULL,
+    mpin VARCHAR(255) NULL,
+    biometric_enabled TINYINT(1) DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

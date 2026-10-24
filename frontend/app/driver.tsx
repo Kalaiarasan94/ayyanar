@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ScrollView, Text, View, TextInput, TouchableOpacity, Alert, ActivityIndicator, Image, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +19,7 @@ const todayLocal = () => {
 // 2. DRIVER MODULE USER INTERFACE
 // ==========================================
 export default function DriverLogScreen() {
+  const router = useRouter();
   const { name: paramName, userId } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -180,7 +181,23 @@ export default function DriverLogScreen() {
           <Text style={styles.headerTitle}>Driver Console</Text>
           <Text style={styles.headerSubtitle}>Trips & diesel bills</Text>
         </View>
-        <LogoutButton variant="solid" />
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <TouchableOpacity
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: 'rgba(255, 255, 255, 0.2)',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+            onPress={() => router.push('/(tabs)/profile')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <MaterialIcons name="person" size={20} color={COLORS.white} />
+          </TouchableOpacity>
+          <LogoutButton variant="solid" />
+        </View>
       </View>
 
       <KeyboardAvoidingView

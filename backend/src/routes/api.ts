@@ -8,6 +8,12 @@ const router = Router();
 
 // Auth Routes
 router.post('/login', authController.login);
+router.post('/login-mpin', authController.loginWithMpin);
+router.post('/login-biometric', authController.loginWithBiometric);
+router.post('/user/mpin', authController.setMpin);
+router.delete('/user/mpin', authController.removeMpin);
+router.post('/user/biometric', authController.setBiometric);
+router.get('/user/security/:userId', authController.getSecurityStatus);
 
 // Field Supervisor & Driver Routes
 router.post('/expenses', fieldController.logExpense);

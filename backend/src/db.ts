@@ -195,6 +195,18 @@ export const initDb = async () => {
       ('totacc', 'Total Accounts', 'TotalAccounts', '0000000002', 'totacc123');
     `);
 
+    // Ensure mpin and biometric_enabled columns exist on users
+    const [mpinColResult] = await pool.execute("SHOW COLUMNS FROM users LIKE 'mpin'");
+    if ((mpinColResult as any[]).length === 0) {
+      await db.query(`ALTER TABLE users ADD COLUMN mpin VARCHAR(255) NULL`);
+      console.log('Added mpin column to users.');
+    }
+    const [bioColResult] = await pool.execute("SHOW COLUMNS FROM users LIKE 'biometric_enabled'");
+    if ((bioColResult as any[]).length === 0) {
+      await db.query(`ALTER TABLE users ADD COLUMN biometric_enabled TINYINT(1) DEFAULT 0`);
+      console.log('Added biometric_enabled column to users.');
+    }
+
     // 2. Add status column to sites if it doesn't exist
     const [columnsResult] = await pool.execute("SHOW COLUMNS FROM sites LIKE 'status'");
     const columns = columnsResult as any[];
