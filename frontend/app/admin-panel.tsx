@@ -22,7 +22,7 @@ import { Picker } from '@react-native-picker/picker';
 import AppBackground from './components/AppBackground';
 import LogoutButton from '../components/LogoutButton';
 import DatePickerField from '../components/DatePickerField';
-import { accountsService, adminService, fieldService } from '../services/api';
+import { accountsService, adminService, fieldService, IMAGE_BASE_URL } from '../services/api';
 import { csvCell, downloadImage, exportCsv, shareImageOnWhatsApp } from '../services/printReport';
 import { buildDailySheetPdfDoc, buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 import { BORDER_RADIUS, COLORS, SPACING } from '../constants/Theme';
@@ -71,6 +71,25 @@ const getBillImageUris = (imageUrl?: string | null) => {
   return imageUrl.split('||').map((uri) => uri.trim()).filter((uri) => uri.startsWith('http'));
 };
 
+const getFullImageUrl = (url?: string | null) => {
+  if (!url) return null;
+  const trimmed = String(url).trim();
+  if (!trimmed) return null;
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('file://') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('data:')
+  ) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/')) {
+    return `${IMAGE_BASE_URL}${trimmed}`;
+  }
+  return `${IMAGE_BASE_URL}/${trimmed}`;
+};
+
 const todayIso = () => new Date().toISOString().split('T')[0];
 const rupeesText = (value: any) => `Rs ${Number(value || 0).toLocaleString('en-IN')}`;
 
@@ -110,6 +129,7 @@ export default function AdminPanelScreen() {
   const [dailySheetDate, setDailySheetDate] = useState(todayIso());
   const [dailySheetSupervisor, setDailySheetSupervisor] = useState<string | null>(null);
   const [dailySheetDetail, setDailySheetDetail] = useState<any>(null);
+  const [billPhotoModal, setBillPhotoModal] = useState<{ url: string; title?: string; subtitle?: string } | null>(null);
   const [generatingDailySheetPdf, setGeneratingDailySheetPdf] = useState(false);
 
   // Bill (ledger entry) edit modal
@@ -2540,7 +2560,15 @@ export default function AdminPanelScreen() {
       </Modal>
 
       {/* Daily Sheet detail — full breakdown of one supervisor's submitted daily report */}
-      <Modal visible={!!dailySheetDetail} transparent animationType="slide" onRequestClose={() => setDailySheetDetail(null)}>
+      <Modal
+        visible={!!dailySheetDetail}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (billPhotoModal) setBillPhotoModal(null);
+          else setDailySheetDetail(null);
+        }}
+      >
         <View style={styles.detailBackdrop}>
           <ScrollView style={[styles.detailSheet, { maxHeight: '88%' }]}>
             <View style={styles.detailHandle} />
@@ -2580,26 +2608,90 @@ export default function AdminPanelScreen() {
                   <MaterialIcons name="receipt" size={18} color={COLORS.primary} />
                   <Text style={styles.detailLocationText}>Bills — Normal: {rupeesText(dailySheetDetail.bills_normal)}</Text>
                 </View>
-                {(dailySheetDetail.billsNormalList || []).map((b: any, bIdx: number) => (
-                  <View key={`n_${bIdx}`} style={[styles.detailLocationRow, { paddingLeft: SPACING.lg, paddingVertical: 2 }]}>
-                    <MaterialIcons name="subdirectory-arrow-right" size={16} color={COLORS.textLight} />
-                    <Text style={[styles.detailLocationText, { fontSize: 13, color: COLORS.textLight }]}>
-                      {b.reason ? `${b.reason} — ` : ''}{rupeesText(b.amount)}
-                    </Text>
-                  </View>
-                ))}
+                {(dailySheetDetail.billsNormalList || []).map((b: any, bIdx: number) => {
+                  const billImg = getFullImageUrl(b.imageUrl || b.image_url || b.imageUri || b.image);
+                  return (
+                    <View
+                      key={`n_${bIdx}`}
+                      style={[
+                        styles.detailLocationRow,
+                        {
+                          paddingLeft: SPACING.lg,
+                          paddingVertical: 3,
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        },
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                        <MaterialIcons name="subdirectory-arrow-right" size={16} color={COLORS.textLight} />
+                        <Text style={[styles.detailLocationText, { fontSize: 13, color: COLORS.textLight, flexShrink: 1 }]}>
+                          {b.reason ? `${b.reason} — ` : ''}{rupeesText(b.amount)}
+                        </Text>
+                      </View>
+                      {billImg ? (
+                        <TouchableOpacity
+                          style={styles.viewBillBadgeButton}
+                          onPress={() =>
+                            setBillPhotoModal({
+                              url: billImg,
+                              title: `${b.reason || 'Normal Bill'} — ${rupeesText(b.amount)}`,
+                              subtitle: `${dailySheetDetail.supervisor_name || 'Supervisor'} • ${dailySheetDetail.site_name || 'Site'} (${new Date(dailySheetDetail.date).toLocaleDateString('en-IN')})`,
+                            })
+                          }
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons name="visibility" size={14} color={COLORS.primary} />
+                          <Text style={styles.viewBillBadgeText}>View Bill</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  );
+                })}
                 <View style={styles.detailLocationRow}>
                   <MaterialIcons name="receipt-long" size={18} color={COLORS.primary} />
                   <Text style={styles.detailLocationText}>Bills — GST: {rupeesText(dailySheetDetail.bills_gst)}</Text>
                 </View>
-                {(dailySheetDetail.billsGstList || []).map((b: any, bIdx: number) => (
-                  <View key={`g_${bIdx}`} style={[styles.detailLocationRow, { paddingLeft: SPACING.lg, paddingVertical: 2 }]}>
-                    <MaterialIcons name="subdirectory-arrow-right" size={16} color={COLORS.textLight} />
-                    <Text style={[styles.detailLocationText, { fontSize: 13, color: COLORS.textLight }]}>
-                      {b.reason ? `${b.reason} — ` : ''}{rupeesText(b.amount)}
-                    </Text>
-                  </View>
-                ))}
+                {(dailySheetDetail.billsGstList || []).map((b: any, bIdx: number) => {
+                  const billImg = getFullImageUrl(b.imageUrl || b.image_url || b.imageUri || b.image);
+                  return (
+                    <View
+                      key={`g_${bIdx}`}
+                      style={[
+                        styles.detailLocationRow,
+                        {
+                          paddingLeft: SPACING.lg,
+                          paddingVertical: 3,
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        },
+                      ]}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                        <MaterialIcons name="subdirectory-arrow-right" size={16} color={COLORS.textLight} />
+                        <Text style={[styles.detailLocationText, { fontSize: 13, color: COLORS.textLight, flexShrink: 1 }]}>
+                          {b.reason ? `${b.reason} — ` : ''}{rupeesText(b.amount)}
+                        </Text>
+                      </View>
+                      {billImg ? (
+                        <TouchableOpacity
+                          style={styles.viewBillBadgeButton}
+                          onPress={() =>
+                            setBillPhotoModal({
+                              url: billImg,
+                              title: `${b.reason || 'GST Bill'} — ${rupeesText(b.amount)}`,
+                              subtitle: `${dailySheetDetail.supervisor_name || 'Supervisor'} • ${dailySheetDetail.site_name || 'Site'} (${new Date(dailySheetDetail.date).toLocaleDateString('en-IN')})`,
+                            })
+                          }
+                          activeOpacity={0.7}
+                        >
+                          <MaterialIcons name="visibility" size={14} color={COLORS.primary} />
+                          <Text style={styles.viewBillBadgeText}>View Bill</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  );
+                })}
                 <View style={styles.detailLocationRow}>
                   <MaterialIcons name="credit-card" size={18} color={COLORS.primary} />
                   <Text style={styles.detailLocationText}>Bills — Under GST / Credit: {rupeesText(dailySheetDetail.bills_credit)}</Text>
@@ -2647,12 +2739,93 @@ export default function AdminPanelScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.detailCloseButton} onPress={() => setDailySheetDetail(null)}>
+                <TouchableOpacity
+                  style={styles.detailCloseButton}
+                  onPress={() => {
+                    setBillPhotoModal(null);
+                    setDailySheetDetail(null);
+                  }}
+                >
                   <Text style={styles.detailCloseButtonText}>Close</Text>
                 </TouchableOpacity>
               </>
             )}
           </ScrollView>
+
+          {billPhotoModal && (
+            <View style={styles.billPhotoOverlay}>
+              <View style={styles.billPhotoCard}>
+                <View style={styles.billPhotoHeader}>
+                  <View style={{ flex: 1, marginRight: 8 }}>
+                    <Text style={styles.billPhotoTitle} numberOfLines={1}>
+                      {billPhotoModal.title || 'Bill Photo'}
+                    </Text>
+                    {billPhotoModal.subtitle ? (
+                      <Text style={styles.billPhotoSubtitle} numberOfLines={1}>
+                        {billPhotoModal.subtitle}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setBillPhotoModal(null)}
+                    style={styles.billPhotoCloseCircle}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
+                    <MaterialIcons name="close" size={20} color={COLORS.text} />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.billPhotoImageContainer}>
+                  <Image
+                    source={{ uri: billPhotoModal.url }}
+                    style={styles.billPhotoImage}
+                    resizeMode="contain"
+                  />
+                </View>
+
+                <View style={styles.billPhotoActions}>
+                  <TouchableOpacity
+                    style={[styles.pdfButton, { flex: 1 }]}
+                    onPress={async () => {
+                      try {
+                        await downloadImage(billPhotoModal.url, `bill-${Date.now()}.jpg`);
+                      } catch (err: any) {
+                        Alert.alert('Download Failed', err?.message || 'Could not download bill image.');
+                      }
+                    }}
+                  >
+                    <MaterialIcons name="download" size={17} color={COLORS.white} />
+                    <Text style={styles.pdfButtonText}>Download</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.pdfButton, styles.whatsappButton, { flex: 1 }]}
+                    onPress={async () => {
+                      try {
+                        await shareImageOnWhatsApp(
+                          billPhotoModal.url,
+                          `bill-${Date.now()}.jpg`,
+                          `*Ayyanar Builders — Bill Photo*\n${billPhotoModal.title || ''}\n${billPhotoModal.subtitle || ''}`
+                        );
+                      } catch (err: any) {
+                        Alert.alert('Share Failed', err?.message || 'Could not share bill image.');
+                      }
+                    }}
+                  >
+                    <MaterialIcons name="share" size={17} color={COLORS.white} />
+                    <Text style={styles.pdfButtonText}>WhatsApp</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity
+                  style={[styles.detailCloseButton, { marginTop: SPACING.sm }]}
+                  onPress={() => setBillPhotoModal(null)}
+                >
+                  <Text style={styles.detailCloseButtonText}>Close</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -3688,5 +3861,87 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 14,
     fontWeight: '900',
+  },
+  viewBillBadgeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: COLORS.tint,
+    borderColor: COLORS.tintBorder,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 3.5,
+    borderRadius: BORDER_RADIUS.md,
+    marginLeft: 8,
+  },
+  viewBillBadgeText: {
+    color: COLORS.primary,
+    fontSize: 11.5,
+    fontWeight: '800',
+  },
+  billPhotoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.78)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.md,
+    zIndex: 1000,
+  },
+  billPhotoCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: BORDER_RADIUS.xl,
+    padding: SPACING.lg,
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '90%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  billPhotoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  billPhotoTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  billPhotoSubtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textLight,
+    marginTop: 2,
+  },
+  billPhotoCloseCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.steel,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  billPhotoImageContainer: {
+    width: '100%',
+    height: 320,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: '#0a0a0a',
+    marginVertical: SPACING.sm,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  billPhotoImage: {
+    width: '100%',
+    height: '100%',
+  },
+  billPhotoActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.xs,
   },
 });

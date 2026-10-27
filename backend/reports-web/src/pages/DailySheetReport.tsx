@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Banknote, Briefcase, Download, FileSpreadsheet, FileText, Receipt, Share2, Users, Wallet, X } from 'lucide-react';
+import { Banknote, Briefcase, Download, Eye, FileSpreadsheet, FileText, Receipt, Share2, Users, Wallet, X } from 'lucide-react';
 import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { adminApi } from '../api';
 import DataTable from '../components/DataTable';
@@ -26,6 +26,7 @@ export default function DailySheetReport() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [detail, setDetail] = useState<any>(null);
+  const [previewBill, setPreviewBill] = useState<{ url: string; title: string; subtitle?: string } | null>(null);
 
   const fetchSheets = (m = filterMode, d = date, f = from, t = to) => {
     setLoading(true);
@@ -490,20 +491,120 @@ export default function DailySheetReport() {
               <Receipt size={13} /> BILLS BREAKDOWN
             </div>
             <div style={{ border: '1px solid var(--border)', borderRadius: 10, overflow: 'hidden' }}>
-              {[
-                { label: 'Normal Bills', value: detail.bills_normal },
-                { label: 'GST Bills', value: detail.bills_gst },
-                { label: 'Credit / Under GST', value: detail.bills_credit },
-                { label: 'Vehicle & Rental', value: detail.vehicle_rental },
-              ].map((row, i) => (
-                <div
-                  key={row.label}
-                  style={{ fontSize: 12.5, fontWeight: 700, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', borderTop: i > 0 ? '1px solid var(--border)' : 'none' }}
-                >
-                  <span className="text-muted">{row.label}</span>
-                  <span>{rupees(row.value)}</span>
-                </div>
-              ))}
+              <div style={{ fontSize: 12.5, fontWeight: 700, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', background: 'var(--surface)' }}>
+                <span className="text-muted">Normal Bills Total</span>
+                <span>{rupees(detail.bills_normal)}</span>
+              </div>
+              {(detail.billsNormalList || []).map((b: any, bIdx: number) => {
+                const billImg = b.imageUrl || b.image_url || b.imageUri || b.image;
+                return (
+                  <div
+                    key={`n_${bIdx}`}
+                    style={{
+                      fontSize: 12,
+                      padding: '6px 12px 6px 24px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      borderTop: '1px solid var(--border)',
+                      background: 'var(--background)',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-light)' }}>
+                      ↳ {b.reason ? `${b.reason} — ` : ''}{rupees(b.amount)}
+                    </span>
+                    {billImg ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewBill({
+                            url: billImg,
+                            title: `${b.reason || 'Normal Bill'} — ${rupees(b.amount)}`,
+                            subtitle: `${detail.supervisor_name || 'Supervisor'} • ${detail.site_name || 'Site'} (${dateLabel(detail.date)})`,
+                          })
+                        }
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '3px 8px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          borderRadius: 6,
+                          border: '1px solid var(--tint-border)',
+                          background: 'var(--tint)',
+                          color: 'var(--primary)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Eye size={12} /> View Bill
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+
+              <div style={{ fontSize: 12.5, fontWeight: 700, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
+                <span className="text-muted">GST Bills Total</span>
+                <span>{rupees(detail.bills_gst)}</span>
+              </div>
+              {(detail.billsGstList || []).map((b: any, bIdx: number) => {
+                const billImg = b.imageUrl || b.image_url || b.imageUri || b.image;
+                return (
+                  <div
+                    key={`g_${bIdx}`}
+                    style={{
+                      fontSize: 12,
+                      padding: '6px 12px 6px 24px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      borderTop: '1px solid var(--border)',
+                      background: 'var(--background)',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-light)' }}>
+                      ↳ {b.reason ? `${b.reason} — ` : ''}{rupees(b.amount)}
+                    </span>
+                    {billImg ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPreviewBill({
+                            url: billImg,
+                            title: `${b.reason || 'GST Bill'} — ${rupees(b.amount)}`,
+                            subtitle: `${detail.supervisor_name || 'Supervisor'} • ${detail.site_name || 'Site'} (${dateLabel(detail.date)})`,
+                          })
+                        }
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '3px 8px',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          borderRadius: 6,
+                          border: '1px solid var(--tint-border)',
+                          background: 'var(--tint)',
+                          color: 'var(--primary)',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <Eye size={12} /> View Bill
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+
+              <div style={{ fontSize: 12.5, fontWeight: 700, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)' }}>
+                <span className="text-muted">Credit / Under GST</span>
+                <span>{rupees(detail.bills_credit)}</span>
+              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', borderTop: '1px solid var(--border)' }}>
+                <span className="text-muted">Vehicle & Rental</span>
+                <span>{rupees(detail.vehicle_rental)}</span>
+              </div>
             </div>
 
             <div className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -551,6 +652,48 @@ export default function DailySheetReport() {
                 </button>
               </div>
               <button className="btn secondary" onClick={() => setDetail(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {previewBill && (
+        <div className="modal-backdrop" onClick={() => setPreviewBill(null)} style={{ zIndex: 1100 }}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480, textAlign: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ textAlign: 'left' }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>{previewBill.title}</h3>
+                {previewBill.subtitle && <p className="sub" style={{ margin: 0 }}>{previewBill.subtitle}</p>}
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setPreviewBill(null)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ background: '#000', borderRadius: 8, padding: 8, marginBottom: 14, maxHeight: 380, display: 'flex', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}>
+              <img
+                src={previewBill.url}
+                alt={previewBill.title}
+                style={{ maxWidth: '100%', maxHeight: 360, objectFit: 'contain', borderRadius: 4 }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a
+                href={previewBill.url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn"
+                style={{ flex: 1, textDecoration: 'none', display: 'flex', justifyContent: 'center', alignItems: 'center' }}
+              >
+                Open Full Size
+              </a>
+              <button type="button" className="btn secondary" onClick={() => setPreviewBill(null)}>
                 Close
               </button>
             </div>
