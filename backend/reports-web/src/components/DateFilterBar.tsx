@@ -19,7 +19,16 @@ type Props = {
   enableMonth?: boolean;
 };
 
-const toIso = (d: Date) => d.toISOString().split('T')[0];
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// Format Date object in local time (avoiding UTC shift in positive timezones like IST)
+const toIso = (d: Date) => {
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${y}-${m}-${day}`;
+};
+
 const todayIso = () => toIso(new Date());
 const yesterdayIso = () => {
   const d = new Date();
@@ -33,7 +42,16 @@ const daysAgoIso = (n: number) => {
 };
 const firstDayOfMonthIso = () => {
   const d = new Date();
-  return toIso(new Date(d.getFullYear(), d.getMonth(), 1));
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-01`;
+};
+
+const getMonthRange = (yearMonthStr: string) => {
+  const [y, m] = yearMonthStr.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return {
+    first: `${y}-${pad2(m)}-01`,
+    last: `${y}-${pad2(m)}-${pad2(lastDay)}`,
+  };
 };
 
 // The standard "Single Date / Date Range / All Time" filter used across every
@@ -46,7 +64,20 @@ export default function DateFilterBar({ mode, onModeChange, date, onDateChange, 
           Single Date
         </button>
         {enableMonth && (
-          <button className={`chip${mode === 'month' ? ' active' : ''}`} onClick={() => onModeChange('month')}>
+          <button
+            className={`chip${mode === 'month' ? ' active' : ''}`}
+            onClick={() => {
+              onModeChange('month');
+              const ym = (date || todayIso()).slice(0, 7);
+              if (ym && ym.includes('-')) {
+                const { first, last } = getMonthRange(ym);
+                onDateChange(first);
+                onFromChange(first);
+                onToChange(last);
+                onApplyRange(first, last);
+              }
+            }}
+          >
             Month
           </button>
         )}
@@ -67,9 +98,7 @@ export default function DateFilterBar({ mode, onModeChange, date, onDateChange, 
               value={date.slice(0, 7)}
               onChange={(e) => {
                 if (!e.target.value) return;
-                const [y, m] = e.target.value.split('-').map(Number);
-                const first = toIso(new Date(y, m - 1, 1));
-                const last = toIso(new Date(y, m, 0));
+                const { first, last } = getMonthRange(e.target.value);
                 onDateChange(first);
                 onFromChange(first);
                 onToChange(last);

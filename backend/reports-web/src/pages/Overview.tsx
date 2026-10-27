@@ -20,14 +20,18 @@ import DateFilterBar, { DateFilterMode } from '../components/DateFilterBar';
 import PrintButton from '../components/PrintButton';
 import { buildPdfReport, downloadPdfReport, sharePdfReportOnWhatsApp } from '../services/pdfReport';
 
+const pad2 = (n: number) => String(n).padStart(2, '0');
 const rupees = (v: any) => `Rs ${Number(v || 0).toLocaleString('en-IN')}`;
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('en-IN');
-const todayIso = () => new Date().toISOString().split('T')[0];
+const todayIso = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+};
 const monthLabel = (period: string) => {
   const [year, month] = period.split('-');
   if (!month) return period;
   const names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${names[parseInt(month) - 1]} ${year}`;
+  return `${names[parseInt(month, 10) - 1]} ${year}`;
 };
 
 const PIE_COLORS = ['#8c0f16', '#cb202d', '#e23744', '#f2787d', '#f8b9bb', '#8c7576'];
@@ -44,7 +48,26 @@ export default function Overview() {
 
   const load = (m = mode, d = date, f = from, t = to) => {
     setLoading(true);
-    const [qFrom, qTo] = m === 'single' ? [d, d] : m === 'range' || m === 'month' ? [f, t] : [undefined, undefined];
+    let qFrom: string | undefined;
+    let qTo: string | undefined;
+
+    if (m === 'single') {
+      qFrom = d;
+      qTo = d;
+    } else if (m === 'month') {
+      const ym = (d || todayIso()).slice(0, 7);
+      const [y, mon] = ym.split('-').map(Number);
+      const lastDay = new Date(y, mon, 0).getDate();
+      qFrom = f || `${y}-${pad2(mon)}-01`;
+      qTo = t || `${y}-${pad2(mon)}-${pad2(lastDay)}`;
+    } else if (m === 'range') {
+      qFrom = f;
+      qTo = t;
+    } else {
+      qFrom = undefined;
+      qTo = undefined;
+    }
+
     Promise.all([accountsApi.getTotalSummary(qFrom, qTo), adminApi.getAnalytics(qFrom, qTo)])
       .then(([s, a]) => {
         setSummary(s);
@@ -171,7 +194,21 @@ export default function Overview() {
       <DateFilterBar
         enableMonth
         mode={mode}
-        onModeChange={(m) => { setMode(m); load(m, date, from, to); }}
+        onModeChange={(m) => {
+          setMode(m);
+          if (m === 'month') {
+            const ym = (date || todayIso()).slice(0, 7);
+            const [y, mon] = ym.split('-').map(Number);
+            const lastDay = new Date(y, mon, 0).getDate();
+            const f = `${y}-${pad2(mon)}-01`;
+            const t = `${y}-${pad2(mon)}-${pad2(lastDay)}`;
+            setFrom(f);
+            setTo(t);
+            load('month', date, f, t);
+          } else {
+            load(m, date, from, to);
+          }
+        }}
         date={date}
         onDateChange={(d) => { setDate(d); if (mode !== 'month') load('single', d, from, to); }}
         from={from}
