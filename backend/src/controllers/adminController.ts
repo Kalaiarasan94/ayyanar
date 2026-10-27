@@ -509,10 +509,11 @@ export const adminController = {
     }
   },
 
-  // Wipes all operational/transactional records while keeping user credentials (users table) completely intact
+  // Wipes operational/transactional records while keeping user credentials (users table) completely intact.
+  // Supports scope: 'month' (specific month & year), 'year' (specific year), or 'all' (complete wipe).
   clearOperationalData: async (req: Request, res: Response): Promise<void> => {
     try {
-      const { password } = req.body;
+      const { password, scope = 'all', year, month } = req.body;
       const MASTER_PASSWORD = 'Kirtheesh@inwora';
 
       if (!password || password !== MASTER_PASSWORD) {
@@ -522,36 +523,134 @@ export const adminController = {
 
       await db.query('SET FOREIGN_KEY_CHECKS = 0');
 
-      const tables = [
-        'ledger',
-        'daily_sheets',
-        'attendance_categories',
-        'site_allocations',
-        'attendance',
-        'supervisor_attendance',
-        'site_photos',
-        'driver_records',
-        'driver_bills',
-        'account_transactions',
-        'leads',
-        'workers',
-        'sites',
-      ];
+      let responseMsg = '';
 
-      for (const table of tables) {
-        try {
-          await db.query(`DELETE FROM \`${table}\``);
-          await db.query(`ALTER TABLE \`${table}\` AUTO_INCREMENT = 1`);
-        } catch (tableErr: any) {
-          console.warn(`Warning clearing table ${table}:`, tableErr.message);
+      if (scope === 'month') {
+        const y = parseInt(String(year), 10);
+        const m = parseInt(String(month), 10);
+        if (!y || !m || m < 1 || m > 12) {
+          await db.query('SET FOREIGN_KEY_CHECKS = 1');
+          res.status(400).json({ success: false, message: 'Valid month (1-12) and year are required.' });
+          return;
         }
+
+        const lastDay = new Date(y, m, 0).getDate();
+        const fromDate = `${y}-${String(m).padStart(2, '0')}-01`;
+        const toDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+        // Tables to clear by date range (accounts overview, daybook, daily sheets, expenses, bills, trips)
+        const tablesWithDate = [
+          'account_transactions',
+          'daily_sheets',
+          'ledger',
+          'driver_records',
+          'driver_bills',
+          'attendance',
+          'supervisor_attendance',
+        ];
+
+        for (const table of tablesWithDate) {
+          try {
+            await db.query(`DELETE FROM \`${table}\` WHERE \`date\` >= ? AND \`date\` <= ?`, [fromDate, toDate]);
+          } catch (tableErr: any) {
+            console.warn(`Warning clearing table ${table} for month:`, tableErr.message);
+          }
+        }
+
+        try {
+          await db.query(`DELETE FROM \`site_photos\` WHERE DATE(\`created_at\`) >= ? AND DATE(\`created_at\`) <= ?`, [fromDate, toDate]);
+        } catch (err: any) {
+          console.warn('Warning clearing site_photos for month:', err.message);
+        }
+
+        try {
+          await db.query(`DELETE FROM \`attendance_categories\` WHERE \`date\` >= ? AND \`date\` <= ?`, [fromDate, toDate]);
+        } catch (err: any) {
+          console.warn('Warning clearing attendance_categories for month:', err.message);
+        }
+
+        const monthNames = [
+          'January', 'February', 'March', 'April', 'May', 'June',
+          'July', 'August', 'September', 'October', 'November', 'December',
+        ];
+        responseMsg = `All operational data for ${monthNames[m - 1]} ${y} (Accounts Overview, Transactions, Daily Sheets, Bills, Expenses) has been cleared successfully.`;
+      } else if (scope === 'year') {
+        const y = parseInt(String(year), 10);
+        if (!y) {
+          await db.query('SET FOREIGN_KEY_CHECKS = 1');
+          res.status(400).json({ success: false, message: 'Valid year is required.' });
+          return;
+        }
+
+        const fromDate = `${y}-01-01`;
+        const toDate = `${y}-12-31`;
+
+        const tablesWithDate = [
+          'account_transactions',
+          'daily_sheets',
+          'ledger',
+          'driver_records',
+          'driver_bills',
+          'attendance',
+          'supervisor_attendance',
+        ];
+
+        for (const table of tablesWithDate) {
+          try {
+            await db.query(`DELETE FROM \`${table}\` WHERE \`date\` >= ? AND \`date\` <= ?`, [fromDate, toDate]);
+          } catch (tableErr: any) {
+            console.warn(`Warning clearing table ${table} for year:`, tableErr.message);
+          }
+        }
+
+        try {
+          await db.query(`DELETE FROM \`site_photos\` WHERE DATE(\`created_at\`) >= ? AND DATE(\`created_at\`) <= ?`, [fromDate, toDate]);
+        } catch (err: any) {
+          console.warn('Warning clearing site_photos for year:', err.message);
+        }
+
+        try {
+          await db.query(`DELETE FROM \`attendance_categories\` WHERE \`date\` >= ? AND \`date\` <= ?`, [fromDate, toDate]);
+        } catch (err: any) {
+          console.warn('Warning clearing attendance_categories for year:', err.message);
+        }
+
+        responseMsg = `All operational data for year ${y} (Accounts Overview, Transactions, Daily Sheets, Bills, Expenses) has been cleared successfully.`;
+      } else {
+        // Complete Overall Wipe
+        const tables = [
+          'ledger',
+          'daily_sheets',
+          'attendance_categories',
+          'site_allocations',
+          'attendance',
+          'supervisor_attendance',
+          'site_photos',
+          'driver_records',
+          'driver_bills',
+          'account_transactions',
+          'leads',
+          'workers',
+          'sites',
+        ];
+
+        for (const table of tables) {
+          try {
+            await db.query(`DELETE FROM \`${table}\``);
+            await db.query(`ALTER TABLE \`${table}\` AUTO_INCREMENT = 1`);
+          } catch (tableErr: any) {
+            console.warn(`Warning clearing table ${table}:`, tableErr.message);
+          }
+        }
+
+        responseMsg = 'All operational data across all time cleared successfully. User credentials remain active.';
       }
 
       await db.query('SET FOREIGN_KEY_CHECKS = 1');
 
       res.status(200).json({
         success: true,
-        message: 'All operational data cleared successfully. User credentials remain active.',
+        message: responseMsg,
       });
     } catch (error: any) {
       try {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, Eye, EyeOff, Loader2, Lock, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Calendar, Eye, EyeOff, Layers, Loader2, Trash2, X } from 'lucide-react';
 import { adminApi } from '../api';
 
 interface ClearDataModalProps {
@@ -7,20 +7,47 @@ interface ClearDataModalProps {
   onClose: () => void;
 }
 
+type ClearScope = 'month' | 'year' | 'all';
+
+const MONTHS = [
+  { value: 1, label: 'January' },
+  { value: 2, label: 'February' },
+  { value: 3, label: 'March' },
+  { value: 4, label: 'April' },
+  { value: 5, label: 'May' },
+  { value: 6, label: 'June' },
+  { value: 7, label: 'July' },
+  { value: 8, label: 'August' },
+  { value: 9, label: 'September' },
+  { value: 10, label: 'October' },
+  { value: 11, label: 'November' },
+  { value: 12, label: 'December' },
+];
+
 export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps) {
+  const currentDate = new Date();
+  const [scope, setScope] = useState<ClearScope>('month');
+  const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
+
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const currentYearNum = currentDate.getFullYear();
+  const availableYears = Array.from({ length: 6 }, (_, i) => currentYearNum - 3 + i);
+
+  const selectedMonthName = MONTHS.find((m) => m.value === selectedMonth)?.label || 'Month';
 
   const handleClose = () => {
     if (loading) return;
     setPassword('');
     setError(null);
-    setSuccess(false);
+    setSuccessMsg(null);
     onClose();
   };
 
@@ -35,9 +62,15 @@ export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps)
     setError(null);
 
     try {
-      const res = await adminApi.clearOperationalData(password);
+      const res = await adminApi.clearOperationalData({
+        password,
+        scope,
+        year: selectedYear,
+        month: selectedMonth,
+      });
+
       if (res.success) {
-        setSuccess(true);
+        setSuccessMsg(res.message || 'Data cleared successfully!');
         setTimeout(() => {
           window.location.reload();
         }, 1500);
@@ -51,15 +84,21 @@ export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps)
     }
   };
 
+  const getActionLabel = () => {
+    if (scope === 'month') return `Clear ${selectedMonthName} ${selectedYear} Data`;
+    if (scope === 'year') return `Clear Year ${selectedYear} Data`;
+    return 'Clear All Operational Data';
+  };
+
   return (
     <div className="modal-backdrop" onClick={handleClose}>
-      <div className="modal-card clear-data-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+      <div className="modal-card clear-data-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div
               style={{
-                width: 38,
-                height: 38,
+                width: 40,
+                height: 40,
                 borderRadius: 10,
                 background: 'rgba(226, 55, 68, 0.12)',
                 display: 'flex',
@@ -72,7 +111,7 @@ export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps)
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: 18, color: '#111827' }}>Clear Operational Data</h3>
-              <p className="sub" style={{ margin: 0 }}>Reset database records</p>
+              <p className="sub" style={{ margin: 0 }}>Reset reports & accounts records</p>
             </div>
           </div>
           <button
@@ -86,13 +125,116 @@ export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps)
           </button>
         </div>
 
+        {/* Scope Selector: Month, Year, All */}
+        <div style={{ marginBottom: 14 }}>
+          <label className="field-label" style={{ marginTop: 0 }}>
+            Choose Timeframe to Clear
+          </label>
+          <div className="chip-row" style={{ gap: 8, marginTop: 4 }}>
+            <button
+              type="button"
+              className={`chip ${scope === 'month' ? 'active' : ''}`}
+              onClick={() => setScope('month')}
+              disabled={loading}
+              style={{ cursor: 'pointer', fontWeight: 700 }}
+            >
+              <Calendar size={14} style={{ marginRight: 6 }} />
+              By Month
+            </button>
+            <button
+              type="button"
+              className={`chip ${scope === 'year' ? 'active' : ''}`}
+              onClick={() => setScope('year')}
+              disabled={loading}
+              style={{ cursor: 'pointer', fontWeight: 700 }}
+            >
+              <Calendar size={14} style={{ marginRight: 6 }} />
+              By Year
+            </button>
+            <button
+              type="button"
+              className={`chip ${scope === 'all' ? 'active' : ''}`}
+              onClick={() => setScope('all')}
+              disabled={loading}
+              style={{ cursor: 'pointer', fontWeight: 700 }}
+            >
+              <Layers size={14} style={{ marginRight: 6 }} />
+              Overall (All Time)
+            </button>
+          </div>
+        </div>
+
+        {/* Month & Year Pickers */}
+        {scope === 'month' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            <div>
+              <label className="field-label" style={{ marginTop: 0 }}>
+                Month
+              </label>
+              <select
+                className="select"
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                disabled={loading}
+                style={{ width: '100%' }}
+              >
+                {MONTHS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="field-label" style={{ marginTop: 0 }}>
+                Year
+              </label>
+              <select
+                className="select"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                disabled={loading}
+                style={{ width: '100%' }}
+              >
+                {availableYears.map((yr) => (
+                  <option key={yr} value={yr}>
+                    {yr}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {scope === 'year' && (
+          <div style={{ marginBottom: 14 }}>
+            <label className="field-label" style={{ marginTop: 0 }}>
+              Select Year
+            </label>
+            <select
+              className="select"
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              disabled={loading}
+              style={{ width: '100%' }}
+            >
+              {availableYears.map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Warning / Impact Box */}
         <div
           style={{
             background: 'rgba(226, 55, 68, 0.06)',
             border: '1px solid rgba(226, 55, 68, 0.25)',
             borderRadius: 10,
             padding: '12px 14px',
-            margin: '12px 0 16px',
+            marginBottom: 16,
             fontSize: 13,
             lineHeight: 1.5,
             color: '#7f1d1d',
@@ -100,13 +242,40 @@ export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps)
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, marginBottom: 4 }}>
             <AlertTriangle size={16} />
-            <span>Permanent Operational Reset</span>
+            <span>
+              {scope === 'month'
+                ? `Clear Data for ${selectedMonthName} ${selectedYear}`
+                : scope === 'year'
+                ? `Clear Data for Year ${selectedYear}`
+                : 'Permanent Overall Operational Reset'}
+            </span>
           </div>
+
           <div>
-            This action wipes all <strong>transactions, daily sheets, ledger bills, attendance, driver logs, site photos, leads, and sites</strong>.
+            {scope === 'month' ? (
+              <>
+                Clears all <strong>accounts overview, cash input/output, daily sheets, expenses, site bills, and driver logs</strong> for{' '}
+                <strong>
+                  {selectedMonthName} {selectedYear}
+                </strong>
+                .
+              </>
+            ) : scope === 'year' ? (
+              <>
+                Clears all <strong>accounts overview, cash input/output, daily sheets, expenses, site bills, and driver logs</strong> for the entire year{' '}
+                <strong>{selectedYear}</strong>.
+              </>
+            ) : (
+              <>
+                Wipes all <strong>historical transactions, daily sheets, ledger bills, attendance, driver logs, site photos, leads, and sites</strong> across all time.
+              </>
+            )}
           </div>
+
           <div style={{ marginTop: 6, color: '#15803d', fontWeight: 600 }}>
-            ✓ Staff login credentials & passwords will NOT be touched.
+            {scope === 'all'
+              ? '✓ Staff login credentials & passwords will NOT be touched.'
+              : '✓ Sites, staff accounts, workers, and other months remain completely safe & untouched.'}
           </div>
         </div>
 
@@ -126,7 +295,7 @@ export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps)
           </div>
         )}
 
-        {success ? (
+        {successMsg ? (
           <div
             style={{
               background: '#dcfce7',
@@ -138,20 +307,20 @@ export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps)
               fontWeight: 700,
             }}
           >
-            ✓ Operational data cleared successfully!
+            ✓ {successMsg}
             <div style={{ fontSize: 12, fontWeight: 400, marginTop: 4 }}>Reloading dashboard...</div>
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
             <label className="field-label" htmlFor="clear-data-password-input">
-              Enter Password to Confirm
+              Enter Admin Password to Confirm
             </label>
             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
               <input
                 id="clear-data-password-input"
                 type={showPassword ? 'text' : 'password'}
                 className="input"
-                placeholder="Enter password"
+                placeholder="Enter admin password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
@@ -217,7 +386,7 @@ export default function ClearDataModal({ isOpen, onClose }: ClearDataModalProps)
                 ) : (
                   <>
                     <Trash2 size={16} />
-                    <span>Clear All Data</span>
+                    <span>{getActionLabel()}</span>
                   </>
                 )}
               </button>

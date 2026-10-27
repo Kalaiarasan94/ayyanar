@@ -67,11 +67,22 @@ export const adminApi = {
     const q = typeof params === 'string' ? { date: params } : params;
     return request<any[]>(`/daily-sheets${qs(q || {})}`);
   },
-  clearOperationalData: (password: string) =>
-    request<{ success: boolean; message?: string }>('/admin/clear-data', {
+  clearOperationalData: (
+    params:
+      | string
+      | {
+          password: string;
+          scope?: 'month' | 'year' | 'all';
+          year?: number | string;
+          month?: number | string;
+        }
+  ) => {
+    const payload = typeof params === 'string' ? { password: params, scope: 'all' } : params;
+    return request<{ success: boolean; message?: string }>('/admin/clear-data', {
       method: 'POST',
-      body: JSON.stringify({ password }),
-    }),
+      body: JSON.stringify(payload),
+    });
+  },
 };
 
 export const fieldApi = {
