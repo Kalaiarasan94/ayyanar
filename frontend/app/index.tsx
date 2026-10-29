@@ -20,6 +20,7 @@ import ScreenWrapper from './components/ScreenWrapper';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
 import { api as authService } from '../services/api';
 import InstallAppButton from '../components/InstallAppButton';
+import UpdateAppButton from '../components/UpdateAppButton';
 import {
   getQuickUnlockProfile,
   saveQuickUnlockProfile,
@@ -534,8 +535,9 @@ export default function LoginScreen() {
                 </View>
 
                 {/* PWA Button */}
-                <View style={{ marginTop: SPACING.md }}>
+                <View style={{ marginTop: SPACING.md, gap: 8 }}>
                   <InstallAppButton variant="solid" />
+                  <UpdateAppButton variant="solid" />
                 </View>
               </View>
             ) : (
@@ -756,8 +758,9 @@ export default function LoginScreen() {
                 )}
 
                 {/* Install PWA Button if available */}
-                <View style={{ marginTop: SPACING.md }}>
+                <View style={{ marginTop: SPACING.md, gap: 8 }}>
                   <InstallAppButton variant="solid" />
+                  <UpdateAppButton variant="solid" />
                 </View>
               </View>
             )}

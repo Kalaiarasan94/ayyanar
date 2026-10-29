@@ -3,12 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <!-- Mobile PWA Viewport: prevent accidental zoom, fit notch/safe-areas, and resize with virtual keyboard -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- Mobile PWA Viewport: prevent accidental zoom, fit notch/safe-areas -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     
     <title>%WEB_TITLE%</title>
     <meta name="description" content="Ayyanar Infra Engineering — Construction CRM for sites, staff, drivers and accounts." />
     
+    <!-- Anti-caching directives to guarantee instantaneous code updates -->
+    <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta httpEquiv="Pragma" content="no-cache" />
+    <meta httpEquiv="Expires" content="0" />
+
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
     
@@ -31,20 +36,19 @@
     
     <!-- PWA Styles & Responsive Shell -->
     <style id="expo-reset">
-      /* Full height root setup */
+      /* Full height root setup without locking dvh to prevent virtual keyboard flickering */
       html, body {
         width: 100%;
+        min-height: 100%;
         height: 100%;
-        height: 100dvh;
         margin: 0;
         padding: 0;
         overscroll-behavior-y: none;
         -webkit-overflow-scrolling: touch;
         -webkit-tap-highlight-color: transparent;
-        touch-action: manipulation;
       }
       body {
-        overflow: hidden;
+        overflow-x: hidden;
         background: #F7F5F5;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       }
@@ -52,12 +56,10 @@
         display: flex;
         flex-direction: column;
         width: 100%;
-        height: 100%;
-        height: 100dvh;
         min-height: 100%;
+        height: 100%;
         flex: 1;
         background: #F7F5F5;
-        overflow: hidden;
       }
 
       /* iPhone safe area insets variables */
@@ -71,12 +73,12 @@
       /* Universal Mobile Web Input Improvements:
          - 16px font-size prevents iOS Safari from auto-zooming on focus
          - text-size-adjust: 100% prevents mobile font inflation
-         - touch-action: manipulation eliminates 300ms tap delay
+         - touch-action: auto ensures virtual keyboard opens and stays open on focus
       */
       input, textarea, select {
         font-size: 16px !important;
         -webkit-text-size-adjust: 100%;
-        touch-action: manipulation;
+        touch-action: auto !important;
       }
 
       /* Smooth momentum scrolling for all scroll containers */
@@ -140,13 +142,29 @@
       }
     </style>
 
-    <!-- Safe Service Worker Registration -->
+    <!-- Safe Service Worker Registration with updateViaCache: 'none' -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', function() {
-          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
             .then(function(reg) {
               console.log('[PWA] Service Worker registered with scope:', reg.scope);
+              window.__pwaRegistration = reg;
+              if (reg.waiting) {
+                window.__pwaWaitingWorker = reg.waiting;
+                window.dispatchEvent(new CustomEvent('pwa-update-ready'));
+              }
+              reg.addEventListener('updatefound', function() {
+                var installingWorker = reg.installing;
+                if (!installingWorker) return;
+                installingWorker.addEventListener('statechange', function() {
+                  if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    window.__pwaWaitingWorker = installingWorker;
+                    window.dispatchEvent(new CustomEvent('pwa-update-ready'));
+                  }
+                });
+              });
+              reg.update().catch(function() {});
             })
             .catch(function(err) {
               console.warn('[PWA] Service Worker registration failed:', err);

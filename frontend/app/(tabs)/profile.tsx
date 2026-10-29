@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, BORDER_RADIUS, SPACING } from '../../constants/Theme';
 import LogoutButton from '../../components/LogoutButton';
 import InstallAppButton from '../../components/InstallAppButton';
+import UpdateAppButton from '../../components/UpdateAppButton';
 import AppBackground from '../components/AppBackground';
 import { api as authService } from '../../services/api';
 import {
@@ -432,7 +433,8 @@ export default function ProfileScreen() {
 
         {/* PWA Application */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>PWA Application</Text>
+          <Text style={styles.sectionTitle}>PWA Application & Updates</Text>
+          <UpdateAppButton variant="menu" />
           <InstallAppButton variant="menu" />
         </View>
 

@@ -238,7 +238,11 @@ export default function UploadBill() {
   return (
     <View style={styles.outerContainer}>
       <AppBackground />
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         
         <View style={styles.addCard}>
           <Text style={styles.sectionTitle}>ADD NEW BILL</Text>

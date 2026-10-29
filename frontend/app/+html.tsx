@@ -16,6 +16,11 @@ export default function Root({ children }: PropsWithChildren) {
         <title>Ayyanar Construction CRM</title>
         <meta name="description" content="Ayyanar Infra Engineering — Construction CRM for sites, staff, drivers and accounts." />
         
+        {/* Anti-caching directives to guarantee instantaneous code updates */}
+        <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+        <meta httpEquiv="Pragma" content="no-cache" />
+        <meta httpEquiv="Expires" content="0" />
+
         {/* Force light color scheme so mobile browsers never inject dark-mode black boxes */}
         <meta name="color-scheme" content="light" />
         
@@ -42,15 +47,31 @@ export default function Root({ children }: PropsWithChildren) {
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: responsiveShellCss }} />
 
-        {/* Service Worker Registration */}
+        {/* Service Worker Registration with updateViaCache: 'none' */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+                  navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' })
                     .then(function(reg) {
                       console.log('[PWA] Service Worker registered with scope:', reg.scope);
+                      window.__pwaRegistration = reg;
+                      if (reg.waiting) {
+                        window.__pwaWaitingWorker = reg.waiting;
+                        window.dispatchEvent(new CustomEvent('pwa-update-ready'));
+                      }
+                      reg.addEventListener('updatefound', function() {
+                        var installingWorker = reg.installing;
+                        if (!installingWorker) return;
+                        installingWorker.addEventListener('statechange', function() {
+                          if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                            window.__pwaWaitingWorker = installingWorker;
+                            window.dispatchEvent(new CustomEvent('pwa-update-ready'));
+                          }
+                        });
+                      });
+                      reg.update().catch(function() {});
                     })
                     .catch(function(err) {
                       console.warn('[PWA] Service Worker registration failed:', err);
@@ -112,7 +133,7 @@ const responsiveShellCss = `
   input, textarea, select {
     font-size: 16px !important;
     -webkit-text-size-adjust: 100%;
-    touch-action: manipulation;
+    touch-action: auto !important;
     outline: none !important;
     outline-style: none !important;
     box-shadow: none !important;

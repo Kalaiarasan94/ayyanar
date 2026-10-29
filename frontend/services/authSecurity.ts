@@ -184,7 +184,7 @@ export const verifyBiometricOnDevice = async (
         const rawId = base64UrlToBuffer(credentialId.trim());
         getOptions.publicKey!.allowCredentials = [
           {
-            id: rawId,
+            id: rawId as BufferSource,
             type: 'public-key',
           },
         ];

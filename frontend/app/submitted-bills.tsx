@@ -187,6 +187,7 @@ export default function SubmittedBills() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#E23744" />}
       >
         <View style={styles.card}>

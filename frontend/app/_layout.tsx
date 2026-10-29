@@ -12,6 +12,8 @@ SplashScreen.preventAutoHideAsync().catch(() => {
   /* reloading the app might cause some errors here, safe to ignore */
 });
 
+const renderHeaderRight = () => <HeaderRightActions />;
+
 export default function RootLayout() {
   useEffect(() => {
     // Hide splash screen after 500ms to ensure everything is rendered
@@ -29,7 +31,7 @@ export default function RootLayout() {
           headerStyle: { backgroundColor: COLORS.headerBackground },
           headerTintColor: COLORS.white,
           headerTitleStyle: { fontWeight: '800' },
-          headerRight: () => <HeaderRightActions />,
+          headerRight: renderHeaderRight,
           contentStyle: { backgroundColor: COLORS.background },
         }}
       >

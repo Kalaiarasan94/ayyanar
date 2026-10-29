@@ -487,7 +487,11 @@ export default function AttendanceScreen() {
   const renderDashboard = () => {
     const monthName = new Date().toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.addCard}>
           <Text style={styles.sectionTitle}>{monthName.toUpperCase()}</Text>
           <View style={styles.dashboardHero}>
@@ -528,7 +532,11 @@ export default function AttendanceScreen() {
     const totalPresent = categoriesList.reduce((s, c) => s + (parseInt(c.presentCount) || 0), 0);
     const totalAbsent = categoriesList.reduce((s, c) => s + (parseInt(c.absentCount) || 0), 0);
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {/* Site & date */}
         <View style={styles.addCard}>
           <Text style={styles.sectionTitle}>SITE & DATE</Text>
@@ -676,7 +684,11 @@ export default function AttendanceScreen() {
   };
 
   const renderSubmittedAttendance = () => (
-    <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      keyboardShouldPersistTaps="handled"
+    >
       <View style={styles.subTabRow}>
         <TouchableOpacity
           style={[styles.subTabButton, submittedSubTab === 'supervisor' && styles.subTabButtonActive]}
@@ -803,7 +815,11 @@ export default function AttendanceScreen() {
 
   const renderSupervisorTab = () => {
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.cardGlass}>
           <Text style={styles.label}>SELECT CURRENT PROJECT SITE</Text>
           {sites.length > 0 ? (

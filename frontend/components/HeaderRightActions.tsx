@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import LogoutButton from './LogoutButton';
 import InstallAppButton from './InstallAppButton';
+import UpdateAppButton from './UpdateAppButton';
 import { COLORS, BORDER_RADIUS } from '../constants/Theme';
 
 export default function HeaderRightActions() {
@@ -11,6 +12,7 @@ export default function HeaderRightActions() {
 
   return (
     <View style={styles.container}>
+      <UpdateAppButton variant="header" />
       <InstallAppButton variant="header" />
       <TouchableOpacity
         style={styles.profileBtn}

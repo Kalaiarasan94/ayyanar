@@ -7,8 +7,9 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "version:bump": "node scripts/generate-build-version.js",
     "build:reports": "npm --prefix ../backend/reports-web run build && mkdir -p public/reports && cp -r ../backend/reports-web/dist/* public/reports/",
-    "build:web": "npm run build:reports && expo export -p web",
+    "build:web": "npm run version:bump && npm run build:reports && expo export -p web && node scripts/generate-build-version.js --sync-dist",
     "export": "npm run build:web"
   },
   "dependencies": {
