@@ -16,6 +16,7 @@ export interface PWAState {
   isStandalone: boolean;
   isUpdateAvailable: boolean;
   isCheckingUpdate: boolean;
+  isUpdating: boolean;
   isBannerDismissed: boolean;
   currentBuildId: string;
   latestBuildId: string | null;
@@ -230,6 +231,11 @@ export async function checkForUpdate(force = false): Promise<{
           if (swRegistration) {
             swRegistration.update().catch(() => {});
           }
+        } else if (serverBuildId && serverBuildId === CLIENT_BUILD_ID) {
+          // Version matches! Only report update if an unhandled waiting worker exists
+          if (!waitingWorker && (!swRegistration || !swRegistration.waiting)) {
+            isUpdateAvailable = false;
+          }
         }
       }
     } catch (verErr) {
@@ -241,6 +247,7 @@ export async function checkForUpdate(force = false): Promise<{
       return { hasUpdate: true, message: 'New update is available!' };
     }
 
+    notifyListeners();
     return { hasUpdate: false, message: 'Application is running the latest version.' };
   } finally {
     if (force) {
@@ -251,78 +258,44 @@ export async function checkForUpdate(force = false): Promise<{
 }
 
 /**
- * Applies the waiting service worker update and reloads the application exactly once.
- * Protected against infinite reload loops.
+ * Applies the waiting service worker update and reloads the application.
+ * Automatically clears CacheStorage and uses timestamp query parameter
+ * to prevent browsers from serving stale cached index.html or JS bundles.
  */
-export function applyPWAUpdate(): void {
+export async function applyPWAUpdate(): Promise<void> {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return;
 
   if (refreshing) {
     console.log('[PWA] Update already in progress...');
     return;
   }
+  refreshing = true;
+  notifyListeners();
 
-  console.log('[PWA] Applying application update...');
+  console.log('[PWA] Applying application update with complete cache flush...');
 
-  // Set safety latch in sessionStorage to prevent infinite reload loops
+  // Set safety latch in sessionStorage to prevent instant re-prompting on reload
   try {
-    const lastReloadStr = window.sessionStorage?.getItem('ayyanar_pwa_updating_at');
-    if (lastReloadStr) {
-      const lastReload = parseInt(lastReloadStr, 10);
-      if (Date.now() - lastReload < 5000) {
-        console.warn('[PWA] Prevented rapid consecutive reload loop.');
-        return;
-      }
-    }
     window.sessionStorage?.setItem('ayyanar_pwa_updating_at', Date.now().toString());
+    window.sessionStorage?.setItem(
+      'ayyanar_pwa_update_snooze_until',
+      (Date.now() + 60000).toString()
+    );
   } catch (_) {}
 
-  // 1. If we have a waiting worker, command it to skipWaiting
-  if (waitingWorker) {
-    console.log('[PWA] Posting SKIP_WAITING to waiting worker');
-    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
-
-    // Fallback safety: If controllerchange does not fire within 2.5s, force reload
-    setTimeout(() => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    }, 2500);
-    return;
-  }
-
-  // 2. If swRegistration has a waiting worker that wasn't assigned yet
-  if (swRegistration && swRegistration.waiting) {
-    console.log('[PWA] Posting SKIP_WAITING to swRegistration.waiting');
-    swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-    setTimeout(() => {
-      if (!refreshing) {
-        refreshing = true;
-        window.location.reload();
-      }
-    }, 2500);
-    return;
-  }
-
-  // 3. If version mismatch was detected but no waiting worker exists, hard reload
-  forceAppUpdate();
-}
-
-/**
- * Force clear all web caches (CacheStorage, service workers) and hard reload the page.
- * Guarantees that any browser-level caching is immediately discarded.
- */
-export async function forceAppUpdate(): Promise<void> {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-
-  if (refreshing) return;
-  refreshing = true;
-
-  console.log('[PWA] Force clearing caches and updating app...');
-
   try {
-    // 1. Tell all service workers to clear cache & skip waiting
+    // 1. Post SKIP_WAITING to waiting workers
+    if (waitingWorker) {
+      console.log('[PWA] Posting SKIP_WAITING to waiting worker');
+      waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+    }
+
+    if (swRegistration && swRegistration.waiting) {
+      console.log('[PWA] Posting SKIP_WAITING to swRegistration.waiting');
+      swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
+
+    // 2. Post CLEAR_CACHE to active workers
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
       for (const reg of regs) {
@@ -331,21 +304,68 @@ export async function forceAppUpdate(): Promise<void> {
       }
     }
 
-    // 2. Clear browser CacheStorage
+    // 3. Purge all CacheStorage entries to ensure old hashed bundles are discarded
     if ('caches' in window) {
       const cacheNames = await caches.keys();
-      await Promise.all(
-        cacheNames
-          .filter((name) => name.startsWith('ayyanar-crm-'))
-          .map((name) => caches.delete(name))
-      );
+      await Promise.all(cacheNames.map((name) => caches.delete(name)));
+      console.log('[PWA] Cleared CacheStorage stores:', cacheNames);
     }
+  } catch (err) {
+    console.warn('[PWA] Cleanup notice during update:', err);
+  }
+
+  // 4. Force browser navigation with cache-busting timestamp parameter
+  setTimeout(() => {
+    const targetUrl = new URL(window.location.href);
+    targetUrl.searchParams.set('reload', Date.now().toString());
+    window.location.replace(targetUrl.toString());
+  }, 400);
+}
+
+/**
+ * Force clear all web caches (CacheStorage, service workers) and hard reload the page.
+ * Unregisters service workers and busts cache to guarantee a completely clean reload.
+ */
+export async function forceAppUpdate(): Promise<void> {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+  if (refreshing) return;
+  refreshing = true;
+  notifyListeners();
+
+  console.log('[PWA] Force clearing all caches, unregistering SW, and hard reloading...');
+
+  try {
+    // 1. Tell all service workers to clear cache and unregister
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) {
+        try {
+          if (reg.active) reg.active.postMessage({ type: 'CLEAR_CACHE' });
+          if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+          await reg.unregister();
+        } catch (_) {}
+      }
+    }
+
+    // 2. Clear browser CacheStorage (delete all caches)
+    if ('caches' in window) {
+      const cacheNames = await caches.keys();
+      await Promise.all(cacheNames.map((name) => caches.delete(name)));
+      console.log('[PWA] Purged all CacheStorage caches:', cacheNames);
+    }
+
+    // 3. Clear session storage flags
+    try {
+      window.sessionStorage?.removeItem('ayyanar_pwa_updating_at');
+      window.sessionStorage?.removeItem('ayyanar_pwa_update_snooze_until');
+    } catch (_) {}
   } catch (err) {
     console.warn('[PWA] Error clearing cache during force update:', err);
   }
 
-  // 3. Force page reload with cache busting query parameter
-  const targetUrl = new URL(window.location.href);
+  // 4. Force hard reload with timestamp query param
+  const targetUrl = new URL(window.location.origin + window.location.pathname);
   targetUrl.searchParams.set('reload', Date.now().toString());
   window.location.replace(targetUrl.toString());
 }
@@ -498,10 +518,12 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
 
     // Listen for controllerchange after skipWaiting
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      console.log('[PWA] New controller active');
+      console.log('[PWA] New controller active, reloading with cache-busting timestamp');
       if (!refreshing) {
         refreshing = true;
-        window.location.reload();
+        const targetUrl = new URL(window.location.href);
+        targetUrl.searchParams.set('reload', Date.now().toString());
+        window.location.replace(targetUrl.toString());
       }
     });
   }
@@ -557,6 +579,7 @@ export function usePWA(): PWAState & {
     isStandalone: isInstalled,
     isUpdateAvailable: isUpdateAvailable || !!waitingWorker,
     isCheckingUpdate,
+    isUpdating: refreshing,
     isBannerDismissed,
     currentBuildId,
     latestBuildId,

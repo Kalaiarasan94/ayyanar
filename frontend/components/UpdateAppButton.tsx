@@ -27,6 +27,7 @@ export default function UpdateAppButton({
     isSupported,
     isUpdateAvailable,
     isCheckingUpdate,
+    isUpdating,
     applyUpdate,
     checkForUpdate,
     forceAppUpdate,
@@ -93,14 +94,21 @@ export default function UpdateAppButton({
       return (
         <TouchableOpacity
           onPress={applyUpdate}
+          disabled={isUpdating}
           activeOpacity={0.8}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          style={[styles.headerUpdateButton, style]}
+          style={[styles.headerUpdateButton, isUpdating && { opacity: 0.75 }, style]}
           accessibilityLabel="Update App"
         >
-          <View style={styles.pulseDot} />
-          <MaterialIcons name="system-update" size={15} color="#FFFFFF" />
-          <Text style={styles.headerUpdateText}>Update</Text>
+          {isUpdating ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <>
+              <View style={styles.pulseDot} />
+              <MaterialIcons name="system-update" size={15} color="#FFFFFF" />
+              <Text style={styles.headerUpdateText}>Update</Text>
+            </>
+          )}
         </TouchableOpacity>
       );
     }
@@ -109,13 +117,13 @@ export default function UpdateAppButton({
       <TouchableOpacity
         onPress={handlePress}
         onLongPress={handleForceReload}
-        disabled={checking || isCheckingUpdate}
+        disabled={checking || isCheckingUpdate || isUpdating}
         activeOpacity={0.7}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         style={[styles.headerSyncButton, style]}
         accessibilityLabel="Check for updates or force refresh"
       >
-        {checking || isCheckingUpdate ? (
+        {checking || isCheckingUpdate || isUpdating ? (
           <ActivityIndicator size="small" color="#FFFFFF" />
         ) : feedback ? (
           <Text style={styles.headerFeedbackText}>{feedback}</Text>
@@ -134,7 +142,7 @@ export default function UpdateAppButton({
       <View style={[styles.menuWrapper, style]}>
         <TouchableOpacity
           onPress={handlePress}
-          disabled={checking || isCheckingUpdate}
+          disabled={checking || isCheckingUpdate || isUpdating}
           activeOpacity={0.7}
           style={styles.menuItem}
         >
@@ -159,7 +167,9 @@ export default function UpdateAppButton({
               {isUpdateAvailable && <View style={styles.newBadge}><Text style={styles.newBadgeText}>NEW</Text></View>}
             </View>
             <Text style={styles.menuSubtitle}>
-              {isUpdateAvailable
+              {isUpdating
+                ? 'Applying update and clearing old cache...'
+                : isUpdateAvailable
                 ? 'Tap to reload and apply latest features immediately'
                 : feedback
                 ? `Status: ${feedback}`
@@ -167,7 +177,7 @@ export default function UpdateAppButton({
             </Text>
           </View>
 
-          {checking || isCheckingUpdate ? (
+          {checking || isCheckingUpdate || isUpdating ? (
             <ActivityIndicator size="small" color={COLORS.primary} />
           ) : isUpdateAvailable ? (
             <View style={styles.updateNowBtn}>
@@ -181,6 +191,7 @@ export default function UpdateAppButton({
         {/* Force Reload & Clear Cache Button */}
         <TouchableOpacity
           onPress={handleForceReload}
+          disabled={isUpdating}
           activeOpacity={0.7}
           style={styles.forceReloadRow}
         >
@@ -199,30 +210,70 @@ export default function UpdateAppButton({
   return (
     <View style={[styles.solidWrapper, style]}>
       {isUpdateAvailable ? (
-        <TouchableOpacity
-          onPress={applyUpdate}
-          activeOpacity={0.85}
-          style={styles.solidUpdateButton}
-        >
-          <MaterialIcons name="system-update" size={18} color="#FFFFFF" />
-          <Text style={styles.solidUpdateText}>New Version Available · Tap to Update Now</Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            onPress={applyUpdate}
+            disabled={isUpdating}
+            activeOpacity={0.85}
+            style={[styles.solidUpdateButton, isUpdating && { opacity: 0.8 }]}
+          >
+            {isUpdating ? (
+              <>
+                <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.solidUpdateText}>Updating & Clearing Cache...</Text>
+              </>
+            ) : (
+              <>
+                <MaterialIcons name="system-update" size={18} color="#FFFFFF" />
+                <Text style={styles.solidUpdateText}>New Version Available · Tap to Update Now</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {/* Explicit troubleshooting button on login screen */}
+          <TouchableOpacity
+            onPress={handleForceReload}
+            disabled={isUpdating}
+            activeOpacity={0.7}
+            style={styles.solidTroubleshootRow}
+          >
+            <MaterialIcons name="cleaning-services" size={15} color={COLORS.textLight} />
+            <Text style={styles.solidTroubleshootText}>
+              Trouble Updating? Clear Cache & Hard Reload
+            </Text>
+          </TouchableOpacity>
+        </>
       ) : (
-        <TouchableOpacity
-          onPress={handlePress}
-          disabled={checking || isCheckingUpdate}
-          activeOpacity={0.7}
-          style={styles.solidSyncButton}
-        >
-          {checking || isCheckingUpdate ? (
-            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 6 }} />
-          ) : (
-            <MaterialIcons name="refresh" size={16} color={COLORS.textLight} style={{ marginRight: 6 }} />
-          )}
-          <Text style={styles.solidSyncText}>
-            {feedback || 'Check for Latest Updates & Refresh'}
-          </Text>
-        </TouchableOpacity>
+        <>
+          <TouchableOpacity
+            onPress={handlePress}
+            disabled={checking || isCheckingUpdate || isUpdating}
+            activeOpacity={0.7}
+            style={styles.solidSyncButton}
+          >
+            {checking || isCheckingUpdate || isUpdating ? (
+              <ActivityIndicator size="small" color={COLORS.primary} style={{ marginRight: 6 }} />
+            ) : (
+              <MaterialIcons name="refresh" size={16} color={COLORS.textLight} style={{ marginRight: 6 }} />
+            )}
+            <Text style={styles.solidSyncText}>
+              {feedback || 'Check for Latest Updates & Refresh'}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Always accessible Clear Cache & Hard Reload option on login screen */}
+          <TouchableOpacity
+            onPress={handleForceReload}
+            disabled={isUpdating}
+            activeOpacity={0.7}
+            style={styles.solidTroubleshootRow}
+          >
+            <MaterialIcons name="cleaning-services" size={14} color={COLORS.textLight} />
+            <Text style={styles.solidTroubleshootText}>
+              Clear Cache & Hard Reload
+            </Text>
+          </TouchableOpacity>
+        </>
       )}
     </View>
   );
@@ -384,5 +435,20 @@ const styles = StyleSheet.create({
     color: COLORS.textLight,
     fontSize: 12.5,
     fontWeight: '600',
+  },
+  solidTroubleshootRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 7,
+    paddingHorizontal: SPACING.md,
+    marginTop: 6,
+  },
+  solidTroubleshootText: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
 });

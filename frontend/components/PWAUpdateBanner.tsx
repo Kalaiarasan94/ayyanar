@@ -5,8 +5,10 @@ import { usePWA } from '../services/pwa';
 import { COLORS, BORDER_RADIUS, SPACING } from '../constants/Theme';
 
 export default function PWAUpdateBanner() {
-  const { isUpdateAvailable, isBannerDismissed, applyUpdate, dismissUpdateBanner } = usePWA();
+  const { isUpdateAvailable, isBannerDismissed, isUpdating, applyUpdate, dismissUpdateBanner } = usePWA();
   const [updating, setUpdating] = useState(false);
+
+  const isBusy = updating || isUpdating;
 
   if (Platform.OS !== 'web' || !isUpdateAvailable || isBannerDismissed) {
     return null;
@@ -39,7 +41,7 @@ export default function PWAUpdateBanner() {
           <TouchableOpacity
             style={styles.laterButton}
             onPress={handleLater}
-            disabled={updating}
+            disabled={isBusy}
             activeOpacity={0.7}
             accessibilityLabel="Update Later"
           >
@@ -49,11 +51,11 @@ export default function PWAUpdateBanner() {
           <TouchableOpacity
             style={styles.updateButton}
             onPress={handleUpdateNow}
-            disabled={updating}
+            disabled={isBusy}
             activeOpacity={0.8}
             accessibilityLabel="Update Now"
           >
-            {updating ? (
+            {isBusy ? (
               <>
                 <ActivityIndicator size="small" color="#FFFFFF" style={{ marginRight: 4 }} />
                 <Text style={styles.updateButtonText}>Updating...</Text>

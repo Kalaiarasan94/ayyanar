@@ -93,9 +93,7 @@ self.addEventListener('message', (event) => {
       .then((keys) => {
         return Promise.all(
           keys.map((key) => {
-            if (key.startsWith(CACHE_PREFIX)) {
-              return caches.delete(key);
-            }
+            return caches.delete(key);
           })
         );
       })
@@ -131,6 +129,8 @@ self.addEventListener('fetch', (event) => {
     url.searchParams.has('nocache') ||
     url.searchParams.has('reload') ||
     url.searchParams.has('refresh') ||
+    url.searchParams.has('v') ||
+    url.searchParams.has('t') ||
     request.headers.has('Authorization')
   ) {
     return; // Pass through directly to native network
